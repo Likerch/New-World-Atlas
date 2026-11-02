@@ -107,6 +107,8 @@ export interface LocalParams {
   danger: number;
   /** Who waits in the deepest room, when the place already has a legend (the troll of a cave on the planet map). */
   boss?: string;
+  /** Which level down this is; 1 is the way in from the surface. */
+  depth?: number;
 }
 
 export interface LocalMap {
@@ -327,6 +329,8 @@ function cave(params: LocalParams, rng: Rng, tiles: Uint8Array, keyed: Keyed[], 
     if (purpose === "lair" || purpose === "nest") features.push({ x, y, kind: "bones" });
     if (purpose === "spring") features.push({ x, y, kind: "pool" });
     if (purpose === "entrance") features.push({ x, y, kind: "stairs-up" });
+    // A shaft further down, in the chamber before the lair.
+    if (rank === chosen.length - 2) features.push({ x: x + 1, y, kind: "stairs-down" });
   });
 }
 

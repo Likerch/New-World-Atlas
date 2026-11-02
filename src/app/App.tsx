@@ -69,6 +69,7 @@ export function App() {
     },
     show: setView,
     names: (key) => store.patch(key).names,
+    players,
   };
   const go = (to: LevelId, from: LevelId) => {
     setCameFrom((current) => ({ ...current, [to]: from }));

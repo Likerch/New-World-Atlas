@@ -15,6 +15,7 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null): Lev
   const [grid, setGrid] = useState(true);
   const [keyed, setKeyed] = useState<number | null>(null);
   const [version, setVersion] = useState(0);
+  const [above, setAbove] = useState<LocalMap[]>([]);
   const pending = useRef(false);
   const build = (next: LocalParams, tongue: Language | null) => {
     pending.current = true;
@@ -23,6 +24,7 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null): Lev
       const made = generateLocal(next, tongue ?? undefined);
       setMap(made);
       setInput(made.params);
+      if (!(next.depth && next.depth > 1)) setAbove([]);
       setKeyed(null);
       setVersion((v) => v + 1);
     });
@@ -71,6 +73,34 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null): Lev
       : null,
     controls: (
       <>
+        {raw && raw.features.some((f) => f.kind === "stairs-down") ? (
+          <button
+            type="button"
+            className="primary wide"
+            onClick={() => {
+              const depth = (raw.params.depth ?? 1) + 1;
+              setAbove([...above, raw]);
+              build(localParams({ ...raw.params, seed: `${raw.params.seed.replace(/\/depth-\d+$/u, "")}/depth-${depth}`, depth, danger: Math.min(3, raw.params.danger + 1), boss: undefined, rooms: raw.params.rooms + 2 }), language);
+            }}
+          >
+            ⬇ {t("local.down")}
+          </button>
+        ) : null}
+        {above.length ? (
+          <button
+            type="button"
+            className="wide"
+            onClick={() => {
+              setMap(above[above.length - 1]);
+              setInput(above[above.length - 1].params);
+              setAbove(above.slice(0, -1));
+              setKeyed(null);
+              setVersion((v) => v + 1);
+            }}
+          >
+            ⬆ {t("local.up")}
+          </button>
+        ) : null}
         {back ? (
           <button type="button" className="back" onClick={back}>
             ← {t("action.back")}
@@ -128,7 +158,7 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null): Lev
     inspector: map ? (
       <aside className="inspector">
         <h4 className="muted">
-          {t(`lkind.${map.params.kind}`)} · {t(`ltheme.${map.params.theme}`)} · {map.cell} {t("unit.m")} / ▢
+          {t("local.level", { n: map.params.depth ?? 1 })} · {t(`lkind.${map.params.kind}`)} · {t(`ltheme.${map.params.theme}`)} · {map.cell} {t("unit.m")} / ▢
         </h4>
         <ul className="list keyed">
           {map.keyed.map((k) => (

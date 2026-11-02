@@ -31,3 +31,4 @@ export * from "./local/links";
 export * from "./planet/region";
 export * from "./campaign";
 export * from "./city/district";
+export * from "./building/room";

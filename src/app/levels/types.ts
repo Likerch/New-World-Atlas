@@ -17,6 +17,8 @@ export interface LevelContext {
   show: (level: LevelId) => void;
   /** The GM's new names for a map's things. */
   names: (mapKey: string | null) => Record<string, string>;
+  /** The players' view is on: hide what only the GM should see. */
+  players: boolean;
 }
 
 export interface Level {

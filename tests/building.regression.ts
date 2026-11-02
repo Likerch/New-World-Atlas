@@ -1,6 +1,6 @@
 // Building-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { BUILDING_THEMES, BUILDING_TYPES, buildingFromCity, generateBuilding, generateCity, pointInPolygon, renderBuilding } from "../src/core/index";
+import { BUILDING_THEMES, BUILDING_TYPES, buildingFromCity, generateBuilding, generateCity, generateRoom, pointInPolygon, renderBuilding, renderRoom } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -48,6 +48,21 @@ test("a tavern on a city map opens as a named tavern with guest rooms upstairs",
 test("every style draws every floor", () => {
   const plan = generateBuilding({ seed: "styles", type: "keep", cellar: true });
   for (const theme of BUILDING_THEMES) for (let floor = 0; floor < plan.floors.length; floor++) assert.doesNotMatch(renderBuilding(plan, { theme, floor, grid: true, highlight: 1 }), /NaN|undefined|Infinity/u);
+});
+
+test("a room opens as a scene: things inside it, doors on its walls, cover from its furniture, finds hidden from players", () => {
+  const plan = generateBuilding({ seed: "scene", type: "tavern", floors: 2 });
+  const floor = plan.floors.findIndex((f) => f.level === 0);
+  const hall = plan.floors[floor].rooms.find((r) => r.kind === "common-room")!;
+  const room = generateRoom(plan, floor, hall.id);
+  for (const item of room.items) assert.ok(item.x >= 0 && item.y >= 0 && item.x <= room.w && item.y <= room.h, `${item.kind} lies outside the room`);
+  assert.ok(room.exits.some((exit) => exit.kind === "door"), "a way in");
+  for (const exit of room.exits) assert.ok([0, room.w].some((v) => Math.abs(exit.at[0] - v) < 0.01) || [0, room.h].some((v) => Math.abs(exit.at[1] - v) < 0.01), "exits sit on the walls");
+  assert.ok(room.cover.length > 0, "tables and the bar give cover");
+  const hidden = { ...room, items: [...room.items, { x: 1, y: 1, kind: "key" as const, hidden: true }] };
+  assert.match(renderRoom(hidden), /#c0392b/u, "the GM sees the hidden find");
+  assert.doesNotMatch(renderRoom(hidden, { players: true }), /#c0392b/u, "players do not");
+  assert.equal(JSON.stringify(generateRoom(plan, floor, hall.id)), JSON.stringify(room));
 });
 
 console.log(`building: ${passed} regressions passed`);

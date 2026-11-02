@@ -1,6 +1,7 @@
 // One floor of a building as an SVG plan: rooms, walls, doors with their swing, windows, stairs, furniture drawn from
 // above, the yard round it, and an optional battle-map grid (1.5 m squares). One metre is `PX` pixels.
 import type { BuildingPlan, Floor, Furniture, RoomKind } from "../building/plan";
+import type { ItemKind, RoomMap } from "../building/room";
 
 export const PX = 24;
 
@@ -59,13 +60,13 @@ export interface BuildingRenderOptions {
   highlight?: number | null;
 }
 
-const n = (value: number) => Math.round(value * PX * 10) / 10;
+const n = (value: number, px = PX) => Math.round(value * px * 10) / 10;
 
-function piece(f: Furniture, th: Theme): string {
-  const x = n(f.x),
-    y = n(f.y),
-    w = n(f.w),
-    h = n(f.h);
+export function piece(f: Furniture, th: Theme, px = PX): string {
+  const x = n(f.x, px),
+    y = n(f.y, px),
+    w = n(f.w, px),
+    h = n(f.h, px);
   const rect = (fill: string, extra = "") => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}" stroke="${th.line}" stroke-width="0.8"${extra}/>`;
   const circle = (fill: string, scale = 1) => `<circle cx="${x + w / 2}" cy="${y + h / 2}" r="${Math.min(w, h) / 2 * scale}" fill="${fill}" stroke="${th.line}" stroke-width="0.8"/>`;
   switch (f.kind) {
@@ -205,6 +206,60 @@ export function renderBuilding(plan: BuildingPlan, options: BuildingRenderOption
   const sx = vx + 0.8,
     sy = vy + 0.8;
   out.push(`<g fill="${th.label}" font-size="11"><rect x="${n(sx)}" y="${n(sy)}" width="${n(2.5)}" height="5" fill="${th.wall}"/><rect x="${n(sx + 2.5)}" y="${n(sy)}" width="${n(2.5)}" height="5" fill="${th.paper}" stroke="${th.wall}"/><text x="${n(sx + 5) + 6}" y="${n(sy) + 6}">5 m</text></g>`);
+  out.push(`</svg>`);
+  return out.join("");
+}
+
+/** Pixels per metre on a room map. */
+export const ROOM_PX = 60;
+
+const ITEM_GLYPH: Record<ItemKind, string> = { candle: "🕯", mug: "◘", plate: "◯", book: "▤", jar: "⚱", coins: "◉", letter: "✉", key: "⚷", weapon: "⚔", bottle: "♁", lamp: "☀", papers: "▭", datapad: "▯", credstick: "▬", rug: "", bones: "☠", rubbish: "∴", relic: "✧", cushion: "▢", tools: "⚒" };
+
+/** One room as a battle map: walls with doors and windows, furniture, items, cover and light; hidden finds for the GM. */
+export function renderRoom(room: RoomMap, options: { theme?: BuildingThemeId; grid?: boolean; players?: boolean; label?: string } = {}): string {
+  const th = THEMES[options.theme ?? "ink"];
+  const P = ROOM_PX;
+  const pad = 0.8;
+  const W = (room.w + pad * 2) * P,
+    H = (room.h + pad * 2) * P;
+  const o = pad * P;
+  const out: string[] = [];
+  out.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="'Segoe UI', Arial, sans-serif">`);
+  out.push(`<defs><radialGradient id="light"><stop offset="0" stop-color="#ffd27a" stop-opacity="0.45"/><stop offset="1" stop-color="#ffd27a" stop-opacity="0"/></radialGradient></defs>`);
+  out.push(`<rect width="${W}" height="${H}" fill="${th.paper}"/><g transform="translate(${o},${o})">`);
+  out.push(`<rect width="${room.w * P}" height="${room.h * P}" fill="${th.rooms[room.kind as RoomKind] ?? th.floor}"/>`);
+  for (const [x, y, r] of room.lights) out.push(`<circle cx="${x * P}" cy="${y * P}" r="${r * P}" fill="url(#light)"/>`);
+  for (const item of room.items.filter((i) => i.kind === "rug")) out.push(`<rect x="${(item.x - 1.4) * P}" y="${(item.y - 1) * P}" width="${2.8 * P}" height="${2 * P}" rx="6" fill="#b0463c" fill-opacity="0.3" stroke="#b0463c" stroke-dasharray="6 3"/>`);
+  for (const f of [...room.furniture].sort((a, b) => Number(b.kind === "carpet") - Number(a.kind === "carpet"))) out.push(piece(f, th, P));
+  if (!options.players) for (const c of room.cover) out.push(`<rect x="${c.x * P - 3}" y="${c.y * P - 3}" width="${c.w * P + 6}" height="${c.h * P + 6}" fill="none" stroke="#e0a400" stroke-width="2" ${c.full ? "" : `stroke-dasharray="6 4"`} opacity="0.8"/>`);
+  for (const item of room.items) {
+    if (item.kind === "rug" || (item.hidden && options.players)) continue;
+    const glyph = ITEM_GLYPH[item.kind];
+    if (item.hidden) out.push(`<circle cx="${item.x * P}" cy="${item.y * P}" r="13" fill="none" stroke="#c0392b" stroke-width="2" stroke-dasharray="4 3"/><text x="${item.x * P}" y="${item.y * P + 5}" text-anchor="middle" font-size="14" font-weight="700" fill="#c0392b">?</text>`);
+    else out.push(`<text x="${item.x * P}" y="${item.y * P + 6}" text-anchor="middle" font-size="16" fill="${th.dark}" font-family="'Segoe UI Symbol', 'Segoe UI Emoji', sans-serif">${glyph}</text>`);
+  }
+  if (options.grid !== false) {
+    let g = "";
+    for (let x = 0; x <= room.w + 1e-6; x += 1.5) g += `M${x * P},0V${room.h * P}`;
+    for (let y = 0; y <= room.h + 1e-6; y += 1.5) g += `M0,${y * P}H${room.w * P}`;
+    out.push(`<path d="${g}" stroke="${th.grid}" stroke-width="1.2"/>`);
+  }
+  // Walls, then the openings cut into them.
+  const wall = 0.3 * P;
+  out.push(`<rect width="${room.w * P}" height="${room.h * P}" fill="none" stroke="${th.wall}" stroke-width="${wall}"/>`);
+  for (const exit of room.exits) {
+    const [x, y] = exit.at;
+    const half = (exit.width / 2) * P;
+    const cx = x * P,
+      cy = y * P;
+    if (exit.kind === "door") {
+      out.push(exit.horizontal ? `<rect x="${cx - half}" y="${cy - wall}" width="${half * 2}" height="${wall * 2}" fill="${th.floor}"/>` : `<rect x="${cx - wall}" y="${cy - half}" width="${wall * 2}" height="${half * 2}" fill="${th.floor}"/>`);
+      out.push(exit.horizontal ? `<path d="M${cx - half},${cy}A${half * 2},${half * 2} 0 0 1 ${cx + half},${cy - half * 2}" fill="none" stroke="${th.line}" stroke-width="1.5"/>` : `<path d="M${cx},${cy - half}A${half * 2},${half * 2} 0 0 1 ${cx + half * 2},${cy + half}" fill="none" stroke="${th.line}" stroke-width="1.5"/>`);
+    } else out.push(exit.horizontal ? `<rect x="${cx - half}" y="${cy - wall / 3}" width="${half * 2}" height="${(wall * 2) / 3}" fill="${th.window}"/>` : `<rect x="${cx - wall / 3}" y="${cy - half}" width="${(wall * 2) / 3}" height="${half * 2}" fill="${th.window}"/>`);
+  }
+  out.push(`</g>`);
+  if (options.label) out.push(`<text x="${o}" y="${o * 0.62}" font-size="18" font-weight="600" fill="${th.label}">${options.label}</text>`);
+  out.push(`<g fill="${th.label}" font-size="12"><rect x="${W - o - 1.5 * P}" y="${H - o * 0.55}" width="${1.5 * P}" height="5" fill="${th.wall}"/><text x="${W - o - 1.5 * P - 6}" y="${H - o * 0.55 + 6}" text-anchor="end">1.5 m</text></g>`);
   out.push(`</svg>`);
   return out.join("");
 }

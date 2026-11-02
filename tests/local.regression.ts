@@ -61,4 +61,14 @@ test("a cave on the planet map keeps its legend's dweller in the lair", () => {
   assert.deepEqual(lair.monsters, [String(cave.facts.dweller).replace(/ /gu, "-")]);
 });
 
+test("dungeons and caves lead further down, and a deeper level is a new place", () => {
+  for (const kind of ["dungeon", "cave"] as const) {
+    const first = generateLocal({ seed: `deep-${kind}`, kind });
+    assert.ok(first.features.some((f) => f.kind === "stairs-down"), `${kind}: a way down`);
+    const second = generateLocal({ ...first.params, seed: `deep-${kind}/depth-2`, depth: 2 });
+    assert.equal(second.params.depth, 2);
+    assert.notDeepEqual(Array.from(second.tiles), Array.from(first.tiles));
+  }
+});
+
 console.log(`local: ${passed} regressions passed`);

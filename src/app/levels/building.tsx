@@ -1,6 +1,6 @@
 // The building level: floor plans, floor by floor, with the rooms' furnishings.
 import { useMemo, useRef, useState } from "react";
-import { BUILDING_THEMES, BUILDING_TYPES, buildingFromCity, buildingParams, ERAS, generateBuilding, PX, renderBuilding, type BuildingParams, type BuildingPlan, type BuildingThemeId, type City } from "../../core/index";
+import { BUILDING_THEMES, BUILDING_TYPES, buildingFromCity, buildingParams, ERAS, generateBuilding, generateRoom, PX, renderBuilding, renderRoom, ROOM_PX, type BuildingParams, type BuildingPlan, type BuildingThemeId, type City } from "../../core/index";
 import type { Level, LevelContext } from "./types";
 
 export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): Level & { openFromCity: (city: City, index: number) => void } {
@@ -13,6 +13,7 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): 
   const [grid, setGrid] = useState(false);
   const [room, setRoom] = useState<number | null>(null);
   const [version, setVersion] = useState(0);
+  const [close, setClose] = useState<number | null>(null);
 
   const build = (next: BuildingParams) => {
     pending.current = true;
@@ -23,12 +24,15 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): 
       setInput(made.params);
       setFloor(Math.max(0, made.floors.findIndex((f) => f.level === 0)));
       setRoom(null);
+      setClose(null);
       setVersion((v) => v + 1);
     });
   };
   const set = <K extends keyof BuildingParams>(key: K, value: BuildingParams[K]) => setInput((current) => ({ ...current, [key]: value }));
   const svg = useMemo(() => (plan ? renderBuilding(plan, { theme, floor, grid, highlight: room, label: (kind) => t(`room.${kind}`) }) : ""), [plan, theme, floor, grid, room, t]);
   const current = plan?.floors[floor];
+  const roomMap = useMemo(() => (plan && close !== null ? generateRoom(plan, floor, close) : null), [plan, floor, close]);
+  const roomSvg = useMemo(() => (roomMap ? renderRoom(roomMap, { theme, grid: true, players: ctx.players, label: t(`room.${roomMap.kind}`) }) : ""), [roomMap, theme, ctx.players, t]);
   const bounds = plan ? plan.yard?.bounds ?? { x: -2, y: -2, w: plan.params.width + 4, h: plan.params.depth + 4 } : null;
   const mapKey = plan ? `building:${plan.params.seed}` : null;
   const names = ctx.names(mapKey);
@@ -51,8 +55,9 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): 
       build(buildingFromCity(city, index));
       ctx.show("building");
     },
-    map:
-      plan && bounds
+    map: roomMap
+      ? { svg: roomSvg, width: (roomMap.w + 1.6) * ROOM_PX, height: (roomMap.h + 1.6) * ROOM_PX, key: `room-${roomMap.seed}`, onPick: () => undefined }
+      : plan && bounds
         ? {
             svg,
             width: (bounds.w + 3) * PX,
@@ -69,6 +74,11 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): 
         : null,
     controls: (
       <>
+        {close !== null ? (
+          <button type="button" className="back" onClick={() => setClose(null)}>
+            ← {t("action.backToFloor")}
+          </button>
+        ) : null}
         {back ? (
           <button type="button" className="back" onClick={back}>
             ← {t("action.backToCity")}
@@ -153,6 +163,27 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): 
                   <b>{selected.furniture.length}</b>
                 </div>
                 <p className="muted">{[...counts].map(([kind, count]) => `${t(`furniture.${kind}`)}${count > 1 ? ` ×${count}` : ""}`).join(", ")}</p>
+                {close === null ? (
+                  <button type="button" className="primary wide" onClick={() => setClose(selected.id)}>
+                    🔍 {t("action.openRoom")}
+                  </button>
+                ) : null}
+                {roomMap && close === selected.id ? (
+                  <>
+                    <h4>{t("room.items")}</h4>
+                    <ul className="plain">
+                      {roomMap.items
+                        .filter((item) => item.kind !== "rug" && (!item.hidden || !ctx.players))
+                        .map((item, k) => (
+                          <li key={k}>
+                            {t(`item.${item.kind}`)}
+                            {item.hidden ? ` — ${t("room.hidden")}` : ""}
+                          </li>
+                        ))}
+                    </ul>
+                    <p className="muted">{t("room.cover", { full: roomMap.cover.filter((c) => c.full).length, half: roomMap.cover.filter((c) => !c.full).length })}</p>
+                  </>
+                ) : null}
               </div>
             );
           })()}
