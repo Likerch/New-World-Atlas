@@ -1,6 +1,6 @@
 // Planet-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { createLanguage, createRng, generatePlanet, name, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
+import { createLanguage, createRng, generatePlanet, globePick, name, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -94,6 +94,15 @@ test("every style renders a complete SVG without broken numbers", () => {
     assert.ok(svg.startsWith("<svg") && svg.endsWith("</svg>"));
     assert.doesNotMatch(svg, /NaN|undefined|Infinity/u, theme);
   }
+});
+
+test("the globe turns to any side and a click finds the place under it", () => {
+  const { width, height, latitudeNorth, latitudeSouth } = planet.params;
+  const centre = globePick(planet, 500, 500, { lon: 0, lat: (latitudeNorth + latitudeSouth) / 2 })!;
+  assert.ok(Math.abs(centre[0] - width / 2) < 1 && Math.abs(centre[1] - height / 2) < 1, `the centre of the globe is the centre of the map, not ${centre}`);
+  assert.equal(globePick(planet, 2, 2), null, "a corner is off the sphere");
+  assert.equal(globePick(planet, 500, 500, { lon: 180, lat: 0 }), null, "the far side of the world is uncharted");
+  for (const [lon, lat] of [[0, 0], [60, 30], [180, -60], [-120, 90]]) assert.doesNotMatch(renderGlobe(planet, { lon, lat, mark: [width / 2, height / 2] }), /NaN|undefined|Infinity/u);
 });
 
 console.log(`planet: ${passed} regressions passed`);

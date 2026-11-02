@@ -38,3 +38,4 @@ export * from "./space/universe";
 export * from "./planet/currents";
 export * from "./planet/underworld";
 export * from "./render/underworld-svg";
+export * from "./render/globe-svg";

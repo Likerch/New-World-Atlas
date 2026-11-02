@@ -1,6 +1,6 @@
 // The planet level: world settings, the world map and its inspector.
 import { useMemo, useRef, useState } from "react";
-import { defaultLayers, generatePlanet, LAYERS, planetParams, planetToJson, renamePlanet, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetParams, type ThemeId } from "../../core/index";
+import { defaultLayers, generatePlanet, GLOBE_SIZE, globePick, LAYERS, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetParams, type ThemeId } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import type { Level, LevelContext } from "./types";
 
@@ -18,6 +18,15 @@ const NUMBER_FIELDS: { key: keyof PlanetParams; min: number; max: number; step: 
 ];
 
 /** The selected thing's patch key and name; the world itself when nothing (or only a spot) is selected. */
+/** Where a selection sits on the map, to ring it on the globe. */
+function markOf(planet: Planet, selection: Selection | null): [number, number] | null {
+  if (!selection) return null;
+  if (selection.kind === "burg") return [planet.burgs[selection.id].x, planet.burgs[selection.id].y];
+  if (selection.kind === "marker") return [planet.markers[selection.id].x, planet.markers[selection.id].y];
+  if (selection.kind === "cell") return [planet.mesh.x[selection.id], planet.mesh.y[selection.id]];
+  return null;
+}
+
 export function selectedOf(planet: Planet | null, selection: Selection | null): { key: string; label: string } | null {
   if (!planet) return null;
   if (!selection || selection.kind === "cell") return { key: "world", label: planet.name };
@@ -47,6 +56,8 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   const [layers, setLayers] = useState<Record<LayerId, boolean>>(defaultLayers("atlas"));
   const [selection, setSelection] = useState<Selection | null>(null);
   const [tab, setTab] = useState<Tab>("place");
+  // The globe view: where it is turned to, or null for the flat map.
+  const [globe, setGlobe] = useState<{ lon: number; lat: number } | null>(null);
   const pending = useRef(false);
 
   const load = (next: Partial<PlanetParams>) => {
@@ -63,7 +74,15 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   };
   const set = <K extends keyof PlanetParams>(key: K, value: PlanetParams[K]) => setParams((current) => ({ ...current, [key]: value }));
   const highlight = selection && (selection.kind === "state" || selection.kind === "province" || selection.kind === "culture") ? { kind: selection.kind, id: selection.id } : null;
-  const svg = useMemo(() => (planet ? renderPlanet(planet, { theme, layers, script: ctx.script, highlight }) : ""), [planet, theme, layers, ctx.script, highlight?.kind, highlight?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const svg = useMemo(() => (!planet ? "" : globe ? renderGlobe(planet, { theme, layers, script: ctx.script, ...globe, mark: markOf(planet, selection) }) : renderPlanet(planet, { theme, layers, script: ctx.script, highlight })), [planet, theme, layers, ctx.script, highlight?.kind, highlight?.id, globe, globe && selection]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pick = (x: number, y: number) => {
+    if (!planet) return;
+    const cell = planet.mesh.find(x, y);
+    const marker = planet.markers.slice(1).find((item) => Math.hypot(item.x - x, item.y - y) < planet.mesh.spacing * 0.3);
+    const burg = planet.burg[cell];
+    setSelection(marker ? { kind: "marker", id: marker.id } : burg && Math.hypot(planet.burgs[burg].x - x, planet.burgs[burg].y - y) < planet.mesh.spacing * 0.4 ? { kind: "burg", id: burg } : { kind: "cell", id: cell });
+    setTab("place");
+  };
 
   return {
     id: "planet",
@@ -78,20 +97,19 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     },
     planet,
     load,
-    mapKey,
+    // Pins and fog are laid on the flat map; the globe shows the world without them.
+    mapKey: globe ? null : mapKey,
     selected: selectedOf(planet, selection),
     map: planet
       ? {
           svg,
-          width: planet.params.width,
-          height: planet.params.height,
-          key: `planet-${planet.params.seed}-${time}`,
+          width: globe ? GLOBE_SIZE : planet.params.width,
+          height: globe ? GLOBE_SIZE : planet.params.height,
+          key: `planet-${planet.params.seed}-${time}-${globe ? "globe" : "map"}`,
           onPick: (x, y) => {
-            const cell = planet.mesh.find(x, y);
-            const marker = planet.markers.slice(1).find((item) => Math.hypot(item.x - x, item.y - y) < planet.mesh.spacing * 0.3);
-            const burg = planet.burg[cell];
-            setSelection(marker ? { kind: "marker", id: marker.id } : burg && Math.hypot(planet.burgs[burg].x - x, planet.burgs[burg].y - y) < planet.mesh.spacing * 0.4 ? { kind: "burg", id: burg } : { kind: "cell", id: cell });
-            setTab("place");
+            if (!globe) return pick(x, y);
+            const point = globePick(planet, x, y, globe);
+            if (point) pick(point[0], point[1]);
           },
         }
       : null,
@@ -106,6 +124,28 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
           <button type="button" className="wide" onClick={() => openUnderworld(planet)}>
             🕳 {t("action.openUnderworld")}
           </button>
+        ) : null}
+        {planet ? (
+          <div className="floor-tabs">
+            <button type="button" aria-pressed={!globe} onClick={() => setGlobe(null)}>
+              🗺 {t("view.flat")}
+            </button>
+            <button type="button" aria-pressed={!!globe} onClick={() => setGlobe({ lon: 0, lat: Math.round((planet.params.latitudeNorth + planet.params.latitudeSouth) / 2) })}>
+              🌐 {t("view.globe")}
+            </button>
+          </div>
+        ) : null}
+        {globe ? (
+          <>
+            <label>
+              {t("globe.lon")}: {globe.lon}°
+              <input type="range" min={-180} max={180} step={5} value={globe.lon} onChange={(event) => setGlobe({ ...globe, lon: Number(event.target.value) })} />
+            </label>
+            <label>
+              {t("globe.lat")}: {globe.lat}°
+              <input type="range" min={-90} max={90} step={5} value={globe.lat} onChange={(event) => setGlobe({ ...globe, lat: Number(event.target.value) })} />
+            </label>
+          </>
         ) : null}
         <h2>{t("panel.world")}</h2>
         <label>
