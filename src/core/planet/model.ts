@@ -12,6 +12,8 @@ export interface PlanetParams {
   seed: string;
   /** A fixed name (a world named in its star system); empty to name it in its first people's tongue. */
   name?: string;
+  /** For a close-up: the seed of the world it was cut from, so its realms and towns keep their arms. */
+  world?: string;
   width: number;
   height: number;
   /** Number of Voronoi cells: detail versus speed (2 000 – 50 000). */
@@ -89,6 +91,8 @@ export interface Burg {
   province: number;
   capital: boolean;
   port: boolean;
+  /** In a close-up: the id of the planet's town this one is. */
+  origin?: number;
   /** Thousands of people. */
   population: number;
   walls: boolean;
@@ -134,6 +138,47 @@ export interface Province {
   color: string;
   cells: number;
   pole: Point;
+}
+
+/** Folk faiths of one people, churches spread from a holy city, cults round one town, heresies split from a church. */
+export type ReligionKind = "folk" | "organized" | "cult" | "heresy";
+export type ReligionForm =
+  | "shamanism"
+  | "animism"
+  | "ancestors"
+  | "nature"
+  | "sky"
+  | "monotheism"
+  | "pantheon"
+  | "dualism"
+  | "henotheism"
+  | "philosophy"
+  | "mystery"
+  | "sun"
+  | "moon"
+  | "fire"
+  | "death"
+  | "serpent"
+  | "dragon";
+
+export interface Religion {
+  id: number;
+  name: string;
+  kind: ReligionKind;
+  form: ReligionForm;
+  /** The god, the chief of the gods or the founder they revere. */
+  deity: string;
+  color: string;
+  culture: number;
+  /** The holy city (a burg), 0 for folk faiths. */
+  center: number;
+  /** The church a heresy broke from. */
+  parent: number;
+  cells: number;
+  /** Square km. */
+  area: number;
+  /** Thousands. */
+  followers: number;
 }
 
 export type RouteKind = "highway" | "road" | "trail" | "sea";
@@ -201,6 +246,8 @@ export interface Planet {
   population: Float32Array;
   culture: Uint16Array;
   cultures: Culture[];
+  religion: Uint16Array;
+  religions: Religion[];
   burg: Int32Array;
   burgs: Burg[];
   state: Uint16Array;

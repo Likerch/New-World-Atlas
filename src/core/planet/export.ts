@@ -19,6 +19,7 @@ export interface PlanetJson {
     precipitation: number[];
     river: number[];
     culture: number[];
+    religion: number[];
     state: number[];
     province: number[];
     burg: number[];
@@ -27,6 +28,7 @@ export interface PlanetJson {
   features: Planet["features"];
   rivers: Planet["rivers"];
   cultures: Omit<Planet["cultures"][number], "language">[];
+  religions: Planet["religions"];
   burgs: Planet["burgs"];
   states: Planet["states"];
   provinces: Planet["provinces"];
@@ -53,6 +55,7 @@ export function planetToJson(planet: Planet): PlanetJson {
       precipitation: round(planet.precipitation, 0),
       river: Array.from(planet.river),
       culture: Array.from(planet.culture),
+      religion: Array.from(planet.religion),
       state: Array.from(planet.state),
       province: Array.from(planet.province),
       burg: Array.from(planet.burg),
@@ -61,6 +64,7 @@ export function planetToJson(planet: Planet): PlanetJson {
     features: planet.features,
     rivers: planet.rivers,
     cultures: planet.cultures.map(({ language: _language, ...culture }) => culture),
+    religions: planet.religions,
     burgs: planet.burgs,
     states: planet.states,
     provinces: planet.provinces,

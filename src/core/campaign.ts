@@ -70,6 +70,7 @@ export function renamePlanet(planet: Planet, names: Record<string, string>): Pla
     states: rename(planet.states, "state", names),
     provinces: rename(planet.provinces, "province", names),
     cultures: rename(planet.cultures, "culture", names),
+    religions: rename(planet.religions, "religion", names),
     burgs: rename(planet.burgs, "burg", names),
     rivers: rename(planet.rivers, "river", names),
     markers: rename(planet.markers, "marker", names),

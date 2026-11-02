@@ -55,7 +55,7 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
 
   const seed = `${planet.params.seed}/${key}`;
   const rng = createRng(seed);
-  const params = { ...planet.params, seed, name: title, width: W, height: H, cells, latitudeNorth: planet.params.latitudeNorth - (y0 / planet.params.height) * (planet.params.latitudeNorth - planet.params.latitudeSouth), latitudeSouth: planet.params.latitudeNorth - (y1 / planet.params.height) * (planet.params.latitudeNorth - planet.params.latitudeSouth) };
+  const params = { ...planet.params, seed, world: planet.params.world ?? planet.params.seed, name: title, width: W, height: H, cells, latitudeNorth: planet.params.latitudeNorth - (y0 / planet.params.height) * (planet.params.latitudeNorth - planet.params.latitudeSouth), latitudeSouth: planet.params.latitudeNorth - (y1 / planet.params.height) * (planet.params.latitudeNorth - planet.params.latitudeSouth) };
   const mesh = buildMesh(W, H, cells, rng.fork("mesh"));
   const n = mesh.cells;
   const scale = planet.scale * k;
@@ -101,6 +101,7 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
     biome[cell] = biomeOf(temperature[cell], moisture, height[cell] < 23, ((cell * 2654435761) >>> 0) % 3 === 0 && (coast[cell] === 1 || river > 0));
   }
   const culture = new Uint16Array(n);
+  const religion = new Uint16Array(n);
   const state = new Uint16Array(n);
   const provinceOf = new Uint16Array(n);
   for (let cell = 0; cell < n; cell++) {
@@ -109,6 +110,7 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
     let c = nearest[cell];
     if (planet.water[c]) c = parent.neighbors[c].find((p) => !planet.water[p]) ?? c;
     culture[cell] = planet.culture[c];
+    religion[cell] = planet.religion[c];
     state[cell] = planet.state[c];
     provinceOf[cell] = planet.province[c];
   }
@@ -145,7 +147,7 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
     }
     if (water[cell] || burg[cell]) continue;
     const id = burgs.length;
-    burgs.push({ ...town, id, cell, x, y });
+    burgs.push({ ...town, id, cell, x, y, origin: town.origin ?? town.id });
     burg[cell] = id;
   }
   const scores = new Float32Array(n);
@@ -193,5 +195,5 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
   // Country folk per cell, scaled to the cell's real size.
   for (let cell = 0; cell < n; cell++) if (!water[cell]) population[cell] = (suitability(ground, cell) * 0.3 * mesh.area[cell] * k * k) / (parent.spacing * parent.spacing);
   const provinces = planet.provinces.map((p) => ({ ...p, pole: toRegion(p.pole[0], p.pole[1]) as [number, number], burg: burgs.find((b) => b.capital === false && b.name === planet.burgs[p.burg]?.name)?.id ?? 0 }));
-  return { ...ground, name: title, population, culture, cultures: planet.cultures, burg, burgs, state, states, province: provinceOf, provinces, routes, markers };
+  return { ...ground, name: title, population, culture, cultures: planet.cultures, religion, religions: planet.religions, burg, burgs, state, states, province: provinceOf, provinces, routes, markers };
 }

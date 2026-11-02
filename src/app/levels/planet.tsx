@@ -17,7 +17,6 @@ const NUMBER_FIELDS: { key: keyof PlanetParams; min: number; max: number; step: 
   { key: "provinceShare", min: 0, max: 1, step: 0.05 },
 ];
 
-/** The selected thing's patch key and name; the world itself when nothing (or only a spot) is selected. */
 /** Where a selection sits on the map, to ring it on the globe. */
 function markOf(planet: Planet, selection: Selection | null): [number, number] | null {
   if (!selection) return null;
@@ -27,10 +26,11 @@ function markOf(planet: Planet, selection: Selection | null): [number, number] |
   return null;
 }
 
+/** The selected thing's patch key and name; the world itself when nothing (or only a spot) is selected. */
 export function selectedOf(planet: Planet | null, selection: Selection | null): { key: string; label: string } | null {
   if (!planet) return null;
   if (!selection || selection.kind === "cell") return { key: "world", label: planet.name };
-  const lists = { state: planet.states, province: planet.provinces, culture: planet.cultures, burg: planet.burgs, river: planet.rivers, marker: planet.markers } as const;
+  const lists = { state: planet.states, province: planet.provinces, culture: planet.cultures, religion: planet.religions, burg: planet.burgs, river: planet.rivers, marker: planet.markers } as const;
   const item = lists[selection.kind as keyof typeof lists]?.[selection.id];
   return item ? { key: `${selection.kind}:${selection.id}`, label: item.name || selection.kind } : null;
 }
@@ -73,7 +73,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     });
   };
   const set = <K extends keyof PlanetParams>(key: K, value: PlanetParams[K]) => setParams((current) => ({ ...current, [key]: value }));
-  const highlight = selection && (selection.kind === "state" || selection.kind === "province" || selection.kind === "culture") ? { kind: selection.kind, id: selection.id } : null;
+  const highlight = selection && (selection.kind === "state" || selection.kind === "province" || selection.kind === "culture" || selection.kind === "religion") ? { kind: selection.kind, id: selection.id } : null;
   const svg = useMemo(() => (!planet ? "" : globe ? renderGlobe(planet, { theme, layers, script: ctx.script, ...globe, mark: markOf(planet, selection) }) : renderPlanet(planet, { theme, layers, script: ctx.script, highlight })), [planet, theme, layers, ctx.script, highlight?.kind, highlight?.id, globe, globe && selection]); // eslint-disable-line react-hooks/exhaustive-deps
   const pick = (x: number, y: number) => {
     if (!planet) return;

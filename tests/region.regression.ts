@@ -1,6 +1,6 @@
 // Region regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { cityFromBurg, generateCity, generateCountry, generatePlanet, generateRegion, generateUnderworld, renderPlanet, renderUnderworld } from "../src/core/index";
+import { armsOf, cityFromBurg, generateCity, generateCountry, generatePlanet, generateRegion, generateUnderworld, renderPlanet, renderUnderworld } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -57,6 +57,12 @@ test("the underworld is one connected web with ways down from the surface", () =
   assert.ok(world.caverns.some((c) => c.kind === "settlement" && c.people), "the deep peoples live somewhere");
   assert.deepEqual(generateUnderworld(planet).caverns.map((c) => c.name), world.caverns.map((c) => c.name));
   assert.doesNotMatch(renderUnderworld(world, planet), /NaN|undefined|Infinity/u);
+});
+
+test("a close-up keeps its realms' and towns' arms", () => {
+  assert.deepEqual(armsOf(region, "state", province.state), armsOf(planet, "state", province.state));
+  const town = region.burgs.slice(1).find((burg) => burg.origin !== undefined)!;
+  assert.deepEqual(armsOf(region, "burg", town.id), armsOf(planet, "burg", town.origin!));
 });
 
 console.log(`region: ${passed} regressions passed`);

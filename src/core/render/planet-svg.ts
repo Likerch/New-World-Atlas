@@ -3,9 +3,12 @@
 import { shade } from "../color";
 import { borders, outline, pathData, smooth, type Point } from "../geometry";
 import { toCyrillic } from "../language";
+import { armsOf } from "../planet/arms";
 import { BIOMES } from "../planet/biomes";
 import { oceanCurrents, windAt } from "../planet/currents";
+import { raiseArmies } from "../planet/military";
 import type { MarkerKind, Planet } from "../planet/model";
+import { renderCoatOfArms } from "./heraldry-svg";
 import { defaultLayers, THEME, type LayerId, type Theme, type ThemeId } from "./themes";
 
 export interface RenderOptions {
@@ -13,7 +16,7 @@ export interface RenderOptions {
   layers?: Partial<Record<LayerId, boolean>>;
   script?: "latin" | "cyrillic";
   /** A region drawn with an emphasis outline. */
-  highlight?: { kind: "state" | "province" | "culture"; id: number } | null;
+  highlight?: { kind: "state" | "province" | "culture" | "religion"; id: number } | null;
 }
 
 const SEA = 20;
@@ -163,6 +166,12 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
       if (shape) out.push(`<path d="${shape}" fill="${state.color}" fill-opacity="${theme.stateFill}" fill-rule="evenodd"/>`);
     }
   }
+  if (layers.religions) {
+    for (const faith of planet.religions.slice(1)) {
+      const shape = rings(outline(mesh, (cell) => land(cell) && planet.religion[cell] === faith.id), 1);
+      if (shape) out.push(`<path d="${shape}" fill="${faith.color}" fill-opacity="0.6" fill-rule="evenodd"/>`);
+    }
+  }
   out.push(`</g>`);
 
   // Lakes and the coastline over the land fills.
@@ -284,9 +293,42 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
 
   if (options.highlight) {
     const { kind, id } = options.highlight;
-    const owner = kind === "state" ? planet.state : kind === "province" ? planet.province : planet.culture;
+    const owner = kind === "state" ? planet.state : kind === "province" ? planet.province : kind === "religion" ? planet.religion : planet.culture;
     const shape = rings(outline(mesh, (cell) => land(cell) && owner[cell] === id), 1);
     out.push(`<path d="${shape}" fill="#ffd34d" fill-opacity="0.18" stroke="#ffb300" stroke-width="2.4" fill-rule="evenodd"/>`);
+  }
+
+  // Room taken by banners, arms and towns, which town names keep clear of.
+  const placed: Box[] = [];
+
+  // Armies and fleets: a banner in the realm's colour with the sign of its main arm and its strength.
+  if (layers.military) {
+    const w = s * 1.15,
+      h = s * 0.74;
+    const strength = (total: number) => (total >= 10000 ? `${Math.round(total / 1000)}k` : total >= 1000 ? `${Math.round(total / 100) / 10}k` : String(total));
+    out.push(`<g stroke-linecap="round" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif">`);
+    for (const regiment of raiseArmies(planet)) {
+      const state = planet.states[regiment.state];
+      const x0 = regiment.x - w / 2,
+        y0 = regiment.y - h / 2;
+      const { infantry, archers, cavalry } = regiment.units;
+      const sign =
+        regiment.stance === "fleet"
+          ? `M${r1(x0 + w * 0.2)},${r1(y0 + h * 0.58)}H${r1(x0 + w * 0.8)}L${r1(x0 + w * 0.68)},${r1(y0 + h * 0.82)}H${r1(x0 + w * 0.32)}ZM${r1(regiment.x)},${r1(y0 + h * 0.58)}V${r1(y0 + h * 0.15)}L${r1(x0 + w * 0.72)},${r1(y0 + h * 0.48)}H${r1(regiment.x)}`
+          : cavalry >= infantry && cavalry >= archers
+            ? `M${r1(x0)},${r1(y0 + h)}L${r1(x0 + w)},${r1(y0)}`
+            : archers > infantry
+              ? `M${r1(regiment.x - w * 0.12)},${r1(y0 + h * 0.12)}Q${r1(regiment.x + w * 0.3)},${r1(regiment.y)} ${r1(regiment.x - w * 0.12)},${r1(y0 + h * 0.88)}Z`
+              : `M${r1(x0)},${r1(y0)}L${r1(x0 + w)},${r1(y0 + h)}M${r1(x0)},${r1(y0 + h)}L${r1(x0 + w)},${r1(y0)}`;
+      const edge = regiment.stance === "march" ? "#b3261e" : theme.ink;
+      placed.push({ x0, y0, x1: x0 + w, y1: y0 + h + s * 0.5 });
+      out.push(
+        `<g data-regiment="${regiment.id}"><rect x="${r1(x0)}" y="${r1(y0)}" width="${r1(w)}" height="${r1(h)}" fill="${state.color}" stroke="${edge}" stroke-width="${regiment.stance === "guard" ? 1.6 : 0.9}"/>` +
+          `<path d="${sign}" fill="none" stroke="${theme.ink}" stroke-width="0.8"/>` +
+          `<text x="${r1(regiment.x)}" y="${r1(y0 + h + s * 0.42)}" font-size="${r1(s * 0.42)}" fill="${theme.ink}" stroke="${theme.halo}" stroke-width="1.6" paint-order="stroke">${strength(regiment.total)}</text></g>`,
+      );
+    }
+    out.push(`</g>`);
   }
 
   // Points of interest.
@@ -300,7 +342,6 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
   }
 
   // Towns: capitals as ringed dots, towns by size.
-  const placed: Box[] = [];
   if (layers.burgs) {
     out.push(`<g stroke="${theme.burgStroke}">`);
     for (const burg of planet.burgs.slice(1)) {
@@ -314,6 +355,19 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
       placed.push({ x0: burg.x - s * 0.3, y0: burg.y - s * 0.3, x1: burg.x + s * 0.3, y1: burg.y + s * 0.3 });
     }
     out.push(`</g>`);
+  }
+
+  // Each realm's arms beside its capital.
+  if (layers.emblems) {
+    const w = s * 1.5;
+    for (const burg of planet.burgs.slice(1)) {
+      const arms = burg.capital ? armsOf(planet, "state", burg.state) : null;
+      if (!arms) continue;
+      const x = burg.x - w - s * 0.4,
+        y = burg.y - w * 0.55;
+      out.push(renderCoatOfArms(arms, { at: { x, y, width: w } }));
+      placed.push({ x0: x, y0: y, x1: x + w, y1: y + w * 1.1 });
+    }
   }
 
   if (layers.labels) {

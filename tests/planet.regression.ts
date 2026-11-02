@@ -1,6 +1,6 @@
 // Planet-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { createLanguage, createRng, generatePlanet, globePick, name, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
+import { createLanguage, createRng, armsOf, coatOfArms, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -103,6 +103,45 @@ test("the globe turns to any side and a click finds the place under it", () => {
   assert.equal(globePick(planet, 2, 2), null, "a corner is off the sphere");
   assert.equal(globePick(planet, 500, 500, { lon: 180, lat: 0 }), null, "the far side of the world is uncharted");
   for (const [lon, lat] of [[0, 0], [60, 30], [180, -60], [-120, 90]]) assert.doesNotMatch(renderGlobe(planet, { lon, lat, mark: [width / 2, height / 2] }), /NaN|undefined|Infinity/u);
+});
+
+test("every settled land keeps a faith, and churches hold their holy cities", () => {
+  for (let cell = 0; cell < planet.mesh.cells; cell++) if (!planet.water[cell] && planet.culture[cell]) assert.ok(planet.religion[cell], `cell ${cell} has no faith`);
+  const churches = planet.religions.filter((faith) => faith.kind === "organized");
+  assert.ok(churches.length >= 1, "a church arose");
+  for (const church of churches) assert.equal(planet.religion[planet.burgs[church.center].cell], church.id, `${church.name} lost its holy city`);
+  for (const heresy of planet.religions.filter((faith) => faith.kind === "heresy")) assert.equal(planet.religions[heresy.parent].kind, "organized");
+  const again = generatePlanet({ seed: "regression", template: "continents", cells: 6000 });
+  assert.deepEqual(Array.from(again.religion), Array.from(planet.religion));
+});
+
+test("arms keep metal off metal, follow their realm and draw cleanly", () => {
+  for (let k = 0; k < 200; k++) {
+    const arms = coatOfArms(`arms-${k}`);
+    if (arms.division === "plain" && arms.ordinary === "none") {
+      assert.ok(arms.charge, "a bare field bears a charge");
+      assert.notEqual(METALS.includes(arms.field), METALS.includes(arms.chargeTincture), `${arms.charge} on ${arms.field} breaks the rule of tincture`);
+    }
+    assert.doesNotMatch(renderCoatOfArms(arms), /NaN|undefined/u);
+  }
+  assert.deepEqual(coatOfArms("same"), coatOfArms("same"));
+  const state = planet.states.slice(1).find((item) => item.cells)!;
+  const kin = planet.provinces.slice(1).filter((province) => province.state === state.id).map((province) => armsOf(planet, "province", province.id)!);
+  const field = armsOf(planet, "state", state.id)!.field;
+  assert.ok(kin.filter((arms) => arms.field === field).length >= kin.length / 3, "most provinces keep their realm's field");
+});
+
+test("armies stand at the capitals and on the marches, fleets in the ports", () => {
+  const regiments = raiseArmies(planet);
+  assert.ok(regiments.length > planet.states.length / 2);
+  for (const regiment of regiments) {
+    const burg = planet.burgs[regiment.burg];
+    assert.equal(burg.state, regiment.state, "a regiment stands in its own realm");
+    assert.ok(regiment.total > 0);
+    if (regiment.stance === "guard") assert.ok(burg.capital, "the guard holds the capital");
+    if (regiment.stance === "fleet") assert.ok(burg.port && regiment.ships > 0, "a fleet lies in a port");
+    if (regiment.stance === "march") assert.ok(["enemy", "rival", "suspicion"].includes(planet.states[regiment.state].relations[regiment.facing]), "a march faces a hostile realm");
+  }
 });
 
 console.log(`planet: ${passed} regressions passed`);

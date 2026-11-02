@@ -39,3 +39,8 @@ export * from "./planet/currents";
 export * from "./planet/underworld";
 export * from "./render/underworld-svg";
 export * from "./render/globe-svg";
+export * from "./planet/religions";
+export * from "./heraldry";
+export * from "./render/heraldry-svg";
+export * from "./planet/arms";
+export * from "./planet/military";

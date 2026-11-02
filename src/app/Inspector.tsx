@@ -1,16 +1,16 @@
 // The GM's side panel: what is at the clicked place, and every state, people, town, river and point of interest with
 // its facts. Picking an entry highlights it and moves the map to it.
 import { useMemo, useState } from "react";
-import { altitude, BIOMES, latitudeOf, localFromMarker, SEA_LEVEL, type Marker, type Planet } from "../core/index";
+import { altitude, armsOf, BIOMES, latitudeOf, localFromMarker, raiseArmies, renderCoatOfArms, SEA_LEVEL, type CoatOfArms, type Marker, type Planet } from "../core/index";
 import { area, km, people } from "./format";
 import type { T } from "./i18n";
 
-export type SelectionKind = "cell" | "state" | "culture" | "burg" | "river" | "marker" | "province";
+export type SelectionKind = "cell" | "state" | "culture" | "religion" | "burg" | "river" | "marker" | "province";
 export interface Selection {
   kind: SelectionKind;
   id: number;
 }
-export type Tab = "place" | "states" | "cultures" | "burgs" | "rivers" | "markers";
+export type Tab = "place" | "states" | "cultures" | "religions" | "burgs" | "rivers" | "markers";
 
 interface Props {
   planet: Planet;
@@ -43,6 +43,10 @@ function Link({ label, onClick }: { label: string; onClick: () => void }) {
   );
 }
 
+function Arms({ arms }: { arms: CoatOfArms | null }) {
+  return arms ? <div className="arms" dangerouslySetInnerHTML={{ __html: renderCoatOfArms(arms, { size: 64 }) }} /> : null;
+}
+
 export function legendOf(marker: Marker, t: T, nm: (name: string) => string): string {
   const facts = Object.fromEntries(
     Object.entries(marker.facts).map(([key, value]) => {
@@ -56,10 +60,12 @@ export function legendOf(marker: Marker, t: T, nm: (name: string) => string): st
 
 export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onOpenCity, onOpenRegion, onOpenLocal, onOpenCountry }: Props) {
   const [query, setQuery] = useState("");
-  const tabs: Tab[] = ["place", "states", "cultures", "burgs", "rivers", "markers"];
+  const tabs: Tab[] = ["place", "states", "cultures", "religions", "burgs", "rivers", "markers"];
   const stateName = (id: number) => (id ? t(`form.${planet.states[id].formKey}`, { name: nm(planet.states[id].name) }) : t("form.wild"));
   const provinceName = (id: number) => (id ? t(`province.${planet.provinces[id].formKey}`, { name: nm(planet.provinces[id].name) }) : "—");
   const pick = (kind: SelectionKind, id: number, at?: [number, number]) => onSelect({ kind, id }, at);
+  const faithName = (id: number) => (id ? `${nm(planet.religions[id].name)} (${t(`religion.form.${planet.religions[id].form}`)})` : "—");
+  const faithAt = (id: number) => <Link label={faithName(id)} onClick={() => pick("religion", id)} />;
   const match = (name: string) => !query.trim() || nm(name).toLowerCase().includes(query.trim().toLowerCase());
 
   const card = useMemo(() => {
@@ -88,6 +94,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
               <Row label={t("place.province")} value={provinceName(planet.province[cell])} />
               <Row label={t("place.culture")} value={planet.culture[cell] ? <Link label={nm(planet.cultures[planet.culture[cell]].name)} onClick={() => pick("culture", planet.culture[cell])} /> : "—"} />
               <Row label={t("place.population")} value={people(planet.population[cell], t)} />
+              <Row label={t("place.religion")} value={planet.religion[cell] ? faithAt(planet.religion[cell]) : "—"} />
             </>
           ) : null}
           {river ? <Row label={t("place.river")} value={<Link label={nm(planet.rivers[river].name)} onClick={() => pick("river", river)} />} /> : null}
@@ -103,8 +110,14 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
     if (kind === "state") {
       const state = planet.states[id];
       const capital = planet.burgs[state.capital];
+      // The faith of most of the realm's land, and its armies and fleets.
+      const faiths = new Map<number, number>();
+      for (let cell = 0; cell < planet.mesh.cells; cell++) if (planet.state[cell] === id && planet.religion[cell]) faiths.set(planet.religion[cell], (faiths.get(planet.religion[cell]) ?? 0) + 1);
+      const faith = [...faiths].sort((a, b) => b[1] - a[1])[0]?.[0] ?? 0;
+      const regiments = id ? raiseArmies(planet).filter((regiment) => regiment.state === id) : [];
       return (
         <div className="card">
+          <Arms arms={armsOf(planet, "state", id)} />
           <h3>
             <span className="swatch" style={{ background: state.color }} />
             {stateName(id)}
@@ -115,6 +128,22 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
           <Row label={t("stat.burgs")} value={state.burgs} />
           <Row label={t("stat.provinces")} value={planet.provinces.filter((province) => province.state === id).length} />
           {id ? <Row label={t("place.culture")} value={<Link label={nm(planet.cultures[state.culture].name)} onClick={() => pick("culture", state.culture)} />} /> : null}
+          {faith ? <Row label={t("place.religion")} value={faithAt(faith)} /> : null}
+          {regiments.length ? (
+            <>
+              <h4>{t("army.title")}</h4>
+              <Row label={t("army.total")} value={regiments.reduce((sum, regiment) => sum + regiment.total, 0).toLocaleString()} />
+              <ul className="plain">
+                {regiments.map((regiment) => (
+                  <li key={regiment.id} title={(["infantry", "archers", "cavalry", "artillery", "fleet"] as const).filter((unit) => regiment.units[unit]).map((unit) => `${t(`army.unit.${unit}`)} ${regiment.units[unit].toLocaleString()}`).join(", ")}>
+                    {t(`army.stance.${regiment.stance}`)} {regiment.number} — <Link label={nm(planet.burgs[regiment.burg].name)} onClick={() => pick("burg", regiment.burg, [regiment.x, regiment.y])} />, {regiment.total.toLocaleString()}
+                    {regiment.ships ? ` · ${t("army.ships", { count: regiment.ships })}` : ""}
+                    {regiment.facing ? ` · ${t("army.facing", { name: nm(planet.states[regiment.facing].name) })}` : ""}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
           {id && onOpenCountry ? (
             <button type="button" className="primary wide" onClick={() => onOpenCountry(id)}>
               🗺 {t("action.openCountry")}
@@ -156,8 +185,10 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
       const traits = (["capital", "port", "walls", "citadel", "temple", "market", "shanty"] as const).filter((trait) => burg[trait]).map((trait) => t(`burg.${trait}`));
       return (
         <div className="card">
+          <Arms arms={armsOf(planet, "burg", id)} />
           <h3>{nm(burg.name)}</h3>
           <Row label={t("stat.population")} value={people(burg.population, t)} />
+          <Row label={t("place.religion")} value={planet.religion[burg.cell] ? faithAt(planet.religion[burg.cell]) : "—"} />
           <Row label={t("place.state")} value={<Link label={stateName(burg.state)} onClick={() => pick("state", burg.state)} />} />
           <Row label={t("place.province")} value={provinceName(burg.province)} />
           <Row label={t("place.culture")} value={<Link label={nm(planet.cultures[burg.culture].name)} onClick={() => pick("culture", burg.culture)} />} />
@@ -167,6 +198,26 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
               🏰 {t("action.openCity")}
             </button>
           ) : null}
+        </div>
+      );
+    }
+    if (kind === "religion") {
+      const faith = planet.religions[id];
+      const holy = planet.burgs[faith.center];
+      return (
+        <div className="card">
+          <h3>
+            <span className="swatch" style={{ background: faith.color }} />
+            {nm(faith.name)}
+          </h3>
+          <Row label={t("stat.kind")} value={t(`religion.kind.${faith.kind}`)} />
+          <Row label={t("religion.teaching")} value={t(`religion.form.${faith.form}`)} />
+          <Row label={t("religion.deity")} value={nm(faith.deity)} />
+          {faith.center ? <Row label={t("religion.center")} value={<Link label={nm(holy.name)} onClick={() => pick("burg", holy.id, [holy.x, holy.y])} />} /> : null}
+          {faith.parent ? <Row label={t("religion.parent")} value={faithAt(faith.parent)} /> : null}
+          <Row label={t("place.culture")} value={<Link label={nm(planet.cultures[faith.culture].name)} onClick={() => pick("culture", faith.culture)} />} />
+          <Row label={t("religion.followers")} value={people(faith.followers, t)} />
+          <Row label={t("stat.area")} value={area(faith.area, t)} />
         </div>
       );
     }
@@ -226,6 +277,18 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
               <span className="swatch" style={{ background: culture.color }} />
               <span className="grow">{nm(culture.name)}</span>
               <small>{t(`culture.${culture.kind}`)}</small>
+            </li>
+          ));
+      case "religions":
+        return planet.religions
+          .slice(1)
+          .filter((faith) => faith.cells && match(faith.name))
+          .sort((a, b) => b.followers - a.followers)
+          .map((faith) => (
+            <li key={faith.id} aria-selected={selection?.kind === "religion" && selection.id === faith.id} onClick={() => pick("religion", faith.id)}>
+              <span className="swatch" style={{ background: faith.color }} />
+              <span className="grow">{nm(faith.name)}</span>
+              <small>{t(`religion.kind.${faith.kind}`)}</small>
             </li>
           ));
       case "burgs":

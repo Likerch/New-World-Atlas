@@ -509,3 +509,11 @@ button.back {
   padding: 4px 8px;
   font-size: 12px;
 }
+
+.card .arms {
+  float: right;
+  margin: 0 0 6px 8px;
+}
+.card .arms svg {
+  display: block;
+}

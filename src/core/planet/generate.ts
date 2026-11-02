@@ -11,6 +11,7 @@ import { markFeatures } from "./features";
 import { generateHeights, TEMPLATES } from "./heightmap";
 import { placeMarkers } from "./markers";
 import { SEA_LEVEL, type Ground, type Planet, type PlanetParams } from "./model";
+import { spreadReligions } from "./religions";
 import { hydrology } from "./rivers";
 import { buildRoutes } from "./routes";
 import { formStates } from "./states";
@@ -83,6 +84,7 @@ export function generatePlanet(input: Partial<PlanetParams> = {}): Planet {
     cultures[culture[cell]].population += population[cell];
   }
   for (const item of burgs.slice(1)) cultures[item.culture].population += item.population;
+  const { religion, religions } = spreadReligions(ground, culture, cultures, burgs, state, states, population, rng.fork("religions"));
 
   // Names for the waters and lands, in the tongue of the people living there.
   const names = rng.fork("names");
@@ -111,5 +113,5 @@ export function generatePlanet(input: Partial<PlanetParams> = {}): Planet {
   const routes = buildRoutes(ground, burgs, states);
   const markers = placeMarkers(ground, culture, cultures, state, states, burgs, burg, routes, rng.fork("markers"));
   const worldName = params.name || name((cultures[1] ?? cultures[0]).language, names, "land");
-  return { ...ground, name: worldName, population, culture, cultures, burg, burgs, state, states, province, provinces, routes, markers };
+  return { ...ground, name: worldName, population, culture, cultures, religion, religions, burg, burgs, state, states, province, provinces, routes, markers };
 }
