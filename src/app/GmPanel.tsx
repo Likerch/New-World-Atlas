@@ -23,7 +23,7 @@ interface Props {
 const COLORS = ["#d64545", "#2f7fd0", "#2e9e5b", "#c98a1a", "#8a4fc9", "#1d1d1d"];
 
 export function GmPanel({ t, store, mapKey, selected, mode, setMode, brush, setBrush, players, setPlayers }: Props) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const file = useRef<HTMLInputElement>(null);
   const patch: MapPatch = store.patch(mapKey);
   const update = (change: (p: MapPatch) => MapPatch) => store.update(mapKey, change);

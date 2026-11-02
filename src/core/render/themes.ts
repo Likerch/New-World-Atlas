@@ -1,8 +1,8 @@
 // Map styles. A theme only decides how data looks; switching it never changes the world.
 
-export type ThemeId = "atlas" | "parchment" | "political" | "relief" | "night";
+export type ThemeId = "atlas" | "parchment" | "political" | "relief" | "night" | "nautical";
 
-export const THEMES: ThemeId[] = ["atlas", "parchment", "political", "relief", "night"];
+export const THEMES: ThemeId[] = ["atlas", "parchment", "political", "relief", "night", "nautical"];
 
 export interface Theme {
   /** Ocean shades from the deep sea to the shallows. */
@@ -146,6 +146,32 @@ export const THEME: Record<ThemeId, Theme> = {
     grid: "rgba(255,255,255,0.15)",
     paper: false,
   },
+  nautical: {
+    ocean: ["#cfdcd8", "#d7e2dd", "#dfe8e2", "#e7eee7", "#eef3ec"],
+    land: "#e8dcb8",
+    biomes: null,
+    heights: null,
+    lake: "#d7e2dd",
+    river: "#5f8796",
+    coast: "#33424a",
+    coastWidth: 1.4,
+    stateFill: 0,
+    border: "#8a4a3a",
+    provinceBorder: "#8a4a3a",
+    road: "#8a7a5a",
+    sea: "#2f5d73",
+    ink: "#33424a",
+    iconFill: "#e8dcb8",
+    tree: "#c9c29a",
+    burg: "#e8dcb8",
+    burgStroke: "#33424a",
+    label: "#2a3238",
+    halo: "#eef3ec",
+    waterLabel: "#2f5d73",
+    font: "'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif",
+    grid: "rgba(51,66,74,0.16)",
+    paper: true,
+  },
   night: {
     ocean: ["#05080f", "#070c18", "#0a1122", "#0d172d", "#111e3a"],
     land: "#141b28",
@@ -188,18 +214,20 @@ export type LayerId =
   | "labels"
   | "markers"
   | "grid"
+  | "currents"
+  | "winds"
   | "frame";
 
-export const LAYERS: LayerId[] = ["depth", "biomes", "heights", "icons", "rivers", "states", "provinces", "borders", "routes", "burgs", "labels", "markers", "grid", "frame"];
+export const LAYERS: LayerId[] = ["depth", "biomes", "heights", "icons", "rivers", "states", "provinces", "borders", "routes", "burgs", "labels", "markers", "grid", "currents", "winds", "frame"];
 
 export function defaultLayers(theme: ThemeId): Record<LayerId, boolean> {
   return {
     depth: true,
-    biomes: theme !== "political" && theme !== "relief",
+    biomes: theme !== "political" && theme !== "relief" && theme !== "nautical",
     heights: theme === "relief",
-    icons: theme !== "political",
+    icons: theme !== "political" && theme !== "nautical",
     rivers: true,
-    states: theme !== "relief",
+    states: theme !== "relief" && theme !== "nautical",
     provinces: theme === "political",
     borders: true,
     routes: true,
@@ -207,6 +235,8 @@ export function defaultLayers(theme: ThemeId): Record<LayerId, boolean> {
     labels: true,
     markers: theme !== "political",
     grid: theme !== "political",
+    currents: theme === "nautical",
+    winds: false,
     frame: true,
   };
 }

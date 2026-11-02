@@ -497,3 +497,15 @@ button.back {
   gap: 6px;
   align-items: center;
 }
+.views {
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.views button {
+  max-width: 190px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  padding: 4px 8px;
+  font-size: 12px;
+}

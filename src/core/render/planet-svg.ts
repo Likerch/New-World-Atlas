@@ -4,6 +4,7 @@ import { shade } from "../color";
 import { borders, outline, pathData, smooth, type Point } from "../geometry";
 import { toCyrillic } from "../language";
 import { BIOMES } from "../planet/biomes";
+import { oceanCurrents, windAt } from "../planet/currents";
 import type { MarkerKind, Planet } from "../planet/model";
 import { defaultLayers, THEME, type LayerId, type Theme, type ThemeId } from "./themes";
 
@@ -15,6 +16,7 @@ export interface RenderOptions {
   highlight?: { kind: "state" | "province" | "culture"; id: number } | null;
 }
 
+const SEA = 20;
 const esc = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;").replace(/"/gu, "&quot;");
 const r1 = (value: number) => Math.round(value * 10) / 10;
 
@@ -108,6 +110,35 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
       const shape = rings(outline(mesh, (cell) => land(cell) || coast[cell] >= -level), 3);
       out.push(`<path d="${shape}" fill="${theme.ocean[k + 1]}" fill-rule="evenodd"/>`);
     });
+  }
+
+  // A sea chart: depth lines, soundings, rhumb lines from compass roses, shoals.
+  if (themeId === "nautical") {
+    for (const level of [6, 12, 17]) {
+      const isobath = rings(outline(mesh, (cell) => land(cell) || planet.height[cell] >= level), 3);
+      out.push(`<path d="${isobath}" fill="none" stroke="${theme.sea}" stroke-width="0.6" stroke-dasharray="${level === 17 ? "2 2" : "6 3"}" opacity="0.6" fill-rule="evenodd"/>`);
+    }
+    const roses = Array.from({ length: mesh.cells }, (_, cell) => cell)
+      .filter((cell) => water[cell])
+      .sort((a, b) => coast[a] - coast[b])
+      .filter((cell, k, list) => list.slice(0, k).every((other) => Math.hypot(mesh.x[other] - mesh.x[cell], mesh.y[other] - mesh.y[cell]) > W / 3))
+      .slice(0, 2);
+    const rays: string[] = [];
+    for (const cell of roses) for (let k = 0; k < 16; k++) rays.push(`M${r1(mesh.x[cell])},${r1(mesh.y[cell])}l${r1(Math.cos((k * Math.PI) / 8) * W * 1.5)},${r1(Math.sin((k * Math.PI) / 8) * W * 1.5)}`);
+    out.push(`<path d="${rays.join("")}" stroke="${theme.sea}" stroke-width="0.4" opacity="0.35"/>`);
+    const soundings: string[] = [];
+    const step = s * 3.2;
+    for (let y = step / 2; y < H; y += step) {
+      for (let x = step / 2; x < W; x += step) {
+        const cell = mesh.find(x + ((y / step) % 2) * step * 0.5, y);
+        if (!water[cell]) continue;
+        const depth = Math.round(((SEA - Math.min(SEA, planet.height[cell])) / SEA) * 600) * 10;
+        soundings.push(`<text x="${r1(mesh.x[cell])}" y="${r1(mesh.y[cell])}">${depth}</text>`);
+      }
+    }
+    out.push(`<g font-size="5.5" fill="${theme.sea}" opacity="0.75" text-anchor="middle" font-style="italic">${soundings.join("")}</g>`);
+    const shoals = Array.from({ length: mesh.cells }, (_, cell) => cell).filter((cell) => water[cell] && coast[cell] === -1 && planet.height[cell] > SEA - 2 && noiseAt(cell, 7) < 0.35);
+    out.push(`<g font-size="7" fill="${theme.border}" text-anchor="middle">${shoals.map((cell) => `<text x="${r1(mesh.x[cell])}" y="${r1(mesh.y[cell] + 2)}">✱</text>`).join("")}</g>`);
   }
 
   // Land, then what covers it.
@@ -217,6 +248,38 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
       out.push(`<path d="${pathData(smooth(points, false, 2), false)}" ${style[route.kind]}/>`);
     }
     out.push(`</g>`);
+  }
+
+  // Winds over everything, currents over the sea: arrows on a coarse grid.
+  const arrow = (x: number, y: number, ux: number, uy: number, length: number, color: string, width: number) => {
+    const ex = x + ux * length,
+      ey = y + uy * length;
+    const hx = -uy * length * 0.25,
+      hy = ux * length * 0.25;
+    return `<path d="M${r1(x)},${r1(y)}L${r1(ex)},${r1(ey)}M${r1(ex - ux * length * 0.35 + hx)},${r1(ey - uy * length * 0.35 + hy)}L${r1(ex)},${r1(ey)}L${r1(ex - ux * length * 0.35 - hx)},${r1(ey - uy * length * 0.35 - hy)}" stroke="${color}" stroke-width="${width}" fill="none" stroke-linecap="round"/>`;
+  };
+  if (layers.currents) {
+    const { u, v } = oceanCurrents(planet);
+    const step = s * 2.6;
+    const arrows: string[] = [];
+    for (let y = step / 2; y < H; y += step) {
+      for (let x = step / 2; x < W; x += step) {
+        const cell = mesh.find(x, y);
+        if (!water[cell] || (!u[cell] && !v[cell])) continue;
+        arrows.push(arrow(mesh.x[cell], mesh.y[cell], u[cell], v[cell], s * 1.3, coast[cell] >= -2 ? "#2f7fd0" : "#5a9bd6", 0.9));
+      }
+    }
+    out.push(`<g opacity="0.7">${arrows.join("")}</g>`);
+  }
+  if (layers.winds) {
+    const step = s * 5;
+    const arrows: string[] = [];
+    for (let y = step / 2; y < H; y += step) {
+      const latitude = params.latitudeNorth - (y / H) * (params.latitudeNorth - params.latitudeSouth);
+      const [ux, uy] = windAt(latitude);
+      for (let x = step / 2; x < W; x += step) arrows.push(arrow(x, y, ux, uy, s * 2.2, "#7a6a9a", 1.2));
+    }
+    out.push(`<g opacity="0.55">${arrows.join("")}</g>`);
   }
 
   if (options.highlight) {
