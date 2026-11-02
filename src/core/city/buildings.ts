@@ -170,13 +170,15 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
       continue;
     }
     if (kind === "plaza") {
-      const c = centroid(inner);
-      for (let k = own.int(6, 12); k > 0; k--) {
-        const angle = own.float(0, Math.PI * 2);
-        const d = own.float(0.25, 0.7) * Math.sqrt(area(inner) / Math.PI);
-        const s = m(own.float(2.5, 4));
-        const p: Point = [c[0] + Math.cos(angle) * d, c[1] + Math.sin(angle) * d];
-        push([[p[0] - s, p[1] - s], [p[0] + s, p[1] - s], [p[0] + s, p[1] + s], [p[0] - s, p[1] + s]], "stall", 1);
+      // Rows of market stalls around an open middle where the well stands.
+      const market = insetConvex(inner, Math.sqrt(area(inner)) * 0.12);
+      const middle = insetConvex(inner, Math.sqrt(area(inner)) * 0.36);
+      if (market) {
+        for (const stall of grid(market, angles[ward] || own.float(0, Math.PI), span(3.2, 1.6), span(3.4, 1.2))) {
+          if (middle && pointInPolygon(centroid(stall), middle)) continue;
+          if (own.chance(0.35)) continue;
+          push(stall, "stall", 1);
+        }
       }
       continue;
     }
@@ -222,6 +224,35 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
         const floors = own.int(rule.floors[0], rule.floors[1]) + (organic ? Math.round(wealth[ward]) : 0);
         push(shape, rule.kind === "tower" && floors < 8 ? "house" : rule.kind, floors);
       }
+    }
+  }
+  // Piers: wooden or stone jetties from the harbour shore out into the sea.
+  if (sea && params.port && params.coast !== null) {
+    const toSea: Point = [Math.cos(params.coast), Math.sin(params.coast)];
+    const shore = sea.slice(0, -2);
+    const harbours = diagram.sites.map((_, ward) => ward).filter((ward) => kinds[ward] === "harbour" || kinds[ward] === "port");
+    const own = rng.fork("piers");
+    const placed: Point[] = [];
+    const gap = organic ? span(35, 10) : span(70, 14);
+    for (let k = 1; k < shore.length - 1; k++) {
+      const p = shore[k];
+      const inland: Point = [p[0] - toSea[0] * span(8, 3), p[1] - toSea[1] * span(8, 3)];
+      const ward = harbours.find((w) => pointInPolygon(inland, diagram.cells[w]));
+      if (ward === undefined || placed.some((q) => Math.hypot(q[0] - p[0], q[1] - p[1]) < gap)) continue;
+      const tx = shore[k + 1][0] - shore[k - 1][0],
+        ty = shore[k + 1][1] - shore[k - 1][1];
+      const tl = Math.hypot(tx, ty) || 1;
+      let nx = -ty / tl,
+        ny = tx / tl;
+      if (nx * toSea[0] + ny * toSea[1] < 0) [nx, ny] = [-nx, -ny];
+      const length = organic ? span(own.float(25, 55), 8) : span(own.float(60, 140), 14);
+      const half = (organic ? span(5, 2) : span(12, 3)) / 2;
+      const ux = tx / tl,
+        uy = ty / tl;
+      const base: Point = [p[0] - nx * span(3, 1), p[1] - ny * span(3, 1)];
+      const tip: Point = [p[0] + nx * length, p[1] + ny * length];
+      out.push({ polygon: [[base[0] - ux * half, base[1] - uy * half], [tip[0] - ux * half, tip[1] - uy * half], [tip[0] + ux * half, tip[1] + uy * half], [base[0] + ux * half, base[1] + uy * half]], ward, kind: "pier", floors: 0 });
+      placed.push(p);
     }
   }
   return out;

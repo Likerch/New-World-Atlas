@@ -274,15 +274,44 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
       for (const river of big) out.push(`<text dy="-2.5"><textPath href="#rv-${river.id}" startOffset="45%" text-anchor="middle">${text(river.name)}</textPath></text>`);
       out.push(`</g>`);
     }
-    // States, large and faint, then towns on top, never colliding.
-    out.push(`<g text-anchor="middle" font-weight="600">`);
+    // States, large and faint, along each state's long axis on a gentle arch; then towns on top, never colliding.
+    const moments = planet.states.map(() => [0, 0, 0, 0, 0, 0]);
+    for (let cell = 0; cell < mesh.cells; cell++) {
+      if (water[cell] || !planet.state[cell]) continue;
+      const m = moments[planet.state[cell]];
+      const x = mesh.x[cell],
+        y = mesh.y[cell];
+      m[0]++;
+      m[1] += x;
+      m[2] += y;
+      m[3] += x * x;
+      m[4] += y * y;
+      m[5] += x * y;
+    }
+    const arches: string[] = [];
+    const names: string[] = [];
     for (const state of planet.states.slice(1)) {
       if (!state.cells) continue;
+      const [count, sx, sy, sxx, syy, sxy] = moments[state.id];
+      const cxx = sxx / count - (sx / count) ** 2;
+      const cyy = syy / count - (sy / count) ** 2;
+      const cxy = sxy / count - (sx / count) * (sy / count);
+      let angle = 0.5 * Math.atan2(2 * cxy, cxx - cyy);
+      if (angle > Math.PI / 2) angle -= Math.PI;
+      if (angle < -Math.PI / 2) angle += Math.PI;
+      angle = Math.max(-0.7, Math.min(0.7, angle));
       const size = Math.max(9, Math.min(30, 5 + Math.sqrt(state.cells) * 1.1));
+      const label = text(state.name.toUpperCase());
+      const length = label.length * size * (0.62 + 0.22) * 1.15 + size;
+      const ux = Math.cos(angle),
+        uy = Math.sin(angle);
+      const [px, py] = state.pole;
+      const bend = length * 0.1;
+      arches.push(`<path id="sl-${state.id}" d="M${r1(px - (ux * length) / 2)},${r1(py - (uy * length) / 2)}Q${r1(px + uy * bend)},${r1(py - ux * bend)} ${r1(px + (ux * length) / 2)},${r1(py + (uy * length) / 2)}"/>`);
       const color = themeId === "night" ? state.color : shade(state.color, -0.55);
-      out.push(`<text x="${r1(state.pole[0])}" y="${r1(state.pole[1])}" font-size="${r1(size)}" letter-spacing="${r1(size * 0.22)}" fill="${color}" opacity="0.85" stroke="${theme.halo}" stroke-width="${r1(size * 0.14)}" stroke-opacity="0.6" paint-order="stroke">${text(state.name.toUpperCase())}</text>`);
+      names.push(`<text font-size="${r1(size)}" letter-spacing="${r1(size * 0.22)}" fill="${color}" opacity="0.85" stroke="${theme.halo}" stroke-width="${r1(size * 0.14)}" stroke-opacity="0.6" paint-order="stroke" dy="${r1(size * 0.35)}"><textPath href="#sl-${state.id}" startOffset="50%">${label}</textPath></text>`);
     }
-    out.push(`</g>`);
+    out.push(`<defs>${arches.join("")}</defs><g text-anchor="middle" font-weight="600">${names.join("")}</g>`);
     const towns = planet.burgs.slice(1).sort((a, b) => Number(b.capital) - Number(a.capital) || b.population - a.population);
     out.push(`<g fill="${theme.label}" ${halo}>`);
     for (const burg of towns) {

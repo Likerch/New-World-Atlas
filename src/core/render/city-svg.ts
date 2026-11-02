@@ -35,6 +35,9 @@ interface CityTheme {
   tint: Partial<Record<WardKind, string>>;
   font: string;
   glow: boolean;
+  /** Paving of the market square. */
+  plaza: string;
+  pier: string;
 }
 
 const COLOR_TINT: Partial<Record<WardKind, string>> = {
@@ -59,11 +62,11 @@ const COLOR_TINT: Partial<Record<WardKind, string>> = {
 };
 
 const THEMES: Record<CityThemeId, CityTheme> = {
-  ink: { paper: "#f4efe1", water: "#c2d3d8", shore: "#5b5a52", field: ["#ebe4cc", "#e4dcc0"], fieldLine: "#b8ad8f", tree: "#d9dcc4", treeLine: "#6e6a58", building: "#cfc6b4", rich: "#c3b9a4", landmark: "#9f9480", line: "#3e3a33", tower: "#b7ad9a", shadow: "rgba(40,35,25,0.18)", street: "#f4efe1", casing: "#8c8473", highway: "#ffffff", wall: "#3e3a33", label: "#2d2a25", halo: "#f4efe1", tint: {}, font: "'Palatino Linotype', Georgia, serif", glow: false },
-  color: { paper: "#f2ede1", water: "#9cc4e0", shore: "#5a7d99", field: ["#e2e6b8", "#d8e0a8"], fieldLine: "#a9b07a", tree: "#9cc68a", treeLine: "#5c8a4e", building: "#d9a582", rich: "#cf9670", landmark: "#b5674a", line: "#6a4a3a", tower: "#b9a7a0", shadow: "rgba(30,30,40,0.22)", street: "#fbf8f1", casing: "#b9ab92", highway: "#f6d27a", wall: "#6b5a4a", label: "#2a2520", halo: "#fbf8f1", tint: COLOR_TINT, font: "'Segoe UI', Arial, sans-serif", glow: false },
-  parchment: { paper: "#ecdfc0", water: "#cdbf98", shore: "#5d4a30", field: ["#e4d5b0", "#ddcca4"], fieldLine: "#a8936a", tree: "#d6c79f", treeLine: "#6d5a3d", building: "#c9b48a", rich: "#bfa77b", landmark: "#a48b5f", line: "#4a3a26", tower: "#b5a07a", shadow: null, street: "#ecdfc0", casing: "#8f7a55", highway: "#efe2c4", wall: "#4a3a26", label: "#3a2c1c", halo: "#ecdfc0", tint: {}, font: "'Palatino Linotype', Georgia, serif", glow: false },
-  blueprint: { paper: "#1d3f6e", water: "#163257", shore: "#9cc3ef", field: ["#22477a", "#244a7e"], fieldLine: "#3f68a0", tree: "#24497c", treeLine: "#8fb5e6", building: "#2a5288", rich: "#2d5890", landmark: "#3a69a8", line: "#cfe3ff", tower: "#33609c", shadow: null, street: "#1d3f6e", casing: "#8fb5e6", highway: "#cfe3ff", wall: "#ffffff", label: "#e8f2ff", halo: "#1d3f6e", tint: {}, font: "'Segoe UI', Arial, sans-serif", glow: false },
-  neon: { paper: "#0b0d14", water: "#06121f", shore: "#1f8fff", field: ["#11161d", "#131920"], fieldLine: "#1f2a33", tree: "#0f2a1f", treeLine: "#1fbf7f", building: "#161a26", rich: "#1b2030", landmark: "#2a1838", line: "#2b3a55", tower: "#1a1f33", shadow: "rgba(0,0,0,0.55)", street: "#0b0d14", casing: "#232c40", highway: "#ffcc33", wall: "#ff3d7f", label: "#e6f1ff", halo: "#0b0d14", tint: {}, font: "'Segoe UI', Arial, sans-serif", glow: true },
+  ink: { paper: "#f4efe1", water: "#c2d3d8", shore: "#5b5a52", field: ["#ebe4cc", "#e4dcc0"], fieldLine: "#b8ad8f", tree: "#d9dcc4", treeLine: "#6e6a58", building: "#cfc6b4", rich: "#c3b9a4", landmark: "#9f9480", line: "#3e3a33", tower: "#b7ad9a", shadow: "rgba(40,35,25,0.18)", street: "#f4efe1", casing: "#8c8473", highway: "#ffffff", wall: "#3e3a33", label: "#2d2a25", halo: "#f4efe1", tint: {}, font: "'Palatino Linotype', Georgia, serif", glow: false, plaza: "#e6dcc3", pier: "#b8a68a" },
+  color: { paper: "#f2ede1", water: "#9cc4e0", shore: "#5a7d99", field: ["#e2e6b8", "#d8e0a8"], fieldLine: "#a9b07a", tree: "#9cc68a", treeLine: "#5c8a4e", building: "#d9a582", rich: "#cf9670", landmark: "#b5674a", line: "#6a4a3a", tower: "#b9a7a0", shadow: "rgba(30,30,40,0.22)", street: "#fbf8f1", casing: "#b9ab92", highway: "#f6d27a", wall: "#6b5a4a", label: "#2a2520", halo: "#fbf8f1", tint: COLOR_TINT, font: "'Segoe UI', Arial, sans-serif", glow: false, plaza: "#ead8ae", pier: "#b08a5c" },
+  parchment: { paper: "#ecdfc0", water: "#cdbf98", shore: "#5d4a30", field: ["#e4d5b0", "#ddcca4"], fieldLine: "#a8936a", tree: "#d6c79f", treeLine: "#6d5a3d", building: "#c9b48a", rich: "#bfa77b", landmark: "#a48b5f", line: "#4a3a26", tower: "#b5a07a", shadow: null, street: "#ecdfc0", casing: "#8f7a55", highway: "#efe2c4", wall: "#4a3a26", label: "#3a2c1c", halo: "#ecdfc0", tint: {}, font: "'Palatino Linotype', Georgia, serif", glow: false, plaza: "#e0d0aa", pier: "#bfa77b" },
+  blueprint: { paper: "#1d3f6e", water: "#163257", shore: "#9cc3ef", field: ["#22477a", "#244a7e"], fieldLine: "#3f68a0", tree: "#24497c", treeLine: "#8fb5e6", building: "#2a5288", rich: "#2d5890", landmark: "#3a69a8", line: "#cfe3ff", tower: "#33609c", shadow: null, street: "#1d3f6e", casing: "#8fb5e6", highway: "#cfe3ff", wall: "#ffffff", label: "#e8f2ff", halo: "#1d3f6e", tint: {}, font: "'Segoe UI', Arial, sans-serif", glow: false, plaza: "#244a7e", pier: "#3a69a8" },
+  neon: { paper: "#0b0d14", water: "#06121f", shore: "#1f8fff", field: ["#11161d", "#131920"], fieldLine: "#1f2a33", tree: "#0f2a1f", treeLine: "#1fbf7f", building: "#161a26", rich: "#1b2030", landmark: "#2a1838", line: "#2b3a55", tower: "#1a1f33", shadow: "rgba(0,0,0,0.55)", street: "#0b0d14", casing: "#232c40", highway: "#ffcc33", wall: "#ff3d7f", label: "#e6f1ff", halo: "#0b0d14", tint: {}, font: "'Segoe UI', Arial, sans-serif", glow: true, plaza: "#141826", pier: "#1a2a3a" },
 };
 
 export function defaultCityTheme(era: CityParams["era"]): CityThemeId {
@@ -127,7 +130,7 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
 
   if (layers.wards) {
     for (const ward of city.wards) {
-      const tint = th.tint[ward.kind];
+      const tint = ward.kind === "plaza" ? th.plaza : th.tint[ward.kind];
       if (tint) out.push(`<path d="${poly(ward.polygon)}" fill="${tint}"/>`);
     }
   }
@@ -143,6 +146,8 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
     const d = pathData(smooth(city.river.points, false, 2), false);
     out.push(`<path d="${d}" fill="none" stroke="${th.shore}" stroke-width="${r1(city.river.width + 2.4)}" stroke-linecap="round" stroke-linejoin="round"/><path d="${d}" fill="none" stroke="${th.water}" stroke-width="${r1(city.river.width)}" stroke-linecap="round" stroke-linejoin="round"/>`);
   }
+
+  if (layers.buildings) for (const pier of byKind("pier")) out.push(`<path d="${poly(pier.polygon)}" fill="${th.pier}" stroke="${th.line}" stroke-width="0.5"/>`);
 
   // Roads and avenues under the buildings' edges; highways and rail over them.
   const streetPath = (points: Point[]) => pathData(points, false);
@@ -167,28 +172,31 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
   if (layers.buildings) {
     const shadows: string[] = [];
     const shapes: string[] = [];
-    const neonLines = ["#38e1ff", "#ff3d7f", "#a46bff", "#ffcc33"];
-    for (const building of city.buildings) {
-      if (building.kind === "tree" || building.kind === "field") continue;
+    // Neon by district: each kind of quarter glows in its own pair of colours.
+    const neon: Partial<Record<WardKind, [string, string]>> = { commercial: ["#ff3d7f", "#38e1ff"], megablock: ["#a46bff", "#38e1ff"], arcology: ["#ffcc33", "#ffffff"], industrial: ["#ff9f1a", "#ffcc33"], "combat-zone": ["#ff4d4d", "#ff9f1a"], port: ["#2bd9c4", "#38e1ff"] };
+    const wardById = new Map(city.wards.map((ward) => [ward.id, ward]));
+    city.buildings.forEach((building, index) => {
+      if (building.kind === "tree" || building.kind === "field" || building.kind === "pier") return;
       const d = poly(building.polygon);
       if (building.kind === "grave") {
         shapes.push(`<path d="${d}" fill="${th.rich}" stroke="none" opacity="0.7"/>`);
-        continue;
+        return;
       }
       if (building.kind === "stall") {
-        shapes.push(`<path d="${d}" fill="${themeId === "color" ? "#d9634a" : th.landmark}" stroke="${th.line}" stroke-width="0.3"/>`);
-        continue;
+        shapes.push(`<path d="${d}" fill="${themeId === "color" ? (index % 3 ? "#d9634a" : "#e0b04a") : th.landmark}" stroke="${th.line}" stroke-width="0.3"/>`);
+        return;
       }
       const tall = building.floors >= 8;
       if (th.shadow && (tall || building.kind === "landmark")) {
         const off = Math.min(m(Math.min(building.floors, 120) * 0.9), 26);
         shadows.push(`<path d="${d}" transform="translate(${r1(off)},${r1(off * 0.8)})" fill="${th.shadow}"/>`);
       }
-      const ward = city.wards.find((w) => w.id === building.ward);
+      const ward = wardById.get(building.ward);
       const fill = building.kind === "landmark" ? th.landmark : building.kind === "tower" ? th.tower : ward && ward.wealth > 0.7 ? th.rich : th.building;
-      const stroke = th.glow && tall ? neonLines[building.floors % neonLines.length] : th.line;
+      const pair = (ward && neon[ward.kind]) ?? ["#4d7cff", "#a46bff"];
+      const stroke = th.glow && (tall || building.kind === "industrial") ? pair[index % 5 === 0 ? 1 : 0] : th.line;
       shapes.push(`<path d="${d}" fill="${fill}" stroke="${stroke}" stroke-width="${th.glow && tall ? 0.8 : 0.45}"${th.glow && building.floors > 60 ? ` filter="url(#glow)"` : ""}/>`);
-    }
+    });
     out.push(`<g>${shadows.join("")}</g><g stroke-linejoin="round">${shapes.join("")}</g>`);
   }
 

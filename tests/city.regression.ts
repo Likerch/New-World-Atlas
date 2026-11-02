@@ -22,7 +22,7 @@ test("the same seed gives the same city", () => {
 
 test("nothing is built in the sea or the river", () => {
   assert.ok(port.sea && port.river, "a port on a river");
-  for (const building of port.buildings) {
+  for (const building of port.buildings.filter((item) => item.kind !== "pier")) {
     for (const p of building.polygon) {
       assert.ok(!pointInPolygon(p, port.sea!), `a ${building.kind} stands in the sea`);
       assert.ok(distanceToPolyline(p, port.river!.points) >= port.river!.width / 2, `a ${building.kind} stands in the river`);
@@ -37,6 +37,8 @@ test("a walled town has gates, towers, a citadel ring, a market and main streets
   assert.ok(port.wards.some((ward) => ward.kind === "plaza"));
   assert.ok(port.streets.filter((street) => street.kind === "main").length >= 2);
   assert.ok(port.landmarks.some((landmark) => landmark.kind === "market-well"));
+  assert.ok(port.buildings.some((building) => building.kind === "pier"), "a harbour has piers");
+  assert.ok(port.buildings.filter((building) => building.kind === "stall").length >= 8, "the market has rows of stalls");
 });
 
 test("every era builds a city and every style draws it", () => {

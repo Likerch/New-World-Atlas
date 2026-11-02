@@ -74,7 +74,7 @@ export interface Ward {
   buildings: number;
 }
 
-export type BuildingKind = "house" | "landmark" | "tower" | "industrial" | "field" | "tree" | "grave" | "stall";
+export type BuildingKind = "house" | "landmark" | "tower" | "industrial" | "field" | "tree" | "grave" | "stall" | "pier";
 
 export interface Building {
   polygon: Point[];
