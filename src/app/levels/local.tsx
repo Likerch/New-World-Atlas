@@ -1,13 +1,16 @@
 // The local-map level: dungeons, caves and wilderness on a battle grid, with the GM's key.
 import { useMemo, useRef, useState } from "react";
-import { generateLocal, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localParams, localPixels, renderLocal, type Language, type LocalMap, type LocalParams, type LocalThemeId } from "../../core/index";
+import { generateLocal, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localParams, localPixels, renameLocal, renderLocal, type Language, type LocalMap, type LocalParams, type LocalThemeId } from "../../core/index";
 import type { Level, LevelContext } from "./types";
 
 export function useLocalLevel(ctx: LevelContext, back: (() => void) | null): Level & { open: (params: Partial<LocalParams>, language: Language | null) => void } {
   const { t, nm } = ctx;
   const [input, setInput] = useState<LocalParams>(() => localParams({ kind: "dungeon" }));
   const [language, setLanguage] = useState<Language | null>(null);
-  const [map, setMap] = useState<LocalMap | null>(null);
+  const [raw, setMap] = useState<LocalMap | null>(null);
+  const mapKey = raw ? `local:${raw.params.seed}` : null;
+  const names = ctx.names(mapKey);
+  const map = useMemo(() => (raw ? renameLocal(raw, names) : null), [raw, names]);
   const [style, setStyle] = useState<LocalThemeId>("classic");
   const [grid, setGrid] = useState(true);
   const [keyed, setKeyed] = useState<number | null>(null);
@@ -45,6 +48,8 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null): Lev
     ensure: () => {
       if (!map && !pending.current) build(input, language);
     },
+    mapKey,
+    selected: !map ? null : keyed !== null ? { key: `keyed:${keyed}`, label: `${keyed}. ${t(`purpose.${map.keyed.find((k) => k.id === keyed)?.purpose}`)}` } : { key: "world", label: map.name },
     open: (params, tongue) => {
       setLanguage(tongue);
       setStyle(params.kind === "wilderness" ? "classic" : params.theme === "bunker" || params.theme === "derelict" ? "dark" : "classic");

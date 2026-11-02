@@ -15,6 +15,8 @@ export interface LevelContext {
   run: (work: () => void) => void;
   /** Switches the visible level. */
   show: (level: LevelId) => void;
+  /** The GM's new names for a map's things. */
+  names: (mapKey: string | null) => Record<string, string>;
 }
 
 export interface Level {
@@ -33,4 +35,8 @@ export interface Level {
   data: () => unknown;
   /** Opens the level for the first time (generates if nothing exists yet). */
   ensure: () => void;
+  /** Identity of the map shown, for the GM's patch. */
+  mapKey: string | null;
+  /** The thing selected on it, for renaming and notes; "world" for the map itself. */
+  selected: { key: string; label: string } | null;
 }

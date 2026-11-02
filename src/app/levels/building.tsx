@@ -30,12 +30,16 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): 
   const svg = useMemo(() => (plan ? renderBuilding(plan, { theme, floor, grid, highlight: room, label: (kind) => t(`room.${kind}`) }) : ""), [plan, theme, floor, grid, room, t]);
   const current = plan?.floors[floor];
   const bounds = plan ? plan.yard?.bounds ?? { x: -2, y: -2, w: plan.params.width + 4, h: plan.params.depth + 4 } : null;
+  const mapKey = plan ? `building:${plan.params.seed}` : null;
+  const names = ctx.names(mapKey);
   const floorName = (level: number) => (level < 0 ? t("floor.cellar") : level === 0 ? t("floor.ground") : t("floor.upper", { n: level + 1 }));
 
   return {
     id: "building",
     icon: "🏠",
-    title: plan ? plan.params.name || t(`btype.${plan.params.type}`) : null,
+    title: plan ? names.world || plan.params.name || t(`btype.${plan.params.type}`) : null,
+    mapKey,
+    selected: !plan || !current ? null : room !== null ? { key: `room:${current.level}:${room}`, label: t(`room.${current.rooms.find((r) => r.id === room)?.kind}`) } : { key: "world", label: plan.params.name || t(`btype.${plan.params.type}`) },
     seed: input.seed,
     setSeed: (seed) => set("seed", seed),
     generate: (seed) => build(seed ? { ...input, seed } : input),

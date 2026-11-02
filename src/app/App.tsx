@@ -1,7 +1,9 @@
 // New World Atlas: the game master's map table. Every level (planet, city, building, …) supplies its settings, map
 // and inspector; the shell around them holds the tabs, the seed, export, the names' script and the language.
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { localFromLandmark, localFromMarker, localFromStar, randomSeed, toCyrillic, type LocalLink } from "../core/index";
+import { localFromLandmark, localFromMarker, localFromStar, overlaySvg, randomSeed, toCyrillic, withOverlay, type LocalLink } from "../core/index";
+import { useCampaign } from "./campaign";
+import { GmPanel, type GmMode } from "./GmPanel";
 import { translator, type Locale } from "./i18n";
 import { useBuildingLevel } from "./levels/building";
 import { useCityLevel } from "./levels/city";
@@ -47,6 +49,10 @@ export function App() {
   const [busy, setBusy] = useState(false);
   const [focus, setFocus] = useState<Focus | null>(null);
   const [cameFrom, setCameFrom] = useState<Partial<Record<LevelId, LevelId>>>({});
+  const store = useCampaign();
+  const [mode, setMode] = useState<GmMode>("inspect");
+  const [brush, setBrush] = useState(60);
+  const [players, setPlayers] = useState(false);
 
   const ctx: LevelContext = {
     t,
@@ -62,6 +68,7 @@ export function App() {
       }, 30);
     },
     show: setView,
+    names: (key) => store.patch(key).names,
   };
   const go = (to: LevelId, from: LevelId) => {
     setCameFrom((current) => ({ ...current, [to]: from }));
@@ -140,11 +147,29 @@ export function App() {
 
   const fileName = `${(level.title ?? level.id).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-")}-${level.seed.replace(/\W+/gu, "-")}`;
   const map = level.map;
+  const patch = store.patch(level.mapKey);
+  // Pins and fog scale with the map, so they stay readable on big and small maps alike.
+  const overlayScale = map ? Math.max(0.6, Math.min(3, Math.max(map.width, map.height) / 1600)) : 1;
+  const overlay = map ? overlaySvg(patch, map.width, map.height, players, overlayScale) : "";
+  const exported = map ? withOverlay(map.svg, overlaySvg(patch, map.width, map.height, true, overlayScale), map.width, map.height) : "";
+  const pick = (x: number, y: number) => {
+    if (!map) return;
+    if (mode === "pin" && level.mapKey) {
+      const label = prompt(t("gm.pinLabel")) ?? "";
+      store.update(level.mapKey, (p) => ({ ...p, pins: [...p.pins, { id: crypto.randomUUID(), x: Math.round(x), y: Math.round(y), label, note: "", color: "#d64545", hidden: false }] }));
+    } else if ((mode === "reveal" || mode === "hide") && level.mapKey) {
+      const r = brush * overlayScale;
+      store.update(level.mapKey, (p) => ({
+        ...p,
+        fog: { ...p.fog, revealed: mode === "reveal" ? [...p.fog.revealed, [Math.round(x), Math.round(y), Math.round(r)]] : p.fog.revealed.filter(([cx, cy]) => Math.hypot(cx - x, cy - y) > r) },
+      }));
+    } else map.onPick(x, y);
+  };
   let stage: ReactNode = null;
-  if (map) stage = <MapView key={map.key} svg={map.svg} width={map.width} height={map.height} focus={focus} onPick={map.onPick} />;
+  if (map) stage = <MapView key={map.key} svg={map.svg} overlay={overlay} width={map.width} height={map.height} focus={focus} onPick={pick} />;
 
   return (
-    <div className="app">
+    <div className={players ? "app players" : "app"}>
       <header className="topbar">
         <div className="brand">
           <strong>{t("app.title")}</strong>
@@ -175,10 +200,10 @@ export function App() {
         <details className="menu">
           <summary>{t("action.export")}</summary>
           <div>
-            <button type="button" disabled={!map} onClick={() => map && download(`${fileName}.svg`, new Blob([map.svg], { type: "image/svg+xml" }))}>
+            <button type="button" disabled={!map} onClick={() => map && download(`${fileName}.svg`, new Blob([exported], { type: "image/svg+xml" }))}>
               {t("action.exportSvg")}
             </button>
-            <button type="button" disabled={!map} onClick={async () => map && download(`${fileName}.png`, await svgToPng(map.svg, map.width, map.height))}>
+            <button type="button" disabled={!map} onClick={async () => map && download(`${fileName}.png`, await svgToPng(exported, map.width, map.height))}>
               {t("action.exportPng")}
             </button>
             <button
@@ -201,7 +226,8 @@ export function App() {
       <main className="stage">
         {stage}
         {busy ? <div className="busy">{t("generating")}</div> : null}
-        {level.status ? <div className="status">{level.status}</div> : null}
+        {level.status && !players ? <div className="status">{level.status}</div> : null}
+        <GmPanel t={t} store={store} mapKey={level.mapKey} selected={level.selected} mode={mode} setMode={setMode} brush={brush} setBrush={setBrush} players={players} setPlayers={setPlayers} />
       </main>
       {level.inspector ?? <aside className="inspector" />}
     </div>

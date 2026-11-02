@@ -1,7 +1,7 @@
 // The galaxy and star-system levels: stars, powers and lanes; then one system's worlds, any of which can be opened as
 // a planet.
 import { useMemo, useState } from "react";
-import { GALAXY_SHAPES, localFromStar, galaxyParams, generateGalaxy, generateSystem, planetFromBody, renderGalaxy, renderSystem, SPECTRA, type Galaxy, type GalaxyParams, type PlanetParams, type StarSystem } from "../../core/index";
+import { GALAXY_SHAPES, localFromStar, galaxyParams, generateGalaxy, generateSystem, planetFromBody, renameGalaxy, renameSystem, renderGalaxy, renderSystem, SPECTRA, type Galaxy, type GalaxyParams, type PlanetParams, type StarSystem } from "../../core/index";
 import type { Level, LevelContext } from "./types";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -16,7 +16,10 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, star: number) => void, openLocal: (galaxy: Galaxy, star: number) => void): Level {
   const { t, nm } = ctx;
   const [input, setInput] = useState<GalaxyParams>(() => galaxyParams());
-  const [galaxy, setGalaxy] = useState<Galaxy | null>(null);
+  const [raw, setGalaxy] = useState<Galaxy | null>(null);
+  const mapKey = raw ? `galaxy:${raw.params.seed}` : null;
+  const names = ctx.names(mapKey);
+  const galaxy = useMemo(() => (raw ? renameGalaxy(raw, names) : null), [raw, names]);
   const [star, setStar] = useState<number | null>(null);
   const [empire, setEmpire] = useState<number | null>(null);
   const [tab, setTab] = useState<"empires" | "stars">("empires");
@@ -45,6 +48,8 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
     ensure: () => {
       if (!galaxy) build(input);
     },
+    mapKey,
+    selected: !galaxy ? null : star !== null ? { key: `star:${star}`, label: galaxy.stars[star].name } : empire !== null ? { key: `empire:${empire}`, label: galaxy.empires[empire].name } : { key: "world", label: galaxy.name },
     map: galaxy
       ? {
           svg,
@@ -164,7 +169,10 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
 
 export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<PlanetParams>) => void, back: (() => void) | null): Level & { open: (galaxy: Galaxy, star: number) => void } {
   const { t, nm } = ctx;
-  const [system, setSystem] = useState<StarSystem | null>(null);
+  const [rawSystem, setSystem] = useState<StarSystem | null>(null);
+  const mapKey = rawSystem ? `system:${rawSystem.seed}` : null;
+  const names = ctx.names(mapKey);
+  const system = useMemo(() => (rawSystem ? renameSystem(rawSystem, names) : null), [rawSystem, names]);
   const [source, setSource] = useState<{ galaxy: Galaxy; star: number } | null>(null);
   const [body, setBody] = useState<number | null>(null);
   const svg = useMemo(() => (system ? renderSystem(system, { script: ctx.script, highlight: body }) : ""), [system, ctx.script, body]);
@@ -185,6 +193,8 @@ export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<P
     generate: () => source && open(source.galaxy, source.star),
     ensure: () => undefined,
     open,
+    mapKey,
+    selected: !system ? null : body !== null ? { key: `body:${body}`, label: system.bodies[body].name } : { key: "world", label: system.name },
     map: system
       ? {
           svg,

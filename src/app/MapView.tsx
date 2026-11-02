@@ -14,7 +14,7 @@ export interface Focus {
   nonce: number;
 }
 
-export function MapView({ svg, width, height, focus, onPick }: { svg: string; width: number; height: number; focus: Focus | null; onPick: (x: number, y: number) => void }) {
+export function MapView({ svg, overlay, width, height, focus, onPick }: { svg: string; overlay: string; width: number; height: number; focus: Focus | null; onPick: (x: number, y: number) => void }) {
   const box = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<View>({ x: 0, y: 0, k: 1 });
   const [fit, setFit] = useState(1);
@@ -91,7 +91,10 @@ export function MapView({ svg, width, height, focus, onPick }: { svg: string; wi
         onPick((event.clientX - rect.left - view.x) / view.k, (event.clientY - rect.top - view.y) / view.k);
       }}
     >
-      <div className="map-canvas" style={{ width, height, transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }} dangerouslySetInnerHTML={{ __html: svg }} />
+      <div className="map-canvas" style={{ width, height, transform: `translate(${view.x}px, ${view.y}px) scale(${view.k})` }}>
+        <div dangerouslySetInnerHTML={{ __html: svg }} />
+        {overlay ? <svg className="map-overlay" viewBox={`0 0 ${width} ${height}`} width={width} height={height} dangerouslySetInnerHTML={{ __html: overlay }} /> : null}
+      </div>
       <div className="map-tools">
         <button type="button" onClick={() => setView((v) => ({ ...v, k: v.k * 1.4, x: v.x - ((box.current!.clientWidth / 2 - v.x) * 0.4), y: v.y - ((box.current!.clientHeight / 2 - v.y) * 0.4) }))} aria-label="+">
           +

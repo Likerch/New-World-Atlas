@@ -1,12 +1,16 @@
 // The region level: one province of the planet up close, with its villages, roads and local places.
 import { useMemo, useState } from "react";
-import { defaultLayers, generateRegion, LAYERS, planetToJson, renderPlanet, THEMES, type LayerId, type Planet, type ThemeId } from "../../core/index";
+import { defaultLayers, generateRegion, LAYERS, planetToJson, renamePlanet, renderPlanet, THEMES, type LayerId, type Planet, type ThemeId } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
+import { selectedOf } from "./planet";
 import type { Level, LevelContext } from "./types";
 
 export function useRegionLevel(ctx: LevelContext, links: { openCity: (region: Planet, burg: number) => void; openLocal: (region: Planet, marker: number) => void; back: (() => void) | null }): Level & { open: (planet: Planet, province: number) => void } {
   const { t } = ctx;
-  const [region, setRegion] = useState<Planet | null>(null);
+  const [raw, setRegion] = useState<Planet | null>(null);
+  const mapKey = raw ? `region:${raw.params.seed}` : null;
+  const names = ctx.names(mapKey);
+  const region = useMemo(() => (raw ? renamePlanet(raw, names) : null), [raw, names]);
   const [theme, setTheme] = useState<ThemeId>("atlas");
   const [layers, setLayers] = useState<Record<LayerId, boolean>>({ ...defaultLayers("atlas"), provinces: true });
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -23,6 +27,8 @@ export function useRegionLevel(ctx: LevelContext, links: { openCity: (region: Pl
     setSeed: () => undefined,
     generate: () => undefined,
     ensure: () => undefined,
+    mapKey,
+    selected: selectedOf(region, selection),
     open: (planet, province) => {
       ctx.run(() => {
         const started = performance.now();

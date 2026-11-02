@@ -29,3 +29,4 @@ export * from "./local/local";
 export * from "./render/local-svg";
 export * from "./local/links";
 export * from "./planet/region";
+export * from "./campaign";

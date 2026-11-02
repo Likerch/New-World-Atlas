@@ -1,6 +1,6 @@
 // The city level: a city of its own or one opened from a planet town.
 import { useMemo, useRef, useState } from "react";
-import { buildingAt, cityFromBurg, cityParams, CITY_LAYERS, createLanguage, createRng, defaultCityTheme, generateCity, pointInPolygon, renderCity, type City, type CityLayerId, type CityParams, type CityThemeId, type Language, type Planet } from "../../core/index";
+import { buildingAt, cityFromBurg, cityParams, CITY_LAYERS, createLanguage, createRng, defaultCityTheme, generateCity, pointInPolygon, renameCity, renderCity, type City, type CityLayerId, type CityParams, type CityThemeId, type Language, type Planet } from "../../core/index";
 import { CityControls, CityInspector, type CitySelection } from "../CityPanels";
 import type { Level, LevelContext } from "./types";
 
@@ -11,7 +11,10 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
   const pending = useRef(false);
   const [input, setInput] = useState<CityParams>(() => cityParams({ seed: initialSeed, era: "medieval" }));
   const [language, setLanguage] = useState<Language | null>(null);
-  const [city, setCity] = useState<City | null>(null);
+  const [raw, setCity] = useState<City | null>(null);
+  const mapKey = raw ? `city:${raw.params.seed}` : null;
+  const names = ctx.names(mapKey);
+  const city = useMemo(() => (raw ? renameCity(raw, names) : null), [raw, names]);
   const [theme, setTheme] = useState<CityThemeId>("ink");
   const [layers, setLayers] = useState<Record<CityLayerId, boolean>>(allOn(CITY_LAYERS));
   const [selection, setSelection] = useState<CitySelection>(null);
@@ -44,6 +47,16 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
       if (!city && !pending.current) build(input, language);
     },
     city,
+    mapKey,
+    selected: !city
+      ? null
+      : selection?.kind === "ward"
+        ? { key: `ward:${selection.id}`, label: city.wards.find((w) => w.id === selection.id)?.name || t(`ward.${city.wards.find((w) => w.id === selection.id)?.kind}`) }
+        : selection?.kind === "landmark"
+          ? { key: `landmark:${selection.id}`, label: city.landmarks.find((l) => l.id === selection.id)?.name || t(`landmark.${city.landmarks.find((l) => l.id === selection.id)?.kind}`) }
+          : selection?.kind === "building"
+            ? { key: `building:${selection.id}`, label: t(`bkind.${city.buildings[selection.id]?.kind}`) }
+            : { key: "world", label: city.name },
     openFromBurg: (planet, burg) => {
       const { params, language: tongue } = cityFromBurg(planet, burg, input.era);
       setLanguage(tongue);

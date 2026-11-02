@@ -1,6 +1,6 @@
 // The planet level: world settings, the world map and its inspector.
 import { useMemo, useRef, useState } from "react";
-import { defaultLayers, generatePlanet, LAYERS, planetParams, planetToJson, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetParams, type ThemeId } from "../../core/index";
+import { defaultLayers, generatePlanet, LAYERS, planetParams, planetToJson, renamePlanet, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetParams, type ThemeId } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import type { Level, LevelContext } from "./types";
 
@@ -17,6 +17,15 @@ const NUMBER_FIELDS: { key: keyof PlanetParams; min: number; max: number; step: 
   { key: "provinceShare", min: 0, max: 1, step: 0.05 },
 ];
 
+/** The selected thing's patch key and name; the world itself when nothing (or only a spot) is selected. */
+export function selectedOf(planet: Planet | null, selection: Selection | null): { key: string; label: string } | null {
+  if (!planet) return null;
+  if (!selection || selection.kind === "cell") return { key: "world", label: planet.name };
+  const lists = { state: planet.states, province: planet.provinces, culture: planet.cultures, burg: planet.burgs, river: planet.rivers, marker: planet.markers } as const;
+  const item = lists[selection.kind as keyof typeof lists]?.[selection.id];
+  return item ? { key: `${selection.kind}:${selection.id}`, label: item.name || selection.kind } : null;
+}
+
 export interface PlanetLinks {
   openCity: (planet: Planet, burg: number) => void;
   openRegion?: (planet: Planet, province: number) => void;
@@ -27,7 +36,10 @@ export interface PlanetLinks {
 export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, { openCity, openRegion, openLocal, back }: PlanetLinks): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void } {
   const { t } = ctx;
   const [params, setParams] = useState<PlanetParams>(() => planetParams({ seed: initialSeed }));
-  const [planet, setPlanet] = useState<Planet | null>(null);
+  const [raw, setPlanet] = useState<Planet | null>(null);
+  const mapKey = raw ? `planet:${raw.params.seed}` : null;
+  const names = ctx.names(mapKey);
+  const planet = useMemo(() => (raw ? renamePlanet(raw, names) : null), [raw, names]);
   const [time, setTime] = useState(0);
   const [theme, setTheme] = useState<ThemeId>("atlas");
   const [layers, setLayers] = useState<Record<LayerId, boolean>>(defaultLayers("atlas"));
@@ -64,6 +76,8 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     },
     planet,
     load,
+    mapKey,
+    selected: selectedOf(planet, selection),
     map: planet
       ? {
           svg,
