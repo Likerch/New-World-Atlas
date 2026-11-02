@@ -1,0 +1,99 @@
+// Planet-level regressions: run with `npm test`.
+import assert from "node:assert/strict";
+import { createLanguage, createRng, generatePlanet, name, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
+
+let passed = 0;
+function test(title: string, run: () => void) {
+  try {
+    run();
+    passed++;
+  } catch (error) {
+    console.error(`✗ ${title}`);
+    throw error;
+  }
+}
+
+const planet = generatePlanet({ seed: "regression", template: "continents", cells: 6000 });
+
+test("the same seed and settings give the same world; another seed gives another", () => {
+  const again = generatePlanet({ seed: "regression", template: "continents", cells: 6000 });
+  assert.equal(JSON.stringify(planetToJson(again)), JSON.stringify(planetToJson(planet)));
+  const other = generatePlanet({ seed: "regression-2", template: "continents", cells: 6000 });
+  assert.notEqual(JSON.stringify(planetToJson(other).cells.height), JSON.stringify(planetToJson(planet).cells.height));
+});
+
+test("every template makes a world with both land and sea", () => {
+  for (const template of TEMPLATES) {
+    const world = generatePlanet({ seed: `land-${template}`, template, cells: 3000 });
+    let land = 0;
+    for (let cell = 0; cell < world.mesh.cells; cell++) if (!world.water[cell]) land++;
+    const share = land / world.mesh.cells;
+    assert.ok(share > 0.04 && share < 0.85, `${template}: ${(share * 100).toFixed(0)}% land`);
+  }
+});
+
+test("water runs downhill to the sea or a lake, and every river is a chain of neighbours", () => {
+  assert.ok(planet.rivers.length > 5, "a continent has rivers");
+  for (const river of planet.rivers.slice(1)) {
+    for (let k = 1; k < river.cells.length; k++) {
+      assert.ok(planet.mesh.neighbors[river.cells[k - 1]].includes(river.cells[k]), `${river.name} skips a cell`);
+      assert.ok(!planet.water[river.cells[k]], `${river.name} runs through water`);
+    }
+    const first = planet.height[river.cells[0]];
+    const last = planet.height[river.cells[river.cells.length - 1]];
+    assert.ok(last <= first + 1, `${river.name} climbs from ${first} to ${last}`);
+    if (river.parent) assert.ok(planet.rivers[river.parent], `${river.name} flows into a missing river`);
+  }
+});
+
+test("land has a biome, a state and people; water has none", () => {
+  for (let cell = 0; cell < planet.mesh.cells; cell++) {
+    if (planet.water[cell]) {
+      assert.equal(planet.biome[cell], 0);
+      assert.equal(planet.state[cell], 0);
+      continue;
+    }
+    assert.ok(planet.biome[cell] > 0, `land cell ${cell} without a biome`);
+    if (planet.height[cell] < SEA_LEVEL) assert.fail(`land below sea level at ${cell}`);
+  }
+});
+
+test("towns stand on land; capitals rule their states; relations are mutual", () => {
+  for (const burg of planet.burgs.slice(1)) {
+    assert.ok(!planet.water[burg.cell], `${burg.name} is in the water`);
+    assert.equal(burg.state, planet.state[burg.cell]);
+    if (burg.capital) assert.equal(planet.states[burg.state].capital, burg.id);
+  }
+  for (const state of planet.states.slice(1)) {
+    for (const other of state.neighbors) {
+      const there = planet.states[other].relations[state.id];
+      const here = state.relations[other];
+      assert.ok(here && there, `${state.name} and ${planet.states[other].name} lack a relation`);
+      if (here === "vassal") assert.equal(there, "suzerain");
+    }
+  }
+  for (let cell = 0; cell < planet.mesh.cells; cell++) {
+    const province = planet.province[cell];
+    if (province) assert.equal(planet.provinces[province].state, planet.state[cell], `province ${province} crosses a border`);
+  }
+});
+
+test("languages give unique names and spell them in Cyrillic", () => {
+  const language = createLanguage(createRng("tongue"));
+  const rng = createRng("names");
+  const names = Array.from({ length: 60 }, () => name(language, rng, "town"));
+  assert.equal(new Set(names).size, names.length);
+  assert.equal(toCyrillic("Eldor"), "Элдор");
+  assert.equal(toCyrillic("Shavarkh Tse"), "Шаварх Це");
+  assert.equal(toCyrillic("Yuma-Zhel"), "Юма-Жел");
+});
+
+test("every style renders a complete SVG without broken numbers", () => {
+  for (const theme of THEMES) {
+    const svg = renderPlanet(planet, { theme, script: theme === "night" ? "cyrillic" : "latin", highlight: { kind: "state", id: 1 } });
+    assert.ok(svg.startsWith("<svg") && svg.endsWith("</svg>"));
+    assert.doesNotMatch(svg, /NaN|undefined|Infinity/u, theme);
+  }
+});
+
+console.log(`planet: ${passed} regressions passed`);

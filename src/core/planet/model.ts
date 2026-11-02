@@ -1,0 +1,215 @@
+// The planet level's data: a world map of thousands of Voronoi cells with relief, climate, water, life and peoples.
+// Index 0 of every entity list is a placeholder for "none" (open sea, wild lands, no culture), so typed arrays can
+// hold ids directly.
+import type { Point } from "../geometry";
+import type { Language } from "../language";
+import type { Mesh } from "../mesh";
+import type { TemplateId } from "./heightmap";
+
+export const SEA_LEVEL = 20;
+
+export interface PlanetParams {
+  seed: string;
+  width: number;
+  height: number;
+  /** Number of Voronoi cells: detail versus speed (2 000 – 50 000). */
+  cells: number;
+  template: TemplateId;
+  /** Latitudes at the map's top and bottom edges, in degrees. */
+  latitudeNorth: number;
+  latitudeSouth: number;
+  /** Mean temperatures at the equator and the poles, °C. */
+  temperatureEquator: number;
+  temperaturePole: number;
+  /** Rain multiplier: 1 is Earth-like, 0.3 a dry world, 2 a wet one. */
+  precipitation: number;
+  /** Height of the highest peak, metres. */
+  peakHeight: number;
+  cultures: number;
+  states: number;
+  /** Towns besides capitals; 0 picks a count from the map size. */
+  towns: number;
+  /** Share of towns that head a province (0–1). */
+  provinceShare: number;
+}
+
+export type FeatureKind = "ocean" | "lake" | "continent" | "island" | "isle";
+
+export interface WaterOrLand {
+  id: number;
+  kind: FeatureKind;
+  land: boolean;
+  cells: number;
+  /** Touches the map's edge (oceans always do). */
+  border: boolean;
+  name: string;
+}
+
+export interface River {
+  id: number;
+  name: string;
+  /** Cells from source to mouth. */
+  cells: number[];
+  /** Where it meets the sea, a lake or its parent river. */
+  mouth: Point;
+  /** Water flowing out at the mouth, in m³/s. */
+  discharge: number;
+  /** Length in km. */
+  length: number;
+  /** The river it flows into, 0 for the sea or a lake. */
+  parent: number;
+  /** Width at the mouth in map units, for drawing. */
+  width: number;
+}
+
+export type CultureKind = "generic" | "river" | "lake" | "naval" | "nomadic" | "highland" | "hunting";
+
+export interface Culture {
+  id: number;
+  name: string;
+  kind: CultureKind;
+  language: Language;
+  center: number;
+  color: string;
+  expansionism: number;
+  cells: number;
+  population: number;
+}
+
+export interface Burg {
+  id: number;
+  name: string;
+  cell: number;
+  x: number;
+  y: number;
+  culture: number;
+  state: number;
+  province: number;
+  capital: boolean;
+  port: boolean;
+  /** Thousands of people. */
+  population: number;
+  walls: boolean;
+  citadel: boolean;
+  temple: boolean;
+  market: boolean;
+  shanty: boolean;
+  kind: CultureKind;
+}
+
+export type StateForm = "monarchy" | "republic" | "theocracy" | "union" | "tribal" | "horde" | "free-city";
+
+export type Relation = "ally" | "friendly" | "neutral" | "suspicion" | "rival" | "enemy" | "vassal" | "suzerain";
+
+export interface State {
+  id: number;
+  name: string;
+  /** The full name: "Kingdom of X", "X Republic"; a localisation key plus the name. */
+  formKey: string;
+  form: StateForm;
+  color: string;
+  capital: number;
+  culture: number;
+  expansionism: number;
+  cells: number;
+  area: number;
+  burgs: number;
+  rural: number;
+  urban: number;
+  /** Where its name is drawn, and how large. */
+  pole: Point;
+  neighbors: number[];
+  relations: Record<number, Relation>;
+}
+
+export interface Province {
+  id: number;
+  name: string;
+  formKey: string;
+  state: number;
+  center: number;
+  burg: number;
+  color: string;
+  cells: number;
+  pole: Point;
+}
+
+export type RouteKind = "highway" | "road" | "trail" | "sea";
+
+export interface Route {
+  id: number;
+  kind: RouteKind;
+  cells: number[];
+  /** Length in km. */
+  length: number;
+}
+
+export type MarkerKind =
+  | "volcano"
+  | "hot-spring"
+  | "mine"
+  | "bridge"
+  | "lighthouse"
+  | "ruins"
+  | "battlefield"
+  | "monastery"
+  | "cave"
+  | "sacred-grove"
+  | "shipwreck"
+  | "brigands"
+  | "inn"
+  | "watchtower"
+  | "giant-tree"
+  | "portal";
+
+export interface Marker {
+  id: number;
+  kind: MarkerKind;
+  cell: number;
+  x: number;
+  y: number;
+  name: string;
+  /** Facts a legend is written from: who, what, when. */
+  facts: Record<string, string | number>;
+}
+
+export interface Planet {
+  params: PlanetParams;
+  /** The world's own name, in the tongue of its first people. */
+  name: string;
+  mesh: Mesh;
+  /** 0–100, sea level at 20. */
+  height: Float32Array;
+  /** 1 for seas and lakes (lakes may lie above sea level). */
+  water: Uint8Array;
+  feature: Int32Array;
+  features: WaterOrLand[];
+  /** Distance to the coast in cells: 1, 2, 3… on land, -1, -2, -3… in water. */
+  coast: Int8Array;
+  /** °C, yearly mean. */
+  temperature: Float32Array;
+  /** mm a year. */
+  precipitation: Float32Array;
+  /** Water passing through a cell, m³/s. */
+  flux: Float32Array;
+  river: Int32Array;
+  rivers: River[];
+  biome: Uint8Array;
+  /** Rural population per cell, thousands. */
+  population: Float32Array;
+  culture: Uint16Array;
+  cultures: Culture[];
+  burg: Int32Array;
+  burgs: Burg[];
+  state: Uint16Array;
+  states: State[];
+  province: Uint16Array;
+  provinces: Province[];
+  routes: Route[];
+  markers: Marker[];
+  /** Km per map unit. */
+  scale: number;
+}
+
+/** The physical world peoples settle on. */
+export type Ground = Pick<Planet, "params" | "mesh" | "height" | "water" | "feature" | "features" | "coast" | "temperature" | "precipitation" | "flux" | "river" | "rivers" | "biome" | "scale">;
