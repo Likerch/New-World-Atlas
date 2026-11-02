@@ -5,6 +5,7 @@ import type { Point } from "../geometry";
 import { toCyrillic } from "../language";
 import { SPECTRA, type Galaxy, type SpaceFeature } from "../space/galaxy";
 import type { BodyKind, StarSystem } from "../space/system";
+import type { Universe } from "../space/universe";
 import { voronoi } from "../voronoi";
 
 const esc = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
@@ -145,5 +146,41 @@ export function renderSystem(system: StarSystem, options: SpaceRenderOptions = {
   }
   out.push(`<text x="20" y="34" font-size="20" letter-spacing="3" fill="#e6ecff" font-weight="600">${text(system.name.toUpperCase())}</text><text x="20" y="54" font-size="12" fill="#9fb0d8">${system.spectral}${system.companion ? ` + ${system.companion}` : ""}</text>`);
   out.push(`</svg>`);
+  return out.join("");
+}
+
+/** The cosmic web: voids, filaments, galaxies by kind, superclusters. */
+export function renderUniverse(universe: Universe, options: SpaceRenderOptions = {}): string {
+  const { width: W, height: H } = universe.params;
+  const text = (value: string) => esc(options.script === "cyrillic" ? toCyrillic(value) : value);
+  const out: string[] = [];
+  out.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="'Segoe UI', Arial, sans-serif">`);
+  out.push(`<defs><filter id="u-glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="1.8" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><filter id="u-soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="14"/></filter></defs>`);
+  out.push(`<rect width="${W}" height="${H}" fill="#020309"/>`);
+  for (const v of universe.voids) out.push(`<circle cx="${r1(v.x)}" cy="${r1(v.y)}" r="${r1(v.r)}" fill="#000000" stroke="#1b1f3a" stroke-width="1" stroke-dasharray="3 6"/>`);
+  for (const g of universe.galaxies) out.push(`<circle cx="${r1(g.x)}" cy="${r1(g.y)}" r="16" fill="${universe.clusters[g.cluster]?.color ?? "#5566aa"}" opacity="0.06" filter="url(#u-soft)"/>`);
+  out.push(`<path d="${universe.filaments.map(([a, b]) => `M${r1(universe.galaxies[a].x)},${r1(universe.galaxies[a].y)}L${r1(universe.galaxies[b].x)},${r1(universe.galaxies[b].y)}`).join("")}" stroke="#6c6fd8" stroke-opacity="0.28" stroke-width="0.8"/>`);
+  for (const g of universe.galaxies) {
+    const x = r1(g.x),
+      y = r1(g.y);
+    const tilt = (g.id * 47) % 180;
+    const ring = options.highlight === g.id ? `<circle cx="${x}" cy="${y}" r="9" fill="none" stroke="#ffd34d" stroke-width="1.5"/>` : "";
+    if (g.kind === "quasar") out.push(`<g filter="url(#u-glow)"><circle cx="${x}" cy="${y}" r="2.4" fill="#ffffff"/><path d="M${x},${r1(g.y - 9)}V${r1(g.y + 9)}" stroke="#9fd8ff" stroke-width="0.8" transform="rotate(${tilt} ${x} ${y})"/></g>${ring}`);
+    else if (g.kind === "dwarf") out.push(`<circle cx="${x}" cy="${y}" r="1.2" fill="#c8c8ff" opacity="0.8"/>${ring}`);
+    else if (g.kind === "elliptical") out.push(`<ellipse cx="${x}" cy="${y}" rx="4" ry="2.6" fill="#ffd9a8" opacity="0.85" filter="url(#u-glow)" transform="rotate(${tilt} ${x} ${y})"/>${ring}`);
+    else if (g.kind === "irregular") out.push(`<g fill="#bcd2ff" filter="url(#u-glow)"><circle cx="${x}" cy="${y}" r="1.6"/><circle cx="${r1(g.x + 2.4)}" cy="${r1(g.y - 1)}" r="1.1"/><circle cx="${r1(g.x - 1.5)}" cy="${r1(g.y + 2)}" r="0.9"/></g>${ring}`);
+    else out.push(`<g transform="rotate(${tilt} ${x} ${y})" filter="url(#u-glow)"><ellipse cx="${x}" cy="${y}" rx="5" ry="1.8" fill="#cfe0ff" opacity="0.55"/><circle cx="${x}" cy="${y}" r="1.4" fill="#fff4dc"/>${g.kind === "ring" ? `<ellipse cx="${x}" cy="${y}" rx="5.5" ry="2.4" fill="none" stroke="#9fd8ff" stroke-width="0.6"/>` : ""}</g>${ring}`);
+    if (g.civilisations) out.push(`<circle cx="${r1(g.x + 4)}" cy="${r1(g.y - 4)}" r="1.4" fill="#36e0a0"/>`);
+  }
+  out.push(`<g text-anchor="middle" font-size="9" fill="#5a5f8a" font-style="italic">${universe.voids.map((v) => `<text x="${r1(v.x)}" y="${r1(v.y)}">${text(v.name)}</text>`).join("")}</g>`);
+  out.push(`<g text-anchor="middle" font-size="15" letter-spacing="4" font-weight="600">`);
+  universe.clusters.forEach((cluster) => {
+    const members = universe.galaxies.filter((g) => g.cluster === cluster.id);
+    if (!members.length) return;
+    const x = members.reduce((s, g) => s + g.x, 0) / members.length;
+    const y = members.reduce((s, g) => s + g.y, 0) / members.length;
+    out.push(`<text x="${r1(x)}" y="${r1(y)}" fill="${cluster.color}" opacity="0.75">${text(cluster.name.toUpperCase())}</text>`);
+  });
+  out.push(`</g><text x="20" y="34" font-size="20" letter-spacing="3" fill="#e6ecff" font-weight="600">${text(universe.name.toUpperCase())}</text></svg>`);
   return out.join("");
 }

@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import type { Locale, T } from "../i18n";
 
-export type LevelId = "galaxy" | "system" | "planet" | "region" | "city" | "building" | "local";
+export type LevelId = "universe" | "galaxy" | "system" | "planet" | "region" | "city" | "building" | "local";
 
 export interface LevelContext {
   t: T;

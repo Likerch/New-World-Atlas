@@ -1,7 +1,7 @@
 // The galaxy and star-system levels: stars, powers and lanes; then one system's worlds, any of which can be opened as
 // a planet.
-import { useMemo, useState } from "react";
-import { GALAXY_SHAPES, localFromStar, galaxyParams, generateGalaxy, generateSystem, planetFromBody, renameGalaxy, renameSystem, renderGalaxy, renderSystem, SPECTRA, type Galaxy, type GalaxyParams, type PlanetParams, type StarSystem } from "../../core/index";
+import { useMemo, useRef, useState } from "react";
+import { generateUniverse, renderUniverse, shapeOf, universeParams, type Universe, type UniverseParams, GALAXY_SHAPES, localFromStar, galaxyParams, generateGalaxy, generateSystem, planetFromBody, renameGalaxy, renameSystem, renderGalaxy, renderSystem, SPECTRA, type Galaxy, type GalaxyParams, type PlanetParams, type StarSystem } from "../../core/index";
 import type { Level, LevelContext } from "./types";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -13,7 +13,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, star: number) => void, openLocal: (galaxy: Galaxy, star: number) => void): Level {
+export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, star: number) => void, openLocal: (galaxy: Galaxy, star: number) => void, back: (() => void) | null = null): Level & { load: (params: Partial<GalaxyParams>) => void } {
   const { t, nm } = ctx;
   const [input, setInput] = useState<GalaxyParams>(() => galaxyParams());
   const [raw, setGalaxy] = useState<Galaxy | null>(null);
@@ -24,8 +24,10 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
   const [empire, setEmpire] = useState<number | null>(null);
   const [tab, setTab] = useState<"empires" | "stars">("empires");
   const [version, setVersion] = useState(0);
+  const pending = useRef(false);
   const build = (next: GalaxyParams) =>
     ctx.run(() => {
+      pending.current = false;
       const made = generateGalaxy(next);
       setGalaxy(made);
       setInput(made.params);
@@ -46,7 +48,12 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
     setSeed: (seed) => set("seed", seed),
     generate: (seed) => build(seed ? { ...input, seed } : input),
     ensure: () => {
-      if (!galaxy) build(input);
+      if (!galaxy && !pending.current) build(input);
+    },
+    load: (params) => {
+      pending.current = true;
+      build(galaxyParams(params));
+      ctx.show("galaxy");
     },
     mapKey,
     selected: !galaxy ? null : star !== null ? { key: `star:${star}`, label: galaxy.stars[star].name } : empire !== null ? { key: `empire:${empire}`, label: galaxy.empires[empire].name } : { key: "world", label: galaxy.name },
@@ -73,6 +80,11 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
       : null,
     controls: (
       <>
+        {back ? (
+          <button type="button" className="back" onClick={back}>
+            ← {t("action.backToUniverse")}
+          </button>
+        ) : null}
         <h2>{t("view.galaxy")}</h2>
         <label>
           {t("field.shape")}
@@ -268,5 +280,102 @@ export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<P
     ) : null,
     status: system ? t("system.summary", { bodies: system.bodies.length, habitable: system.bodies.filter((b) => b.habitable).length }) : "",
     data: () => (system ? { format: "new-world-atlas/system", version: 1, ...system, language: undefined } : null),
+  };
+}
+
+export function useUniverseLevel(ctx: LevelContext, openGalaxy: (params: Partial<GalaxyParams>) => void): Level {
+  const { t, nm } = ctx;
+  const [input, setInput] = useState<UniverseParams>(() => universeParams());
+  const [universe, setUniverse] = useState<Universe | null>(null);
+  const [picked, setPicked] = useState<number | null>(null);
+  const [version, setVersion] = useState(0);
+  const build = (next: UniverseParams) =>
+    ctx.run(() => {
+      const made = generateUniverse(next);
+      setUniverse(made);
+      setInput(made.params);
+      setPicked(null);
+      setVersion((v) => v + 1);
+    });
+  const svg = useMemo(() => (universe ? renderUniverse(universe, { script: ctx.script, highlight: picked }) : ""), [universe, ctx.script, picked]);
+  const selected = universe && picked !== null ? universe.galaxies[picked] : null;
+  const open = (id: number) => universe && openGalaxy({ seed: `${universe.params.seed}/galaxy-${id}`, shape: shapeOf(universe.galaxies[id].kind), stars: universe.galaxies[id].stars });
+  return {
+    id: "universe",
+    icon: "🌠",
+    title: universe?.name ?? null,
+    seed: input.seed,
+    setSeed: (seed) => setInput((current) => ({ ...current, seed })),
+    generate: (seed) => build(seed ? { ...input, seed } : input),
+    ensure: () => {
+      if (!universe) build(input);
+    },
+    mapKey: universe ? `universe:${universe.params.seed}` : null,
+    selected: !universe ? null : selected ? { key: `galaxy:${selected.id}`, label: selected.name } : { key: "world", label: universe.name },
+    map: universe
+      ? {
+          svg,
+          width: universe.params.width,
+          height: universe.params.height,
+          key: `universe-${version}`,
+          onPick: (x, y) => {
+            let best = -1;
+            let distance = 10;
+            for (const g of universe.galaxies) {
+              const d = Math.hypot(g.x - x, g.y - y);
+              if (d < distance) {
+                distance = d;
+                best = g.id;
+              }
+            }
+            setPicked(best >= 0 ? best : null);
+          },
+        }
+      : null,
+    controls: (
+      <>
+        <h2>{t("view.universe")}</h2>
+        <label>
+          {t("field.ugalaxies")}
+          <input type="number" min={50} max={800} value={input.galaxies} onChange={(event) => setInput((current) => ({ ...current, galaxies: Number(event.target.value) }))} />
+        </label>
+      </>
+    ),
+    inspector: universe ? (
+      <aside className="inspector">
+        {selected ? (
+          <div className="card">
+            <h3>{nm(selected.name)}</h3>
+            <Row label={t("stat.kind2")} value={t(`gkind.${selected.kind}`)} />
+            <Row label={t("universe.cluster")} value={nm(universe.clusters[selected.cluster]?.name ?? "—")} />
+            <Row label={t("universe.civilisations")} value={selected.civilisations} />
+            <button type="button" className="primary wide" onClick={() => open(selected.id)}>
+              🌌 {t("action.openGalaxy")}
+            </button>
+          </div>
+        ) : (
+          <p className="muted">{t("universe.hint")}</p>
+        )}
+        <ul className="list">
+          {universe.galaxies
+            .filter((g) => g.civilisations || g.kind === "quasar")
+            .map((g) => (
+              <li
+                key={g.id}
+                aria-selected={picked === g.id}
+                onClick={() => {
+                  setPicked(g.id);
+                  ctx.focus(g.x, g.y);
+                }}
+              >
+                <span className="grow">{nm(g.name)}</span>
+                <small>{g.civilisations ? `◉ ${g.civilisations}` : t(`gkind.${g.kind}`)}</small>
+              </li>
+            ))}
+        </ul>
+      </aside>
+    ) : null,
+    status: universe ? t("universe.summary", { galaxies: universe.galaxies.length, clusters: universe.clusters.length, voids: universe.voids.length }) : "",
+    data: () => (universe ? { format: "new-world-atlas/universe", version: 1, ...universe } : null),
   };
 }

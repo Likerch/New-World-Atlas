@@ -34,3 +34,4 @@ export * from "./city/district";
 export * from "./building/room";
 export * from "./city/tiers";
 export * from "./render/tier-svg";
+export * from "./space/universe";

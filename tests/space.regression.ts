@@ -1,6 +1,6 @@
 // Galaxy and star-system regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { GALAXY_SHAPES, generateGalaxy, generatePlanet, generateSystem, planetFromBody, renderGalaxy, renderSystem } from "../src/core/index";
+import { generateUniverse, renderUniverse, shapeOf, GALAXY_SHAPES, generateGalaxy, generatePlanet, generateSystem, planetFromBody, renderGalaxy, renderSystem } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -51,6 +51,17 @@ test("a world of a system opens as a planet with its name and climate", () => {
   const planet = generatePlanet({ ...params, cells: 3000 });
   assert.equal(planet.name, body.name);
   assert.equal(planet.params.temperatureEquator, params.temperatureEquator);
+});
+
+test("the universe strings its galaxies along void walls, and each galaxy opens in its own shape", () => {
+  const universe = generateUniverse({ seed: "web", galaxies: 200 });
+  assert.ok(universe.galaxies.length > 150, `${universe.galaxies.length} galaxies`);
+  for (const g of universe.galaxies) for (const v of universe.voids) assert.ok(Math.hypot(g.x - v.x, g.y - v.y) >= v.r * 0.8 - 1e-6, "no galaxy deep inside a void");
+  assert.ok(universe.filaments.length > universe.galaxies.length * 0.8, "a web, not scattered dots");
+  assert.doesNotMatch(renderUniverse(universe, { highlight: 3 }), /NaN|undefined|Infinity/u);
+  const barred = universe.galaxies.find((g) => g.kind === "barred")!;
+  const galaxy = generateGalaxy({ seed: `web/galaxy-${barred.id}`, shape: shapeOf(barred.kind), stars: barred.stars });
+  assert.equal(galaxy.params.shape, "barred");
 });
 
 console.log(`space: ${passed} regressions passed`);

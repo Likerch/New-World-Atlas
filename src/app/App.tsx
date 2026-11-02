@@ -10,7 +10,7 @@ import { useCityLevel } from "./levels/city";
 import { useLocalLevel } from "./levels/local";
 import { useRegionLevel } from "./levels/region";
 import { usePlanetLevel } from "./levels/planet";
-import { useGalaxyLevel, useSystemLevel } from "./levels/space";
+import { useGalaxyLevel, useSystemLevel, useUniverseLevel } from "./levels/space";
 import type { Level, LevelContext, LevelId } from "./levels/types";
 import { MapView, type Focus } from "./MapView";
 
@@ -137,8 +137,13 @@ export function App() {
       setView("system");
     },
     (made, star) => openLocal(localFromStar(made, star), "galaxy"),
+    cameFrom.galaxy ? () => setView(cameFrom.galaxy!) : null,
   );
-  const levels: Level[] = [galaxy, system, planet, region, city, building, local];
+  const universe = useUniverseLevel(ctx, (params) => {
+    go("galaxy", "universe");
+    galaxy.load(params);
+  });
+  const levels: Level[] = [universe, galaxy, system, planet, region, city, building, local];
   const level = levels.find((item) => item.id === view) ?? planet;
 
   useEffect(() => {
