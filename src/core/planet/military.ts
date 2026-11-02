@@ -48,7 +48,7 @@ export function raiseArmies(planet: Planet): Regiment[] {
   const s = planet.mesh.spacing;
   for (const state of planet.states.slice(1)) {
     if (!state.cells) continue;
-    const towns = planet.burgs.filter((burg) => burg.id && burg.state === state.id);
+    const towns = planet.burgs.filter((burg) => burg.id && !burg.removed && burg.state === state.id);
     const capital = towns.find((burg) => burg.capital) ?? [...towns].sort((a, b) => b.population - a.population)[0];
     if (!capital || !towns.length) continue;
     const people = planet.cultures[state.culture]?.kind ?? "generic";

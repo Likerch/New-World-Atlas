@@ -185,7 +185,7 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
   const km2 = planet.scale * planet.scale;
   const density = new Float32Array(mesh.cells);
   for (let cell = 0; cell < mesh.cells; cell++) density[cell] = (planet.population[cell] * 1000) / (mesh.area[cell] * km2);
-  for (const burg of planet.burgs.slice(1)) density[burg.cell] += (burg.population * 1000) / (mesh.area[burg.cell] * km2);
+  for (const burg of planet.burgs.slice(1)) if (!burg.removed) density[burg.cell] += (burg.population * 1000) / (mesh.area[burg.cell] * km2);
   const heat = { temperature: (cell: number) => planet.temperature[cell], precipitation: (cell: number) => planet.precipitation[cell], population: (cell: number) => density[cell] };
   const shown = (["temperature", "precipitation", "population"] as const).filter((id) => layers[id]);
   for (const id of shown) {
@@ -367,6 +367,7 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
   if (layers.burgs) {
     out.push(`<g stroke="${theme.burgStroke}">`);
     for (const burg of planet.burgs.slice(1)) {
+      if (burg.removed) continue;
       if (burg.capital) {
         const r = s * 0.3;
         out.push(`<circle cx="${r1(burg.x)}" cy="${r1(burg.y)}" r="${r1(r)}" fill="${theme.burg}" stroke-width="0.9"/><circle cx="${r1(burg.x)}" cy="${r1(burg.y)}" r="${r1(r * 0.42)}" fill="${theme.burgStroke}" stroke="none"/>`);
@@ -383,7 +384,7 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
   if (layers.emblems) {
     const w = s * 1.5;
     for (const burg of planet.burgs.slice(1)) {
-      const arms = burg.capital ? armsOf(planet, "state", burg.state) : null;
+      const arms = burg.capital && !burg.removed ? armsOf(planet, "state", burg.state) : null;
       if (!arms) continue;
       const x = burg.x - w - s * 0.4,
         y = burg.y - w * 0.55;
@@ -453,13 +454,13 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
       names.push(`<text font-size="${r1(size)}" letter-spacing="${r1(size * 0.22)}" fill="${color}" opacity="0.85" stroke="${theme.halo}" stroke-width="${r1(size * 0.14)}" stroke-opacity="0.6" paint-order="stroke" dy="${r1(size * 0.35)}"><textPath href="#sl-${state.id}" startOffset="50%">${label}</textPath></text>`);
     }
     out.push(`<defs>${arches.join("")}</defs><g text-anchor="middle" font-weight="600">${names.join("")}</g>`);
-    const towns = planet.burgs.slice(1).sort((a, b) => Number(b.capital) - Number(a.capital) || b.population - a.population);
+    const towns = planet.burgs.slice(1).filter((burg) => !burg.removed).sort((a, b) => Number(b.capital) - Number(a.capital) || b.population - a.population);
     out.push(`<g fill="${theme.label}" ${halo}>`);
     for (const burg of towns) {
       const size = burg.capital ? 10 : burg.population > 15 ? 7.5 : 6.2;
       const label = text(burg.name);
       const width = label.length * size * 0.56;
-      const offset = s * (burg.capital ? 0.42 : 0.28);
+      const offset = s * (burg.capital ? 0.42 : 0.33);
       const tries: [number, number, string][] = [
         [burg.x + offset, burg.y + size * 0.35, "start"],
         [burg.x - offset, burg.y + size * 0.35, "end"],

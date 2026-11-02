@@ -6,6 +6,7 @@ import { createRng, randomSeed } from "../random";
 import { biomeOf } from "./biomes";
 import { precipitation, temperatures } from "./climate";
 import { placeBurgs } from "./burgs";
+import { sculpt, type PlanetEdits } from "./edit";
 import { settleCultures, suitability } from "./cultures";
 import { markFeatures } from "./features";
 import { generateHeights, TEMPLATES } from "./heightmap";
@@ -42,11 +43,13 @@ export function planetParams(input: Partial<PlanetParams> = {}): PlanetParams {
   };
 }
 
-export function generatePlanet(input: Partial<PlanetParams> = {}): Planet {
+/** A world from its settings; `terrain` replays the GM's relief brush before anything grows on it. */
+export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: PlanetEdits["terrain"]): Planet {
   const params = planetParams(input);
   const rng = createRng(params.seed);
   const mesh = buildMesh(params.width, params.height, params.cells, rng.fork("mesh"));
   const height = generateHeights(mesh, params.template, rng.fork("relief"));
+  if (terrain?.length) sculpt(mesh, height, terrain);
   const scale = ((params.latitudeNorth - params.latitudeSouth) * 111) / params.height;
 
   const sea = markFeatures(mesh, (cell) => height[cell] < SEA_LEVEL);

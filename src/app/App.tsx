@@ -70,6 +70,8 @@ export function App() {
     },
     show: setView,
     names: (key) => store.patch(key).names,
+    patch: store.patch,
+    update: store.update,
     players,
   };
   const go = (to: LevelId, from: LevelId) => {

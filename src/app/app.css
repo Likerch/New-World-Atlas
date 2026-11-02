@@ -517,3 +517,12 @@ button.back {
 .card .arms svg {
   display: block;
 }
+
+.editor summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin: 10px 0 6px;
+}
+.editor .floor-tabs {
+  margin-bottom: 6px;
+}

@@ -93,6 +93,8 @@ export interface Burg {
   port: boolean;
   /** In a close-up: the id of the planet's town this one is. */
   origin?: number;
+  /** Razed by the GM: kept only so other towns keep their ids. */
+  removed?: boolean;
   /** Thousands of people. */
   population: number;
   walls: boolean;

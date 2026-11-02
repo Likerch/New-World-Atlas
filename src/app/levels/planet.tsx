@@ -1,7 +1,8 @@
 // The planet level: world settings, the world map and its inspector.
 import { useMemo, useRef, useState } from "react";
-import { defaultLayers, generatePlanet, GLOBE_SIZE, globePick, LAYERS, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetParams, type ThemeId } from "../../core/index";
+import { createRng, defaultLayers, editPlanet, emptyEdits, generatePlanet, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type ThemeId } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
+import { WorldEditor, type EditTool } from "../WorldEditor";
 import type { Level, LevelContext } from "./types";
 
 const NUMBER_FIELDS: { key: keyof PlanetParams; min: number; max: number; step: number }[] = [
@@ -50,7 +51,16 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   const [raw, setPlanet] = useState<Planet | null>(null);
   const mapKey = raw ? `planet:${raw.params.seed}` : null;
   const names = ctx.names(mapKey);
-  const planet = useMemo(() => (raw ? renamePlanet(raw, names) : null), [raw, names]);
+  // The GM's edits: relief strokes regrow the whole world from the new ground; realms and towns are laid over it.
+  const edits = ctx.patch(mapKey).edits ?? null;
+  const terrainKey = JSON.stringify(edits?.terrain ?? []);
+  const shaped = useMemo(() => (raw && edits?.terrain.length ? generatePlanet(raw.params, edits.terrain) : raw), [raw, terrainKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const planet = useMemo(() => (shaped ? renamePlanet(editPlanet(shaped, edits), names) : null), [shaped, edits, names]);
+  const [tool, setTool] = useState<EditTool | null>(null);
+  const [brush, setBrush] = useState({ radius: 60, strength: 12 });
+  const [realm, setRealm] = useState(1);
+  const [moving, setMoving] = useState<number | null>(null);
+  const [history, setHistory] = useState<PlanetEdits[]>([]);
   const [time, setTime] = useState(0);
   const [theme, setTheme] = useState<ThemeId>("atlas");
   const [layers, setLayers] = useState<Record<LayerId, boolean>>(defaultLayers("atlas"));
@@ -70,6 +80,8 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
       setPlanet(made);
       setParams(made.params);
       setSelection(null);
+      setHistory([]);
+      setMoving(null);
     });
   };
   const set = <K extends keyof PlanetParams>(key: K, value: PlanetParams[K]) => setParams((current) => ({ ...current, [key]: value }));
@@ -82,6 +94,43 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     const burg = planet.burg[cell];
     setSelection(marker ? { kind: "marker", id: marker.id } : burg && Math.hypot(planet.burgs[burg].x - x, planet.burgs[burg].y - y) < planet.mesh.spacing * 0.4 ? { kind: "burg", id: burg } : { kind: "cell", id: cell });
     setTab("place");
+  };
+  const change = (next: (current: PlanetEdits) => PlanetEdits) => {
+    setHistory((past) => [...past.slice(-40), edits ?? emptyEdits()]);
+    ctx.update(mapKey, (patch) => ({ ...patch, edits: next(patch.edits ?? emptyEdits()) }));
+  };
+  /** What a click does with an editor tool in hand. */
+  const sculpt = (x: number, y: number) => {
+    if (!planet || !tool) return;
+    const { mesh } = planet;
+    const town = () => {
+      let best = 0;
+      for (const burg of planet.burgs.slice(1)) if (!burg.removed && Math.hypot(burg.x - x, burg.y - y) < mesh.spacing * 0.8 && (!best || Math.hypot(burg.x - x, burg.y - y) < Math.hypot(planet.burgs[best].x - x, planet.burgs[best].y - y))) best = burg.id;
+      return best;
+    };
+    const at: [number, number] = [Math.round(x), Math.round(y)];
+    if (tool === "raise" || tool === "lower") change((current) => ({ ...current, terrain: [...current.terrain, [...at, brush.radius, tool === "raise" ? brush.strength : -brush.strength]] }));
+    else if (tool === "paint") {
+      const owners: Record<number, number> = {};
+      for (let cell = 0; cell < mesh.cells; cell++) if (!planet.water[cell] && Math.hypot(mesh.x[cell] - x, mesh.y[cell] - y) < brush.radius) owners[cell] = realm;
+      change((current) => ({ ...current, owners: { ...current.owners, ...owners } }));
+    } else if (tool === "move") {
+      if (moving === null) setMoving(town() || null);
+      else {
+        const id = moving;
+        change((current) => ({ ...current, moved: { ...current.moved, [id]: at } }));
+        setMoving(null);
+      }
+    } else if (tool === "add") {
+      const cell = mesh.find(x, y);
+      if (planet.water[cell]) return;
+      const people = planet.cultures[planet.culture[cell]] ?? planet.cultures[0];
+      const founded = name({ ...people.language }, createRng(`${planet.params.seed}/founded-${edits?.added.length ?? 0}`), "town");
+      change((current) => ({ ...current, added: [...current.added, [...at, founded, 2]] }));
+    } else {
+      const id = town();
+      if (id && !planet.burgs[id].capital) change((current) => ({ ...current, removed: [...current.removed, id] }));
+    }
   };
 
   return {
@@ -107,7 +156,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
           height: globe ? GLOBE_SIZE : planet.params.height,
           key: `planet-${planet.params.seed}-${time}-${globe ? "globe" : "map"}`,
           onPick: (x, y) => {
-            if (!globe) return pick(x, y);
+            if (!globe) return tool ? sculpt(x, y) : pick(x, y);
             const point = globePick(planet, x, y, globe);
             if (point) pick(point[0], point[1]);
           },
@@ -146,6 +195,31 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
               <input type="range" min={-90} max={90} step={5} value={globe.lat} onChange={(event) => setGlobe({ ...globe, lat: Number(event.target.value) })} />
             </label>
           </>
+        ) : null}
+        {planet && !globe ? (
+          <WorldEditor
+            t={t}
+            nm={ctx.nm}
+            planet={planet}
+            edits={edits}
+            tool={tool}
+            setTool={(next) => {
+              setTool(next);
+              setMoving(null);
+            }}
+            brush={brush}
+            setBrush={setBrush}
+            realm={realm}
+            setRealm={setRealm}
+            moving={moving}
+            canUndo={history.length > 0}
+            onUndo={() => {
+              const last = history[history.length - 1];
+              setHistory((past) => past.slice(0, -1));
+              ctx.update(mapKey, (patch) => ({ ...patch, edits: last }));
+            }}
+            onReset={() => change(() => emptyEdits())}
+          />
         ) : null}
         <h2>{t("panel.world")}</h2>
         <label>

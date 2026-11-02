@@ -1,6 +1,6 @@
 // Planet-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { createLanguage, createRng, armsOf, coatOfArms, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
+import { createLanguage, createRng, armsOf, coatOfArms, editPlanet, emptyEdits, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -150,6 +150,27 @@ test("heat maps of warmth, rain and people draw with their key", () => {
     assert.doesNotMatch(svg, /NaN|undefined|Infinity/u, id);
     assert.ok(svg.includes(id === "temperature" ? "°C" : id === "precipitation" ? ">mm<" : "/km²"), `${id} has a key`);
   }
+});
+
+test("the world editor reshapes the ground, repaints realms and moves towns without renumbering them", () => {
+  const sea = Array.from({ length: planet.mesh.cells }, (_, cell) => cell).find((cell) => planet.coast[cell] === -4)!;
+  const raised = generatePlanet(planet.params, [[planet.mesh.x[sea], planet.mesh.y[sea], 90, 40]]);
+  assert.equal(raised.water[sea], 0, "the brush raised land out of the sea");
+  assert.deepEqual(generatePlanet(planet.params, []).burgs.map((b) => b.name), planet.burgs.map((b) => b.name), "no strokes, no change");
+
+  const town = planet.burgs.find((b) => b.id && !b.capital)!;
+  const other = planet.burgs.find((b) => b.id && !b.capital && b.state !== town.state)!;
+  const spot = Array.from({ length: planet.mesh.cells }, (_, cell) => cell).find((cell) => !planet.water[cell] && !planet.burg[cell] && Math.hypot(planet.mesh.x[cell] - town.x, planet.mesh.y[cell] - town.y) > 50)!;
+  const edits = { ...emptyEdits(), owners: { [other.cell]: town.state }, moved: { [town.id]: [planet.mesh.x[spot], planet.mesh.y[spot]] as [number, number] }, added: [[10, 10, "Founded", 2] as [number, number, string, number]], removed: [other.id] };
+  const edited = editPlanet(planet, edits);
+  assert.equal(edited.burgs[town.id].cell, spot, "the town moved");
+  assert.equal(edited.burgs[town.id].name, town.name, "and kept its id");
+  assert.equal(edited.burgs.length, planet.burgs.length + 1, "a founded town follows the others");
+  assert.ok(edited.burgs[other.id].removed && !edited.burg[other.cell], "a razed town is gone from the map");
+  assert.equal(edited.state[other.cell], town.state, "the land changed hands");
+  assert.equal(edited.states.slice(1).reduce((sum, item) => sum + item.cells, 0), planet.states.slice(1).reduce((sum, item) => sum + item.cells, 0), "realms recounted");
+  assert.ok(!renderPlanet(edited).includes(`>${other.name}<`), "a razed town is not drawn");
+  assert.equal(editPlanet(planet, emptyEdits()), planet, "no edits, the same world");
 });
 
 console.log(`planet: ${passed} regressions passed`);

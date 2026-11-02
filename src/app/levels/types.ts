@@ -1,5 +1,6 @@
 // What every map level (galaxy, system, planet, region, city, building, local map) gives the app shell.
 import type { ReactNode } from "react";
+import type { MapPatch } from "../../core/index";
 import type { Locale, T } from "../i18n";
 
 export type LevelId = "universe" | "galaxy" | "system" | "planet" | "region" | "underworld" | "city" | "building" | "local";
@@ -17,6 +18,9 @@ export interface LevelContext {
   show: (level: LevelId) => void;
   /** The GM's new names for a map's things. */
   names: (mapKey: string | null) => Record<string, string>;
+  /** A map's whole GM patch, and a change to it. */
+  patch: (mapKey: string | null) => MapPatch;
+  update: (mapKey: string | null, change: (patch: MapPatch) => MapPatch) => void;
   /** The players' view is on: hide what only the GM should see. */
   players: boolean;
 }

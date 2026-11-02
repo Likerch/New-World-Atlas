@@ -166,7 +166,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
     }
     if (kind === "culture") {
       const culture = planet.cultures[id];
-      const towns = planet.burgs.filter((burg) => burg.culture === id).slice(0, 8);
+      const towns = planet.burgs.filter((burg) => burg.culture === id && !burg.removed).slice(0, 8);
       return (
         <div className="card">
           <h3>
@@ -294,7 +294,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
       case "burgs":
         return planet.burgs
           .slice(1)
-          .filter((burg) => match(burg.name))
+          .filter((burg) => !burg.removed && match(burg.name))
           .sort((a, b) => b.population - a.population)
           .slice(0, 300)
           .map((burg) => (

@@ -132,6 +132,7 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
   const burg = new Int32Array(n);
   const burgs: Burg[] = [{ ...planet.burgs[0] }];
   for (const town of planet.burgs.slice(1)) {
+    if (town.removed) continue;
     if (town.x < x0 || town.x > x1 || town.y < y0 || town.y > y1) continue;
     const [x, y] = toRegion(town.x, town.y);
     // The finer coast may have moved: take the nearest dry cell within a few rings.

@@ -174,7 +174,7 @@ export function renderGlobe(planet: Planet, options: GlobeOptions = {}): string 
   // Towns and names on the side that faces us.
   if (layers.burgs) {
     for (const burg of planet.burgs.slice(1)) {
-      if (!burg.capital && burg.population < 20) continue;
+      if (burg.removed || (!burg.capital && burg.population < 20)) continue;
       const [x, y, front] = project([burg.x, burg.y]);
       if (front) out.push(`<circle cx="${r1(x)}" cy="${r1(y)}" r="${burg.capital ? 3.4 : 2}" fill="${theme.burg}" stroke="${theme.burgStroke}" stroke-width="1"/>`);
     }
@@ -187,7 +187,7 @@ export function renderGlobe(planet: Planet, options: GlobeOptions = {}): string 
       if (front && Math.hypot(x - C, y - C) < R * 0.9) out.push(`<text x="${r1(x)}" y="${r1(y)}" font-size="${r1(Math.min(22, 9 + Math.sqrt(state.cells) * 0.35))}" letter-spacing="1.5" font-weight="600">${text(state.name.toUpperCase())}</text>`);
     }
     for (const burg of planet.burgs.slice(1)) {
-      if (!burg.capital) continue;
+      if (!burg.capital || burg.removed) continue;
       const [x, y, front] = project([burg.x, burg.y]);
       if (front && Math.hypot(x - C, y - C) < R * 0.92) out.push(`<text x="${r1(x)}" y="${r1(y - 6)}" font-size="10">${text(burg.name)}</text>`);
     }

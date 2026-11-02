@@ -1,7 +1,9 @@
-// A game master's layer over generated maps: renamed things, notes, pins, and fog of war. A map is identified by its
-// level and seed, so the same generated map always finds its patch again; a campaign is all patches together.
+// A game master's layer over generated maps: renamed things, notes, pins, fog of war and a planet's world edits. A map
+// is identified by its level and seed, so the same generated map always finds its patch again; a campaign is all
+// patches together.
 import type { City } from "./city/model";
 import type { LocalMap } from "./local/local";
+import type { PlanetEdits } from "./planet/edit";
 import type { Planet } from "./planet/model";
 import type { Galaxy } from "./space/galaxy";
 import type { StarSystem } from "./space/system";
@@ -23,6 +25,8 @@ export interface MapPatch {
   notes: Record<string, string>;
   pins: Pin[];
   fog: { enabled: boolean; revealed: [number, number, number][] };
+  /** A planet's edits from the world editor. */
+  edits?: PlanetEdits;
 }
 
 export interface Campaign {
