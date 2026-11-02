@@ -20,6 +20,7 @@ interface Props {
   onSelect: (selection: Selection, at?: [number, number]) => void;
   tab: Tab;
   setTab: (tab: Tab) => void;
+  onOpenCity?: (burg: number) => void;
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -50,7 +51,7 @@ export function legendOf(marker: Marker, t: T, nm: (name: string) => string): st
   return t(`legend.${marker.kind}`, facts);
 }
 
-export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab }: Props) {
+export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onOpenCity }: Props) {
   const [query, setQuery] = useState("");
   const tabs: Tab[] = ["place", "states", "cultures", "burgs", "rivers", "markers"];
   const stateName = (id: number) => (id ? t(`form.${planet.states[id].formKey}`, { name: nm(planet.states[id].name) }) : t("form.wild"));
@@ -148,6 +149,11 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab }: P
           <Row label={t("place.province")} value={provinceName(burg.province)} />
           <Row label={t("place.culture")} value={<Link label={nm(planet.cultures[burg.culture].name)} onClick={() => pick("culture", burg.culture)} />} />
           <p>{traits.join(" · ")}</p>
+          {onOpenCity ? (
+            <button type="button" className="primary wide" onClick={() => onOpenCity(burg.id)}>
+              🏰 {t("action.openCity")}
+            </button>
+          ) : null}
         </div>
       );
     }
@@ -176,7 +182,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab }: P
       );
     }
     return null;
-  }, [selection, planet, t, nm]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selection, planet, t, nm, onOpenCity]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const list = (() => {
     switch (tab) {

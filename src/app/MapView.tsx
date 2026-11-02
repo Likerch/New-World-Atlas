@@ -36,9 +36,12 @@ export function MapView({ svg, width, height, focus, onPick }: { svg: string; wi
     return () => window.removeEventListener("resize", onResize);
   }, [width, height]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Only jumps asked for while this map is shown; an older one must not move a freshly opened map.
+  const applied = useRef(focus?.nonce);
   useEffect(() => {
     const el = box.current;
-    if (!focus || !el) return;
+    if (!focus || !el || focus.nonce === applied.current) return;
+    applied.current = focus.nonce;
     const k = Math.max(view.k, fit * 3);
     setView({ k, x: el.clientWidth / 2 - focus.x * k, y: el.clientHeight / 2 - focus.y * k });
   }, [focus]); // eslint-disable-line react-hooks/exhaustive-deps

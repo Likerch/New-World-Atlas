@@ -350,3 +350,24 @@ ul.plain {
 .list small {
   color: var(--muted);
 }
+
+.views {
+  display: flex;
+  gap: 4px;
+}
+.views button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+button.wide {
+  width: 100%;
+  margin-top: 10px;
+}
+button.back {
+  width: 100%;
+  margin: 4px 0 6px;
+}
+.controls label.check select {
+  margin-left: auto;
+  max-width: 110px;
+}

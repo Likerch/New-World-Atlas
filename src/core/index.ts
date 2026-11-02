@@ -14,3 +14,8 @@ export * from "./planet/generate";
 export * from "./planet/export";
 export * from "./render/themes";
 export * from "./render/planet-svg";
+export * from "./polygon";
+export * from "./voronoi";
+export * from "./city/model";
+export * from "./city/generate";
+export * from "./render/city-svg";
