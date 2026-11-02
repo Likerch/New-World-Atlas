@@ -1,0 +1,33 @@
+{
+  "name": "new-world-atlas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "New World Atlas: a procedural map generator for game masters, from galaxies down to rooms. Standalone app plus an engine-independent core that Marinara Worlds embeds.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:lib": "node scripts/build-lib.mjs",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node scripts/run-tests.mjs",
+    "check": "npm run typecheck && npm test && node scripts/check-core-boundary.mjs"
+  },
+  "dependencies": {
+    "delaunator": "^5.0.1",
+    "simplex-noise": "^4.0.3"
+  },
+  "devDependencies": {
+    "@types/delaunator": "^5.0.3",
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "esbuild": "^0.25.5",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tsx": "^4.20.3",
+    "typescript": "~5.9.2",
+    "vite": "^7.0.0"
+  }
+}
