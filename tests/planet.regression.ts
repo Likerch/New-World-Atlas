@@ -144,4 +144,12 @@ test("armies stand at the capitals and on the marches, fleets in the ports", () 
   }
 });
 
+test("heat maps of warmth, rain and people draw with their key", () => {
+  for (const id of ["temperature", "precipitation", "population"] as const) {
+    const svg = renderPlanet(planet, { layers: { [id]: true } });
+    assert.doesNotMatch(svg, /NaN|undefined|Infinity/u, id);
+    assert.ok(svg.includes(id === "temperature" ? "°C" : id === "precipitation" ? ">mm<" : "/km²"), `${id} has a key`);
+  }
+});
+
 console.log(`planet: ${passed} regressions passed`);

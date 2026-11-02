@@ -20,6 +20,13 @@ export interface RenderOptions {
 }
 
 const SEA = 20;
+
+/** Heat maps: band floors (the first covers everything) and their colours, from cold, dry and empty upwards. */
+const CLIMATE = {
+  temperature: { unit: "°C", levels: [-Infinity, -20, -10, -5, 0, 5, 10, 15, 20, 25], colors: ["#2c3e91", "#3f63b8", "#5b8fd6", "#86b9e6", "#bfe0ef", "#f1eebf", "#f7d27e", "#f2a54d", "#e2713a", "#c0392b"] },
+  precipitation: { unit: "mm", levels: [-Infinity, 25, 50, 100, 250, 500, 1000, 2000], colors: ["#c8a26a", "#d9c27c", "#d6d98d", "#a9d18e", "#6fbf8a", "#3ea38f", "#2b7fa3", "#25579a"] },
+  population: { unit: "/km²", levels: [-Infinity, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 10], colors: ["#fff6da", "#fde3a0", "#fbc879", "#f6a35a", "#ec7a46", "#d9533a", "#b8302f", "#851d2a"] },
+} as const;
 const esc = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;").replace(/"/gu, "&quot;");
 const r1 = (value: number) => Math.round(value * 10) / 10;
 
@@ -173,6 +180,21 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
     }
   }
   out.push(`</g>`);
+
+  // Climate and people as banded heat maps: each band is the ground (or, for warmth, the whole map) above a floor.
+  const km2 = planet.scale * planet.scale;
+  const density = new Float32Array(mesh.cells);
+  for (let cell = 0; cell < mesh.cells; cell++) density[cell] = (planet.population[cell] * 1000) / (mesh.area[cell] * km2);
+  for (const burg of planet.burgs.slice(1)) density[burg.cell] += (burg.population * 1000) / (mesh.area[burg.cell] * km2);
+  const heat = { temperature: (cell: number) => planet.temperature[cell], precipitation: (cell: number) => planet.precipitation[cell], population: (cell: number) => density[cell] };
+  const shown = (["temperature", "precipitation", "population"] as const).filter((id) => layers[id]);
+  for (const id of shown) {
+    const { levels, colors } = CLIMATE[id];
+    levels.forEach((level, k) => {
+      const shape = rings(outline(mesh, (cell) => (id === "temperature" || land(cell)) && heat[id](cell) >= level), 1);
+      if (shape) out.push(`<path d="${shape}" fill="${colors[k]}" fill-opacity="${id === "temperature" ? 0.55 : 0.75}" fill-rule="evenodd"/>`);
+    });
+  }
 
   // Lakes and the coastline over the land fills.
   const lakePath = rings(outline(mesh, (cell) => water[cell] === 1 && planet.features[planet.feature[cell]].kind === "lake"), 2);
@@ -471,9 +493,26 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
     out.push(`<path d="${lines.join("")}" stroke="${theme.grid}" stroke-width="0.6" fill="none"/>`);
   }
   out.push(`</g>`);
+  const legend = (["temperature", "precipitation", "population"] as const).find((id) => layers[id]);
+  if (legend) out.push(climateLegend(legend, W, theme));
   if (layers.frame) out.push(frame(planet, theme, text));
   out.push(`</svg>`);
   return out.join("");
+}
+
+/** The key to the first heat map shown: its colours and the floor of each band, in the top right corner. */
+function climateLegend(id: keyof typeof CLIMATE, W: number, theme: Theme): string {
+  const { unit, levels, colors } = CLIMATE[id];
+  const step = 30;
+  const x0 = W - 16 - levels.length * step - 16;
+  const parts = [`<rect x="${x0}" y="16" width="${levels.length * step + 16}" height="44" rx="3" fill="${theme.halo}" fill-opacity="0.88" stroke="${theme.ink}" stroke-width="1"/>`];
+  levels.forEach((level, k) => {
+    const x = x0 + 8 + k * step;
+    parts.push(`<rect x="${x}" y="24" width="${step}" height="10" fill="${colors[k]}"/>`);
+    if (k) parts.push(`<text x="${x}" y="46" text-anchor="middle" font-size="8" fill="${theme.ink}">${level}</text>`);
+  });
+  parts.push(`<text x="${x0 + levels.length * step + 8}" y="56" text-anchor="end" font-size="8" fill="${theme.ink}">${unit}</text>`);
+  return `<g>${parts.join("")}</g>`;
 }
 
 /** Border, title, compass rose and scale bar. */

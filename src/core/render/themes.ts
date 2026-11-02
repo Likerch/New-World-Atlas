@@ -217,11 +217,14 @@ export type LayerId =
   | "markers"
   | "military"
   | "grid"
+  | "temperature"
+  | "precipitation"
+  | "population"
   | "currents"
   | "winds"
   | "frame";
 
-export const LAYERS: LayerId[] = ["depth", "biomes", "heights", "icons", "rivers", "states", "religions", "provinces", "borders", "routes", "burgs", "emblems", "labels", "markers", "military", "grid", "currents", "winds", "frame"];
+export const LAYERS: LayerId[] = ["depth", "biomes", "heights", "icons", "rivers", "states", "religions", "provinces", "borders", "routes", "burgs", "emblems", "labels", "markers", "military", "grid", "temperature", "precipitation", "population", "currents", "winds", "frame"];
 
 export function defaultLayers(theme: ThemeId): Record<LayerId, boolean> {
   return {
@@ -241,6 +244,9 @@ export function defaultLayers(theme: ThemeId): Record<LayerId, boolean> {
     markers: theme !== "political",
     military: false,
     grid: theme !== "political",
+    temperature: false,
+    precipitation: false,
+    population: false,
     currents: theme === "nautical",
     winds: false,
     frame: true,
