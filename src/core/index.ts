@@ -22,3 +22,6 @@ export * from "./render/city-svg";
 export * from "./building/plan";
 export * from "./render/building-svg";
 export * from "./building/from-city";
+export * from "./space/galaxy";
+export * from "./space/system";
+export * from "./render/space-svg";

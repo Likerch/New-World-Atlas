@@ -110,6 +110,6 @@ export function generatePlanet(input: Partial<PlanetParams> = {}): Planet {
 
   const routes = buildRoutes(ground, burgs, states);
   const markers = placeMarkers(ground, culture, cultures, state, states, burgs, burg, routes, rng.fork("markers"));
-  const worldName = name((cultures[1] ?? cultures[0]).language, names, "land");
+  const worldName = params.name || name((cultures[1] ?? cultures[0]).language, names, "land");
   return { ...ground, name: worldName, population, culture, cultures, burg, burgs, state, states, province, provinces, routes, markers };
 }

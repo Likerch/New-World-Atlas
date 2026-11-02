@@ -10,6 +10,8 @@ export const SEA_LEVEL = 20;
 
 export interface PlanetParams {
   seed: string;
+  /** A fixed name (a world named in its star system); empty to name it in its first people's tongue. */
+  name?: string;
   width: number;
   height: number;
   /** Number of Voronoi cells: detail versus speed (2 000 – 50 000). */

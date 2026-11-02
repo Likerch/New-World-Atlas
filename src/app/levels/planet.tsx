@@ -1,5 +1,5 @@
 // The planet level: world settings, the world map and its inspector.
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { defaultLayers, generatePlanet, LAYERS, planetParams, planetToJson, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetParams, type ThemeId } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import type { Level, LevelContext } from "./types";
@@ -17,7 +17,7 @@ const NUMBER_FIELDS: { key: keyof PlanetParams; min: number; max: number; step: 
   { key: "provinceShare", min: 0, max: 1, step: 0.05 },
 ];
 
-export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, openCity: (planet: Planet, burg: number) => void, openRegion?: (planet: Planet, province: number) => void): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void } {
+export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, openCity: (planet: Planet, burg: number) => void, openRegion?: (planet: Planet, province: number) => void, back: (() => void) | null = null): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void } {
   const { t } = ctx;
   const [params, setParams] = useState<PlanetParams>(() => planetParams({ seed: initialSeed }));
   const [planet, setPlanet] = useState<Planet | null>(null);
@@ -26,9 +26,12 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   const [layers, setLayers] = useState<Record<LayerId, boolean>>(defaultLayers("atlas"));
   const [selection, setSelection] = useState<Selection | null>(null);
   const [tab, setTab] = useState<Tab>("place");
+  const pending = useRef(false);
 
-  const load = (next: Partial<PlanetParams>) =>
+  const load = (next: Partial<PlanetParams>) => {
+    pending.current = true;
     ctx.run(() => {
+      pending.current = false;
       const started = performance.now();
       const made = generatePlanet({ ...params, ...next });
       setTime(Math.round(performance.now() - started));
@@ -36,6 +39,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
       setParams(made.params);
       setSelection(null);
     });
+  };
   const set = <K extends keyof PlanetParams>(key: K, value: PlanetParams[K]) => setParams((current) => ({ ...current, [key]: value }));
   const highlight = selection && (selection.kind === "state" || selection.kind === "province" || selection.kind === "culture") ? { kind: selection.kind, id: selection.id } : null;
   const svg = useMemo(() => (planet ? renderPlanet(planet, { theme, layers, script: ctx.script, highlight }) : ""), [planet, theme, layers, ctx.script, highlight?.kind, highlight?.id]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -48,7 +52,8 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     setSeed: (seed) => set("seed", seed),
     generate: (seed) => load(seed ? { seed } : {}),
     ensure: () => {
-      if (!planet) load({});
+      // Only when nothing is on its way: a world opened from a star system must not be replaced.
+      if (!planet && !pending.current) load({});
     },
     planet,
     load,
@@ -69,6 +74,11 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
       : null,
     controls: (
       <>
+        {back ? (
+          <button type="button" className="back" onClick={back}>
+            ← {t("action.backToSystem")}
+          </button>
+        ) : null}
         <h2>{t("panel.world")}</h2>
         <label>
           {t("field.theme")}

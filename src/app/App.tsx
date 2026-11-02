@@ -6,6 +6,7 @@ import { translator, type Locale } from "./i18n";
 import { useBuildingLevel } from "./levels/building";
 import { useCityLevel } from "./levels/city";
 import { usePlanetLevel } from "./levels/planet";
+import { useGalaxyLevel, useSystemLevel } from "./levels/space";
 import type { Level, LevelContext, LevelId } from "./levels/types";
 import { MapView, type Focus } from "./MapView";
 
@@ -74,11 +75,31 @@ export function App() {
     },
     cameFrom.city ? () => setView(cameFrom.city!) : null,
   );
-  const planet = usePlanetLevel(ctx, query.get("seed") || undefined, (made, burg) => {
-    go("city", "planet");
-    city.openFromBurg(made, burg);
+  const planet = usePlanetLevel(
+    ctx,
+    query.get("seed") || undefined,
+    (made, burg) => {
+      go("city", "planet");
+      city.openFromBurg(made, burg);
+    },
+    undefined,
+    cameFrom.planet ? () => setView(cameFrom.planet!) : null,
+  );
+  const system = useSystemLevel(
+    ctx,
+    (params) => {
+      go("planet", "system");
+      planet.load(params);
+      setView("planet");
+    },
+    cameFrom.system ? () => setView(cameFrom.system!) : null,
+  );
+  const galaxy = useGalaxyLevel(ctx, (made, star) => {
+    go("system", "galaxy");
+    system.open(made, star);
+    setView("system");
   });
-  const levels: Level[] = [planet, city, building];
+  const levels: Level[] = [galaxy, system, planet, city, building];
   const level = levels.find((item) => item.id === view) ?? planet;
 
   useEffect(() => {

@@ -66,6 +66,7 @@ test("a town of the planet becomes a city that keeps its coast, river and defenc
   assert.equal(params.walls, burg.walls);
   const city = generateCity(params, language);
   assert.equal(city.name, burg.name);
+  assert.deepEqual(generateCity(params, language).wards.map((ward) => ward.name), city.wards.map((ward) => ward.name), "the same town gets the same names when opened again");
   assert.ok(city.sea);
 });
 

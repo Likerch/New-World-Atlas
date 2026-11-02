@@ -35,6 +35,8 @@ export function cityParams(input: Partial<CityParams> = {}): CityParams {
 
 export function generateCity(input: Partial<CityParams> = {}, language = createLanguage(createRng(input.seed ?? "city").fork("language"))): City {
   const params = cityParams(input);
+  // A copy of the people's language: the same town must get the same names however often it is opened.
+  language = { ...language };
   const rng = createRng(params.seed);
   const layout = layoutCity(params, rng.fork("layout"));
   const net = buildStreets(params, layout, language, rng.fork("streets"));
