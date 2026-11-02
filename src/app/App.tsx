@@ -1,10 +1,11 @@
 // New World Atlas: the game master's map table. Every level (planet, city, building, …) supplies its settings, map
 // and inspector; the shell around them holds the tabs, the seed, export, the names' script and the language.
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { randomSeed, toCyrillic } from "../core/index";
+import { localFromLandmark, localFromMarker, localFromStar, randomSeed, toCyrillic, type LocalLink } from "../core/index";
 import { translator, type Locale } from "./i18n";
 import { useBuildingLevel } from "./levels/building";
 import { useCityLevel } from "./levels/city";
+import { useLocalLevel } from "./levels/local";
 import { usePlanetLevel } from "./levels/planet";
 import { useGalaxyLevel, useSystemLevel } from "./levels/space";
 import type { Level, LevelContext, LevelId } from "./levels/types";
@@ -65,6 +66,12 @@ export function App() {
     setCameFrom((current) => ({ ...current, [to]: from }));
   };
 
+  const local = useLocalLevel(ctx, cameFrom.local ? () => setView(cameFrom.local!) : null);
+  const openLocal = (link: LocalLink | null, from: LevelId) => {
+    if (!link) return;
+    go("local", from);
+    local.open(link.params, link.language);
+  };
   const building = useBuildingLevel(ctx, cameFrom.building ? () => setView(cameFrom.building!) : null);
   const city = useCityLevel(
     ctx,
@@ -74,16 +81,19 @@ export function App() {
       building.openFromCity(made, index);
     },
     cameFrom.city ? () => setView(cameFrom.city!) : null,
+    (made, landmark) => openLocal(localFromLandmark(made, landmark), "city"),
   );
   const planet = usePlanetLevel(
     ctx,
     query.get("seed") || undefined,
-    (made, burg) => {
-      go("city", "planet");
-      city.openFromBurg(made, burg);
+    {
+      openCity: (made, burg) => {
+        go("city", "planet");
+        city.openFromBurg(made, burg);
+      },
+      openLocal: (made, marker) => openLocal(localFromMarker(made, marker), "planet"),
+      back: cameFrom.planet ? () => setView(cameFrom.planet!) : null,
     },
-    undefined,
-    cameFrom.planet ? () => setView(cameFrom.planet!) : null,
   );
   const system = useSystemLevel(
     ctx,
@@ -94,12 +104,16 @@ export function App() {
     },
     cameFrom.system ? () => setView(cameFrom.system!) : null,
   );
-  const galaxy = useGalaxyLevel(ctx, (made, star) => {
-    go("system", "galaxy");
-    system.open(made, star);
-    setView("system");
-  });
-  const levels: Level[] = [galaxy, system, planet, city, building];
+  const galaxy = useGalaxyLevel(
+    ctx,
+    (made, star) => {
+      go("system", "galaxy");
+      system.open(made, star);
+      setView("system");
+    },
+    (made, star) => openLocal(localFromStar(made, star), "galaxy"),
+  );
+  const levels: Level[] = [galaxy, system, planet, city, building, local];
   const level = levels.find((item) => item.id === view) ?? planet;
 
   useEffect(() => {

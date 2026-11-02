@@ -17,7 +17,14 @@ const NUMBER_FIELDS: { key: keyof PlanetParams; min: number; max: number; step: 
   { key: "provinceShare", min: 0, max: 1, step: 0.05 },
 ];
 
-export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, openCity: (planet: Planet, burg: number) => void, openRegion?: (planet: Planet, province: number) => void, back: (() => void) | null = null): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void } {
+export interface PlanetLinks {
+  openCity: (planet: Planet, burg: number) => void;
+  openRegion?: (planet: Planet, province: number) => void;
+  openLocal?: (planet: Planet, marker: number) => void;
+  back: (() => void) | null;
+}
+
+export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, { openCity, openRegion, openLocal, back }: PlanetLinks): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void } {
   const { t } = ctx;
   const [params, setParams] = useState<PlanetParams>(() => planetParams({ seed: initialSeed }));
   const [planet, setPlanet] = useState<Planet | null>(null);
@@ -142,6 +149,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
         setTab={setTab}
         onOpenCity={(burg) => openCity(planet, burg)}
         onOpenRegion={openRegion ? (province) => openRegion(planet, province) : undefined}
+        onOpenLocal={openLocal ? (marker) => openLocal(planet, marker) : undefined}
         onSelect={(next, at) => {
           setSelection(next);
           if (at) ctx.focus(at[0], at[1]);

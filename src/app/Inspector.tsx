@@ -1,7 +1,7 @@
 // The GM's side panel: what is at the clicked place, and every state, people, town, river and point of interest with
 // its facts. Picking an entry highlights it and moves the map to it.
 import { useMemo, useState } from "react";
-import { altitude, BIOMES, latitudeOf, SEA_LEVEL, type Marker, type Planet } from "../core/index";
+import { altitude, BIOMES, latitudeOf, localFromMarker, SEA_LEVEL, type Marker, type Planet } from "../core/index";
 import { area, km, people } from "./format";
 import type { T } from "./i18n";
 
@@ -22,6 +22,7 @@ interface Props {
   setTab: (tab: Tab) => void;
   onOpenCity?: (burg: number) => void;
   onOpenRegion?: (province: number) => void;
+  onOpenLocal?: (marker: number) => void;
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -52,7 +53,7 @@ export function legendOf(marker: Marker, t: T, nm: (name: string) => string): st
   return t(`legend.${marker.kind}`, facts);
 }
 
-export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onOpenCity, onOpenRegion }: Props) {
+export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onOpenCity, onOpenRegion, onOpenLocal }: Props) {
   const [query, setQuery] = useState("");
   const tabs: Tab[] = ["place", "states", "cultures", "burgs", "rivers", "markers"];
   const stateName = (id: number) => (id ? t(`form.${planet.states[id].formKey}`, { name: nm(planet.states[id].name) }) : t("form.wild"));
@@ -184,11 +185,16 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
           </h3>
           <p>{legendOf(marker, t, nm)}</p>
           <Row label={t("place.state")} value={stateName(planet.state[marker.cell])} />
+          {onOpenLocal && localFromMarker(planet, marker.id) ? (
+            <button type="button" className="primary wide" onClick={() => onOpenLocal(marker.id)}>
+              🗺️ {t("action.openLocal")}
+            </button>
+          ) : null}
         </div>
       );
     }
     return null;
-  }, [selection, planet, t, nm, onOpenCity, onOpenRegion]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selection, planet, t, nm, onOpenCity, onOpenRegion, onOpenLocal]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const list = (() => {
     switch (tab) {

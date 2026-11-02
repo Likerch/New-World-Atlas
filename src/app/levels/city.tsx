@@ -6,7 +6,7 @@ import type { Level, LevelContext } from "./types";
 
 const allOn = (ids: readonly CityLayerId[]) => Object.fromEntries(ids.map((id) => [id, true])) as Record<CityLayerId, boolean>;
 
-export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined, openBuilding: (city: City, index: number) => void, back: (() => void) | null): Level & { city: City | null; openFromBurg: (planet: Planet, burg: number) => void } {
+export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined, openBuilding: (city: City, index: number) => void, back: (() => void) | null, openLocal: (city: City, landmark: number) => void): Level & { city: City | null; openFromBurg: (planet: Planet, burg: number) => void } {
   const { t } = ctx;
   const pending = useRef(false);
   const [input, setInput] = useState<CityParams>(() => cityParams({ seed: initialSeed, era: "medieval" }));
@@ -95,6 +95,7 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
         nm={ctx.nm}
         selection={selection}
         onOpenBuilding={(index) => openBuilding(city, index)}
+        onOpenLocal={(landmark) => openLocal(city, landmark)}
         onSelect={(next, at) => {
           setSelection(next);
           if (at) ctx.focus(at[0], at[1]);

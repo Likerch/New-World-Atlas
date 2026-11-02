@@ -1,7 +1,7 @@
 // The galaxy and star-system levels: stars, powers and lanes; then one system's worlds, any of which can be opened as
 // a planet.
 import { useMemo, useState } from "react";
-import { GALAXY_SHAPES, galaxyParams, generateGalaxy, generateSystem, planetFromBody, renderGalaxy, renderSystem, SPECTRA, type Galaxy, type GalaxyParams, type PlanetParams, type StarSystem } from "../../core/index";
+import { GALAXY_SHAPES, localFromStar, galaxyParams, generateGalaxy, generateSystem, planetFromBody, renderGalaxy, renderSystem, SPECTRA, type Galaxy, type GalaxyParams, type PlanetParams, type StarSystem } from "../../core/index";
 import type { Level, LevelContext } from "./types";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -13,7 +13,7 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, star: number) => void): Level {
+export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, star: number) => void, openLocal: (galaxy: Galaxy, star: number) => void): Level {
   const { t, nm } = ctx;
   const [input, setInput] = useState<GalaxyParams>(() => galaxyParams());
   const [galaxy, setGalaxy] = useState<Galaxy | null>(null);
@@ -103,6 +103,11 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
             <button type="button" className="primary wide" onClick={() => openSystem(galaxy, selected.id)}>
               ☀️ {t("action.openSystem")}
             </button>
+            {localFromStar(galaxy, selected.id) ? (
+              <button type="button" className="wide" onClick={() => openLocal(galaxy, selected.id)}>
+                🗺️ {t("action.openLocal")}
+              </button>
+            ) : null}
           </div>
         ) : (
           <p className="muted">{t("space.hint")}</p>

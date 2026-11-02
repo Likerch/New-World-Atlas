@@ -97,7 +97,7 @@ export type CitySelection = { kind: "ward" | "landmark" | "building"; id: number
 
 const wealthWord = (value: number) => (value > 0.75 ? "rich" : value > 0.5 ? "comfortable" : value > 0.25 ? "modest" : "poor");
 
-export function CityInspector({ city, t, nm, selection, onSelect, onOpenBuilding }: { city: City; t: T; nm: (name: string) => string; selection: CitySelection; onSelect: (selection: CitySelection, at?: [number, number]) => void; onOpenBuilding: (index: number) => void }) {
+export function CityInspector({ city, t, nm, selection, onSelect, onOpenBuilding, onOpenLocal }: { city: City; t: T; nm: (name: string) => string; selection: CitySelection; onSelect: (selection: CitySelection, at?: [number, number]) => void; onOpenBuilding: (index: number) => void; onOpenLocal: (landmark: number) => void }) {
   const [tab, setTab] = useState<"wards" | "landmarks" | "streets">("wards");
   const wardTitle = (id: number) => {
     const ward = city.wards.find((w) => w.id === id);
@@ -186,6 +186,11 @@ export function CityInspector({ city, t, nm, selection, onSelect, onOpenBuilding
               </button>
             </b>
           </div>
+          {landmark.kind === "undercity" ? (
+            <button type="button" className="primary wide" onClick={() => onOpenLocal(landmark.id)}>
+              🗺️ {t("action.openLocal")}
+            </button>
+          ) : null}
           {(() => {
             const index = city.buildings.findIndex((b) => b.ward === landmark.ward && pointInPolygon([landmark.x, landmark.y], b.polygon));
             return index >= 0 ? (
