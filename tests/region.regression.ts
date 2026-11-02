@@ -1,6 +1,6 @@
 // Region regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { cityFromBurg, generateCity, generateCountry, generatePlanet, generateRegion, renderPlanet } from "../src/core/index";
+import { cityFromBurg, generateCity, generateCountry, generatePlanet, generateRegion, generateUnderworld, renderPlanet, renderUnderworld } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -44,6 +44,19 @@ test("a whole country opens up close with all its towns", () => {
   const country = generateCountry(planet, state.id, 6000);
   assert.equal(country.name, state.name);
   for (const town of planet.burgs.filter((burg) => burg.state === state.id)) assert.ok(country.burgs.some((burg) => burg.name === town.name), `${town.name} is missing`);
+});
+
+test("the underworld is one connected web with ways down from the surface", () => {
+  const world = generateUnderworld(planet);
+  assert.ok(world.caverns.length > 20, "caverns were placed");
+  const parent = world.caverns.map((_, k) => k);
+  const root = (k: number): number => (parent[k] === k ? k : (parent[k] = root(parent[k])));
+  for (const [a, b] of world.tunnels) parent[root(a)] = root(b);
+  assert.equal(new Set(world.caverns.map((c) => root(c.id))).size, 1, "every cavern is reachable");
+  for (const entrance of world.entrances) assert.ok(world.caverns[entrance.cavern], "an entrance leads to a cavern");
+  assert.ok(world.caverns.some((c) => c.kind === "settlement" && c.people), "the deep peoples live somewhere");
+  assert.deepEqual(generateUnderworld(planet).caverns.map((c) => c.name), world.caverns.map((c) => c.name));
+  assert.doesNotMatch(renderUnderworld(world, planet), /NaN|undefined|Infinity/u);
 });
 
 console.log(`region: ${passed} regressions passed`);

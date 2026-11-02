@@ -31,10 +31,11 @@ export interface PlanetLinks {
   openRegion?: (planet: Planet, province: number) => void;
   openLocal?: (planet: Planet, marker: number) => void;
   openCountry?: (planet: Planet, state: number) => void;
+  openUnderworld?: (planet: Planet) => void;
   back: (() => void) | null;
 }
 
-export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, { openCity, openRegion, openLocal, openCountry, back }: PlanetLinks): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void } {
+export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, { openCity, openRegion, openLocal, openCountry, openUnderworld, back }: PlanetLinks): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void } {
   const { t } = ctx;
   const [params, setParams] = useState<PlanetParams>(() => planetParams({ seed: initialSeed }));
   const [raw, setPlanet] = useState<Planet | null>(null);
@@ -99,6 +100,11 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
         {back ? (
           <button type="button" className="back" onClick={back}>
             ← {t("action.backToSystem")}
+          </button>
+        ) : null}
+        {planet && openUnderworld ? (
+          <button type="button" className="wide" onClick={() => openUnderworld(planet)}>
+            🕳 {t("action.openUnderworld")}
           </button>
         ) : null}
         <h2>{t("panel.world")}</h2>

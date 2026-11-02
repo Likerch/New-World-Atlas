@@ -9,6 +9,7 @@ import { useBuildingLevel } from "./levels/building";
 import { useCityLevel } from "./levels/city";
 import { useLocalLevel } from "./levels/local";
 import { useRegionLevel } from "./levels/region";
+import { useUnderworldLevel } from "./levels/underworld";
 import { usePlanetLevel } from "./levels/planet";
 import { useGalaxyLevel, useSystemLevel, useUniverseLevel } from "./levels/space";
 import type { Level, LevelContext, LevelId } from "./levels/types";
@@ -92,6 +93,14 @@ export function App() {
     cameFrom.city ? () => setView(cameFrom.city!) : null,
     (made, landmark) => openLocal(localFromLandmark(made, landmark), "city"),
   );
+  const underworld = useUnderworldLevel(
+    ctx,
+    (world, cavern) => {
+      go("local", "underworld");
+      local.open({ seed: `${world.seed}/cavern-${cavern}`, kind: "cave", theme: "lair", danger: 3 }, world.caverns[cavern].people ? world.peoples[world.caverns[cavern].people - 1].language : null);
+    },
+    cameFrom.underworld ? () => setView(cameFrom.underworld!) : null,
+  );
   const region = useRegionLevel(ctx, {
     openCity: (made, burg) => {
       go("city", "region");
@@ -112,6 +121,10 @@ export function App() {
       openRegion: (made, province) => {
         go("region", "planet");
         region.open(made, province);
+      },
+      openUnderworld: (made) => {
+        go("underworld", "planet");
+        underworld.open(made);
       },
       openCountry: (made, state) => {
         go("region", "planet");
@@ -143,7 +156,7 @@ export function App() {
     go("galaxy", "universe");
     galaxy.load(params);
   });
-  const levels: Level[] = [universe, galaxy, system, planet, region, city, building, local];
+  const levels: Level[] = [universe, galaxy, system, planet, region, underworld, city, building, local];
   const level = levels.find((item) => item.id === view) ?? planet;
 
   useEffect(() => {
