@@ -6,6 +6,7 @@ import { translator, type Locale } from "./i18n";
 import { useBuildingLevel } from "./levels/building";
 import { useCityLevel } from "./levels/city";
 import { useLocalLevel } from "./levels/local";
+import { useRegionLevel } from "./levels/region";
 import { usePlanetLevel } from "./levels/planet";
 import { useGalaxyLevel, useSystemLevel } from "./levels/space";
 import type { Level, LevelContext, LevelId } from "./levels/types";
@@ -83,6 +84,14 @@ export function App() {
     cameFrom.city ? () => setView(cameFrom.city!) : null,
     (made, landmark) => openLocal(localFromLandmark(made, landmark), "city"),
   );
+  const region = useRegionLevel(ctx, {
+    openCity: (made, burg) => {
+      go("city", "region");
+      city.openFromBurg(made, burg);
+    },
+    openLocal: (made, marker) => openLocal(localFromMarker(made, marker), "region"),
+    back: cameFrom.region ? () => setView(cameFrom.region!) : null,
+  });
   const planet = usePlanetLevel(
     ctx,
     query.get("seed") || undefined,
@@ -92,6 +101,10 @@ export function App() {
         city.openFromBurg(made, burg);
       },
       openLocal: (made, marker) => openLocal(localFromMarker(made, marker), "planet"),
+      openRegion: (made, province) => {
+        go("region", "planet");
+        region.open(made, province);
+      },
       back: cameFrom.planet ? () => setView(cameFrom.planet!) : null,
     },
   );
@@ -113,7 +126,7 @@ export function App() {
     },
     (made, star) => openLocal(localFromStar(made, star), "galaxy"),
   );
-  const levels: Level[] = [galaxy, system, planet, city, building, local];
+  const levels: Level[] = [galaxy, system, planet, region, city, building, local];
   const level = levels.find((item) => item.id === view) ?? planet;
 
   useEffect(() => {

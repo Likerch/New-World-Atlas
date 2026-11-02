@@ -291,8 +291,8 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
     const arches: string[] = [];
     const names: string[] = [];
     for (const state of planet.states.slice(1)) {
-      if (!state.cells) continue;
       const [count, sx, sy, sxx, syy, sxy] = moments[state.id];
+      if (!state.cells || !count) continue;
       const cxx = sxx / count - (sx / count) ** 2;
       const cyy = syy / count - (sy / count) ** 2;
       const cxy = sxy / count - (sx / count) * (sy / count);
@@ -305,7 +305,9 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
       const length = label.length * size * (0.62 + 0.22) * 1.15 + size;
       const ux = Math.cos(angle),
         uy = Math.sin(angle);
-      const [px, py] = state.pole;
+      // A pole off this map (a state seen only in part) falls back to the middle of its visible land.
+      const inside = state.pole[0] >= 0 && state.pole[0] <= W && state.pole[1] >= 0 && state.pole[1] <= H;
+      const [px, py] = inside ? state.pole : [sx / count, sy / count];
       const bend = length * 0.1;
       arches.push(`<path id="sl-${state.id}" d="M${r1(px - (ux * length) / 2)},${r1(py - (uy * length) / 2)}Q${r1(px + uy * bend)},${r1(py - ux * bend)} ${r1(px + (ux * length) / 2)},${r1(py + (uy * length) / 2)}"/>`);
       const color = themeId === "night" ? state.color : shade(state.color, -0.55);

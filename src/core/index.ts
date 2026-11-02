@@ -28,3 +28,4 @@ export * from "./render/space-svg";
 export * from "./local/local";
 export * from "./render/local-svg";
 export * from "./local/links";
+export * from "./planet/region";

@@ -108,7 +108,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
             <span className="swatch" style={{ background: state.color }} />
             {stateName(id)}
           </h3>
-          {id ? <Row label={t("stat.capital")} value={<Link label={nm(capital.name)} onClick={() => pick("burg", capital.id, [capital.x, capital.y])} />} /> : null}
+          {id && state.capital ? <Row label={t("stat.capital")} value={<Link label={nm(capital.name)} onClick={() => pick("burg", capital.id, [capital.x, capital.y])} />} /> : null}
           <Row label={t("stat.area")} value={area(state.area, t)} />
           <Row label={t("stat.population")} value={`${people(state.rural + state.urban, t)} (${t("stat.urban")} ${people(state.urban, t)})`} />
           <Row label={t("stat.burgs")} value={state.burgs} />

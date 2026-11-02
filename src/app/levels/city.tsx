@@ -71,7 +71,7 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
       <>
         {back ? (
           <button type="button" className="back" onClick={back}>
-            ← {t("action.backToPlanet")}
+            ← {t("action.back")}
           </button>
         ) : null}
         <CityControls
