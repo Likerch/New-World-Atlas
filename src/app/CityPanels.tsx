@@ -97,7 +97,7 @@ export type CitySelection = { kind: "ward" | "landmark" | "building"; id: number
 
 const wealthWord = (value: number) => (value > 0.75 ? "rich" : value > 0.5 ? "comfortable" : value > 0.25 ? "modest" : "poor");
 
-export function CityInspector({ city, t, nm, selection, onSelect, onOpenBuilding, onOpenLocal }: { city: City; t: T; nm: (name: string) => string; selection: CitySelection; onSelect: (selection: CitySelection, at?: [number, number]) => void; onOpenBuilding: (index: number) => void; onOpenLocal: (landmark: number) => void }) {
+export function CityInspector({ city, t, nm, selection, onSelect, onOpenBuilding, onOpenLocal, onOpenDistrict }: { city: City; t: T; nm: (name: string) => string; selection: CitySelection; onSelect: (selection: CitySelection, at?: [number, number]) => void; onOpenBuilding: (index: number) => void; onOpenLocal: (landmark: number) => void; onOpenDistrict?: (ward: number) => void }) {
   const [tab, setTab] = useState<"wards" | "landmarks" | "streets">("wards");
   const wardTitle = (id: number) => {
     const ward = city.wards.find((w) => w.id === id);
@@ -135,6 +135,11 @@ export function CityInspector({ city, t, nm, selection, onSelect, onOpenBuilding
             <span>{t("stat.inside")}</span>
             <b>{t(ward.urban ? "yes" : "no")}</b>
           </div>
+          {onOpenDistrict && ward.urban ? (
+            <button type="button" className="primary wide" onClick={() => onOpenDistrict(ward.id)}>
+              🔍 {t("action.openDistrict")}
+            </button>
+          ) : null}
           {places.length ? (
             <ul className="plain">
               {places.map((landmark) => (

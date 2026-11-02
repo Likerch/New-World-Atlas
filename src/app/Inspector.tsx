@@ -23,6 +23,7 @@ interface Props {
   onOpenCity?: (burg: number) => void;
   onOpenRegion?: (province: number) => void;
   onOpenLocal?: (marker: number) => void;
+  onOpenCountry?: (state: number) => void;
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -53,7 +54,7 @@ export function legendOf(marker: Marker, t: T, nm: (name: string) => string): st
   return t(`legend.${marker.kind}`, facts);
 }
 
-export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onOpenCity, onOpenRegion, onOpenLocal }: Props) {
+export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onOpenCity, onOpenRegion, onOpenLocal, onOpenCountry }: Props) {
   const [query, setQuery] = useState("");
   const tabs: Tab[] = ["place", "states", "cultures", "burgs", "rivers", "markers"];
   const stateName = (id: number) => (id ? t(`form.${planet.states[id].formKey}`, { name: nm(planet.states[id].name) }) : t("form.wild"));
@@ -114,6 +115,11 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
           <Row label={t("stat.burgs")} value={state.burgs} />
           <Row label={t("stat.provinces")} value={planet.provinces.filter((province) => province.state === id).length} />
           {id ? <Row label={t("place.culture")} value={<Link label={nm(planet.cultures[state.culture].name)} onClick={() => pick("culture", state.culture)} />} /> : null}
+          {id && onOpenCountry ? (
+            <button type="button" className="primary wide" onClick={() => onOpenCountry(id)}>
+              🗺 {t("action.openCountry")}
+            </button>
+          ) : null}
           {state.neighbors.length ? (
             <>
               <h4>{t("stat.neighbors")}</h4>
@@ -194,7 +200,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
       );
     }
     return null;
-  }, [selection, planet, t, nm, onOpenCity, onOpenRegion, onOpenLocal]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selection, planet, t, nm, onOpenCity, onOpenRegion, onOpenLocal, onOpenCountry]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const list = (() => {
     switch (tab) {

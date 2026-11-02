@@ -112,6 +112,10 @@ export function App() {
         go("region", "planet");
         region.open(made, province);
       },
+      openCountry: (made, state) => {
+        go("region", "planet");
+        region.openCountry(made, state);
+      },
       back: cameFrom.planet ? () => setView(cameFrom.planet!) : null,
     },
   );

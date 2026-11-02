@@ -1,6 +1,6 @@
 // Region regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { cityFromBurg, generateCity, generatePlanet, generateRegion, renderPlanet } from "../src/core/index";
+import { cityFromBurg, generateCity, generateCountry, generatePlanet, generateRegion, renderPlanet } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -37,6 +37,13 @@ test("a village of a region opens as a small town", () => {
   const city = generateCity(params, language);
   assert.equal(city.name, village.name);
   assert.ok(city.wards.filter((ward) => ward.urban).length <= 12);
+});
+
+test("a whole country opens up close with all its towns", () => {
+  const state = planet.states.slice(1).sort((a, b) => b.cells - a.cells)[0];
+  const country = generateCountry(planet, state.id, 6000);
+  assert.equal(country.name, state.name);
+  for (const town of planet.burgs.filter((burg) => burg.state === state.id)) assert.ok(country.burgs.some((burg) => burg.name === town.name), `${town.name} is missing`);
 });
 
 console.log(`region: ${passed} regressions passed`);

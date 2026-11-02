@@ -53,7 +53,7 @@ const BY_LANDMARK: Record<string, BuildingType> = {
 
 /** The building at a map point, if any (not trees, fields, graves or piers). */
 export function buildingAt(city: City, point: Point): number {
-  return city.buildings.findIndex((b) => !["tree", "field", "grave", "pier", "stall"].includes(b.kind) && pointInPolygon(point, b.polygon));
+  return city.buildings.findIndex((b) => !["tree", "field", "grave", "pier", "stall", "yard"].includes(b.kind) && pointInPolygon(point, b.polygon));
 }
 
 export function buildingFromCity(city: City, index: number): BuildingParams {

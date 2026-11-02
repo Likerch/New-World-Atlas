@@ -15,9 +15,17 @@ import { hydrology } from "./rivers";
 import { buildRoutes } from "./routes";
 
 export function generateRegion(planet: Planet, provinceId: number, cells = 9000): Planet {
-  const province = planet.provinces[provinceId];
+  return closeUp(planet, (cell) => planet.province[cell] === provinceId, planet.provinces[provinceId].name, `province-${provinceId}`, cells);
+}
+
+/** A whole state up close: the same as a province, over all of its land. */
+export function generateCountry(planet: Planet, stateId: number, cells = 12000): Planet {
+  return closeUp(planet, (cell) => planet.state[cell] === stateId && !planet.water[cell], planet.states[stateId].name, `state-${stateId}`, cells);
+}
+
+function closeUp(planet: Planet, inside: (cell: number) => boolean, title: string, key: string, cells: number): Planet {
   const parent = planet.mesh;
-  const own = Array.from({ length: parent.cells }, (_, cell) => cell).filter((cell) => planet.province[cell] === provinceId);
+  const own = Array.from({ length: parent.cells }, (_, cell) => cell).filter(inside);
   const xs = own.map((cell) => parent.x[cell]);
   const ys = own.map((cell) => parent.y[cell]);
   // The province's box with a margin, stretched to the map's 16:10 frame.
@@ -45,9 +53,9 @@ export function generateRegion(planet: Planet, provinceId: number, cells = 9000)
   const toParent = (x: number, y: number) => [x0 + x * k, y0 + y * k] as const;
   const toRegion = (x: number, y: number) => [(x - x0) / k, (y - y0) / k] as const;
 
-  const seed = `${planet.params.seed}/province-${provinceId}`;
+  const seed = `${planet.params.seed}/${key}`;
   const rng = createRng(seed);
-  const params = { ...planet.params, seed, name: province.name, width: W, height: H, cells, latitudeNorth: planet.params.latitudeNorth - (y0 / planet.params.height) * (planet.params.latitudeNorth - planet.params.latitudeSouth), latitudeSouth: planet.params.latitudeNorth - (y1 / planet.params.height) * (planet.params.latitudeNorth - planet.params.latitudeSouth) };
+  const params = { ...planet.params, seed, name: title, width: W, height: H, cells, latitudeNorth: planet.params.latitudeNorth - (y0 / planet.params.height) * (planet.params.latitudeNorth - planet.params.latitudeSouth), latitudeSouth: planet.params.latitudeNorth - (y1 / planet.params.height) * (planet.params.latitudeNorth - planet.params.latitudeSouth) };
   const mesh = buildMesh(W, H, cells, rng.fork("mesh"));
   const n = mesh.cells;
   const scale = planet.scale * k;
@@ -141,8 +149,8 @@ export function generateRegion(planet: Planet, provinceId: number, cells = 9000)
     burg[cell] = id;
   }
   const scores = new Float32Array(n);
-  for (let cell = 0; cell < n; cell++) scores[cell] = provinceOf[cell] === provinceId ? suitability(ground, cell) : 0;
-  const villages = Math.round(own.length * 1.6 + 8);
+  for (let cell = 0; cell < n; cell++) scores[cell] = inside(nearest[cell]) && !water[cell] ? suitability(ground, cell) : 0;
+  const villages = Math.min(160, Math.round(own.length * 1.6 + 8));
   const spacing = mesh.spacing * 3.2;
   const candidates = Array.from({ length: n }, (_, cell) => cell)
     .filter((cell) => scores[cell] > 0)
@@ -185,5 +193,5 @@ export function generateRegion(planet: Planet, provinceId: number, cells = 9000)
   // Country folk per cell, scaled to the cell's real size.
   for (let cell = 0; cell < n; cell++) if (!water[cell]) population[cell] = (suitability(ground, cell) * 0.3 * mesh.area[cell] * k * k) / (parent.spacing * parent.spacing);
   const provinces = planet.provinces.map((p) => ({ ...p, pole: toRegion(p.pole[0], p.pole[1]) as [number, number], burg: burgs.find((b) => b.capital === false && b.name === planet.burgs[p.burg]?.name)?.id ?? 0 }));
-  return { ...ground, name: province.name, population, culture, cultures: planet.cultures, burg, burgs, state, states, province: provinceOf, provinces, routes, markers };
+  return { ...ground, name: title, population, culture, cultures: planet.cultures, burg, burgs, state, states, province: provinceOf, provinces, routes, markers };
 }

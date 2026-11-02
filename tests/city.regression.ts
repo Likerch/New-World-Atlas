@@ -1,6 +1,6 @@
 // City-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { CITY_THEMES, cityFromBurg, distanceToPolyline, ERAS, generateCity, generatePlanet, pointInPolygon, renderCity } from "../src/core/index";
+import { CITY_THEMES, generateDistrict, cityFromBurg, distanceToPolyline, ERAS, generateCity, generatePlanet, pointInPolygon, renderCity } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -68,6 +68,16 @@ test("a town of the planet becomes a city that keeps its coast, river and defenc
   assert.equal(city.name, burg.name);
   assert.deepEqual(generateCity(params, language).wards.map((ward) => ward.name), city.wards.map((ward) => ward.name), "the same town gets the same names when opened again");
   assert.ok(city.sea);
+});
+
+test("a quarter opens up close as blocks of houses round courtyards, inside the frame", () => {
+  const ward = port.wards.find((w) => w.urban && (w.kind === "craftsmen" || w.kind === "merchants"))!;
+  const district = generateDistrict(port, ward.id);
+  assert.ok(district.scale < port.scale, "closer means fewer metres per unit");
+  assert.ok(district.wards.filter((w) => w.urban).length >= 2, "alleys cut the quarter into blocks");
+  assert.ok(district.buildings.some((b) => b.kind === "yard"), "blocks have courtyards");
+  for (const b of district.buildings) for (const [x, y] of b.polygon) assert.ok(x > -1 && y > -1 && x < 1201 && y < 901, `a ${b.kind} sits outside the frame`);
+  assert.doesNotMatch(renderCity(district), /NaN|undefined|Infinity/u);
 });
 
 console.log(`city: ${passed} regressions passed`);

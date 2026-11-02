@@ -1,6 +1,6 @@
 // The city level: a city of its own or one opened from a planet town.
 import { useMemo, useRef, useState } from "react";
-import { buildingAt, cityFromBurg, cityParams, CITY_LAYERS, createLanguage, createRng, defaultCityTheme, generateCity, pointInPolygon, renameCity, renderCity, type City, type CityLayerId, type CityParams, type CityThemeId, type Language, type Planet } from "../../core/index";
+import { buildingAt, generateDistrict, cityFromBurg, cityParams, CITY_LAYERS, createLanguage, createRng, defaultCityTheme, generateCity, pointInPolygon, renameCity, renderCity, type City, type CityLayerId, type CityParams, type CityThemeId, type Language, type Planet } from "../../core/index";
 import { CityControls, CityInspector, type CitySelection } from "../CityPanels";
 import type { Level, LevelContext } from "./types";
 
@@ -19,6 +19,7 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
   const [layers, setLayers] = useState<Record<CityLayerId, boolean>>(allOn(CITY_LAYERS));
   const [selection, setSelection] = useState<CitySelection>(null);
   const [time, setTime] = useState(0);
+  const [parents, setParents] = useState<City[]>([]);
 
   const build = (next: CityParams, tongue: Language | null) => {
     pending.current = true;
@@ -28,6 +29,7 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
       const made = generateCity(next, tongue ?? createLanguage(createRng(next.seed).fork("language")));
       setTime(Math.round(performance.now() - started));
       setCity(made);
+      setParents([]);
       setInput({ ...made.params, name: next.name });
       setSelection(null);
     });
@@ -82,7 +84,19 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
       : null,
     controls: (
       <>
-        {back ? (
+        {parents.length ? (
+          <button
+            type="button"
+            className="back"
+            onClick={() => {
+              setCity(parents[parents.length - 1]);
+              setParents(parents.slice(0, -1));
+              setSelection(null);
+            }}
+          >
+            ← {t("action.backToWholeCity")}
+          </button>
+        ) : back ? (
           <button type="button" className="back" onClick={back}>
             ← {t("action.back")}
           </button>
@@ -109,6 +123,17 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
         selection={selection}
         onOpenBuilding={(index) => openBuilding(city, index)}
         onOpenLocal={(landmark) => openLocal(city, landmark)}
+        onOpenDistrict={
+          parents.length
+            ? undefined
+            : (ward) =>
+                ctx.run(() => {
+                  setParents([...parents, raw!]);
+                  setCity(generateDistrict(raw!, ward));
+                  setSelection(null);
+                  setTime((v) => v + 1);
+                })
+        }
         onSelect={(next, at) => {
           setSelection(next);
           if (at) ctx.focus(at[0], at[1]);

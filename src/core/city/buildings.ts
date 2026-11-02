@@ -45,7 +45,7 @@ const RULES: Partial<Record<WardKind, Rule>> = {
 const MODERN_SUBURB: Rule = { lot: 230, empty: 0.12, floors: [1, 2], kind: "house", gap: 5, block: 120 };
 
 /** Cuts a convex polygon into lots of about a target area, splitting across its longest side each time. */
-function lots(poly: Point[], target: number, rng: Rng, out: Point[][], depth = 0): void {
+export function lots(poly: Point[], target: number, rng: Rng, out: Point[][], depth = 0): void {
   const size = area(poly);
   if (size < target * rng.float(1.1, 1.9) || depth > 14) {
     out.push(poly);
@@ -97,7 +97,7 @@ function grid(poly: Point[], angle: number, block: number, street: number): Poin
   return out;
 }
 
-function scatter(poly: Point[], spacing: number, rng: Rng, size: [number, number], kind: BuildingKind, ward: number, out: Building[]) {
+export function scatter(poly: Point[], spacing: number, rng: Rng, size: [number, number], kind: BuildingKind, ward: number, out: Building[]) {
   const xs = poly.map((p) => p[0]);
   const ys = poly.map((p) => p[1]);
   const count = Math.round(area(poly) / (spacing * spacing));

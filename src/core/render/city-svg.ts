@@ -139,6 +139,8 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
     out.push(`<g stroke="${th.fieldLine}" stroke-width="0.5">`);
     byKind("field").forEach((b, k) => out.push(`<path d="${poly(b.polygon)}" fill="${th.field[k % 2]}"/>`));
     out.push(`</g>`);
+    // Courtyards: gardens behind the houses.
+    for (const yard of byKind("yard")) out.push(`<path d="${poly(yard.polygon)}" fill="${th.field[1]}" stroke="${th.fieldLine}" stroke-width="0.4"/>`);
   }
   // Water over the land, so the shore stays clean.
   if (city.sea) out.push(`<path d="${pathData(smooth([...city.sea, city.sea[0]], true, 1), true)}" fill="${th.water}" stroke="${th.shore}" stroke-width="1.4"/>`);
@@ -176,7 +178,7 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
     const neon: Partial<Record<WardKind, [string, string]>> = { commercial: ["#ff3d7f", "#38e1ff"], megablock: ["#a46bff", "#38e1ff"], arcology: ["#ffcc33", "#ffffff"], industrial: ["#ff9f1a", "#ffcc33"], "combat-zone": ["#ff4d4d", "#ff9f1a"], port: ["#2bd9c4", "#38e1ff"] };
     const wardById = new Map(city.wards.map((ward) => [ward.id, ward]));
     city.buildings.forEach((building, index) => {
-      if (building.kind === "tree" || building.kind === "field" || building.kind === "pier") return;
+      if (building.kind === "tree" || building.kind === "field" || building.kind === "pier" || building.kind === "yard") return;
       const d = poly(building.polygon);
       if (building.kind === "grave") {
         shapes.push(`<path d="${d}" fill="${th.rich}" stroke="none" opacity="0.7"/>`);
