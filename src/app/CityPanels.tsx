@@ -1,6 +1,6 @@
 // City mode: its settings on the left, its quarters and places on the right.
 import { useState } from "react";
-import { area, CITY_LAYERS, CITY_THEMES, ERAS, type City, type CityLayerId, type CityParams, type CityThemeId } from "../core/index";
+import { area, pointInPolygon, CITY_LAYERS, CITY_THEMES, ERAS, type City, type CityLayerId, type CityParams, type CityThemeId } from "../core/index";
 import type { T } from "./i18n";
 
 const DIRECTIONS: [string, number][] = [
@@ -93,11 +93,11 @@ export function CityControls({ params, set, theme, setTheme, layers, setLayers, 
   );
 }
 
-export type CitySelection = { kind: "ward" | "landmark"; id: number } | null;
+export type CitySelection = { kind: "ward" | "landmark" | "building"; id: number } | null;
 
 const wealthWord = (value: number) => (value > 0.75 ? "rich" : value > 0.5 ? "comfortable" : value > 0.25 ? "modest" : "poor");
 
-export function CityInspector({ city, t, nm, selection, onSelect }: { city: City; t: T; nm: (name: string) => string; selection: CitySelection; onSelect: (selection: CitySelection, at?: [number, number]) => void }) {
+export function CityInspector({ city, t, nm, selection, onSelect, onOpenBuilding }: { city: City; t: T; nm: (name: string) => string; selection: CitySelection; onSelect: (selection: CitySelection, at?: [number, number]) => void; onOpenBuilding: (index: number) => void }) {
   const [tab, setTab] = useState<"wards" | "landmarks" | "streets">("wards");
   const wardTitle = (id: number) => {
     const ward = city.wards.find((w) => w.id === id);
@@ -149,6 +149,29 @@ export function CityInspector({ city, t, nm, selection, onSelect }: { city: City
         </div>
       );
     }
+  } else if (selection?.kind === "building") {
+    const building = city.buildings[selection.id];
+    if (building)
+      card = (
+        <div className="card">
+          <h3>{t(`bkind.${building.kind}`)}</h3>
+          <div className="row">
+            <span>{t("stat.floors")}</span>
+            <b>{building.floors}</b>
+          </div>
+          <div className="row">
+            <span>{t("panel.wards")}</span>
+            <b>
+              <button type="button" className="link" onClick={() => onSelect({ kind: "ward", id: building.ward })}>
+                {wardTitle(building.ward)}
+              </button>
+            </b>
+          </div>
+          <button type="button" className="primary wide" onClick={() => onOpenBuilding(selection.id)}>
+            🏠 {t("action.openBuilding")}
+          </button>
+        </div>
+      );
   } else if (selection?.kind === "landmark") {
     const landmark = city.landmarks.find((l) => l.id === selection.id);
     if (landmark)
@@ -163,6 +186,14 @@ export function CityInspector({ city, t, nm, selection, onSelect }: { city: City
               </button>
             </b>
           </div>
+          {(() => {
+            const index = city.buildings.findIndex((b) => b.ward === landmark.ward && pointInPolygon([landmark.x, landmark.y], b.polygon));
+            return index >= 0 ? (
+              <button type="button" className="primary wide" onClick={() => onOpenBuilding(index)}>
+                🏠 {t("action.openBuilding")}
+              </button>
+            ) : null;
+          })()}
         </div>
       );
   }

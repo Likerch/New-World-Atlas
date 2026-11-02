@@ -21,6 +21,7 @@ interface Props {
   tab: Tab;
   setTab: (tab: Tab) => void;
   onOpenCity?: (burg: number) => void;
+  onOpenRegion?: (province: number) => void;
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -51,7 +52,7 @@ export function legendOf(marker: Marker, t: T, nm: (name: string) => string): st
   return t(`legend.${marker.kind}`, facts);
 }
 
-export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onOpenCity }: Props) {
+export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onOpenCity, onOpenRegion }: Props) {
   const [query, setQuery] = useState("");
   const tabs: Tab[] = ["place", "states", "cultures", "burgs", "rivers", "markers"];
   const stateName = (id: number) => (id ? t(`form.${planet.states[id].formKey}`, { name: nm(planet.states[id].name) }) : t("form.wild"));
@@ -89,6 +90,11 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
           ) : null}
           {river ? <Row label={t("place.river")} value={<Link label={nm(planet.rivers[river].name)} onClick={() => pick("river", river)} />} /> : null}
           {burg ? <Row label={t("panel.burgs")} value={<Link label={nm(planet.burgs[burg].name)} onClick={() => pick("burg", burg)} />} /> : null}
+          {!isWater && planet.province[cell] && onOpenRegion ? (
+            <button type="button" className="primary wide" onClick={() => onOpenRegion(planet.province[cell])}>
+              🗺 {t("action.openRegion")}
+            </button>
+          ) : null}
         </div>
       );
     }
@@ -182,7 +188,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
       );
     }
     return null;
-  }, [selection, planet, t, nm, onOpenCity]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [selection, planet, t, nm, onOpenCity, onOpenRegion]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const list = (() => {
     switch (tab) {

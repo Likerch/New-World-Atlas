@@ -1,39 +1,12 @@
-// New World Atlas: the game master's map table. Settings on the left, the map in the middle, the inspector on the
-// right; the planet and any of its towns (or a standalone city) are views of the same table.
-import { useEffect, useMemo, useState } from "react";
-import {
-  cityFromBurg,
-  cityParams,
-  CITY_LAYERS,
-  createLanguage,
-  createRng,
-  defaultCityTheme,
-  defaultLayers,
-  generateCity,
-  generatePlanet,
-  LAYERS,
-  planetParams,
-  planetToJson,
-  pointInPolygon,
-  randomSeed,
-  renderCity,
-  renderPlanet,
-  TEMPLATES,
-  THEMES,
-  toCyrillic,
-  type City,
-  type CityLayerId,
-  type CityParams,
-  type CityThemeId,
-  type Language,
-  type LayerId,
-  type Planet,
-  type PlanetParams,
-  type ThemeId,
-} from "../core/index";
-import { CityControls, CityInspector, type CitySelection } from "./CityPanels";
+// New World Atlas: the game master's map table. Every level (planet, city, building, …) supplies its settings, map
+// and inspector; the shell around them holds the tabs, the seed, export, the names' script and the language.
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { randomSeed, toCyrillic } from "../core/index";
 import { translator, type Locale } from "./i18n";
-import { Inspector, type Selection, type Tab } from "./Inspector";
+import { useBuildingLevel } from "./levels/building";
+import { useCityLevel } from "./levels/city";
+import { usePlanetLevel } from "./levels/planet";
+import type { Level, LevelContext, LevelId } from "./levels/types";
 import { MapView, type Focus } from "./MapView";
 
 function download(name: string, blob: Blob) {
@@ -61,110 +34,66 @@ async function svgToPng(svg: string, width: number, height: number, scale = 2): 
   return new Promise((resolve) => canvas.toBlob((blob) => resolve(blob!), "image/png"));
 }
 
-const NUMBER_FIELDS: { key: keyof PlanetParams; min: number; max: number; step: number }[] = [
-  { key: "latitudeNorth", min: -90, max: 90, step: 1 },
-  { key: "latitudeSouth", min: -90, max: 90, step: 1 },
-  { key: "temperatureEquator", min: -20, max: 50, step: 1 },
-  { key: "temperaturePole", min: -60, max: 20, step: 1 },
-  { key: "precipitation", min: 0.1, max: 3, step: 0.1 },
-  { key: "peakHeight", min: 500, max: 12000, step: 100 },
-  { key: "cultures", min: 1, max: 40, step: 1 },
-  { key: "states", min: 1, max: 60, step: 1 },
-  { key: "towns", min: 0, max: 2000, step: 10 },
-  { key: "provinceShare", min: 0, max: 1, step: 0.05 },
-];
-
-type View = "planet" | "city";
-const allOn = (ids: readonly CityLayerId[]) => Object.fromEntries(ids.map((id) => [id, true])) as Record<CityLayerId, boolean>;
-
 export function App() {
+  const query = useMemo(() => new URLSearchParams(location.search), []);
   const [locale, setLocale] = useState<Locale>("ru");
   const t = useMemo(() => translator(locale), [locale]);
-  const query = new URLSearchParams(location.search);
-  const [view, setView] = useState<View>(query.get("view") === "city" ? "city" : "planet");
-  const [busy, setBusy] = useState(false);
-  const [time, setTime] = useState(0);
   const [script, setScript] = useState<"latin" | "cyrillic">("latin");
   const nm = useMemo(() => (name: string) => (script === "cyrillic" ? toCyrillic(name) : name), [script]);
+  const [view, setView] = useState<LevelId>((query.get("view") as LevelId) || "planet");
+  const [busy, setBusy] = useState(false);
   const [focus, setFocus] = useState<Focus | null>(null);
+  const [cameFrom, setCameFrom] = useState<Partial<Record<LevelId, LevelId>>>({});
 
-  // Planet.
-  const [params, setParams] = useState<PlanetParams>(() => planetParams({ seed: query.get("seed") || undefined }));
-  const [planet, setPlanet] = useState<Planet | null>(null);
-  const [theme, setTheme] = useState<ThemeId>("atlas");
-  const [layers, setLayers] = useState<Record<LayerId, boolean>>(defaultLayers("atlas"));
-  const [selection, setSelection] = useState<Selection | null>(null);
-  const [tab, setTab] = useState<Tab>("place");
-
-  // City.
-  const [cityInput, setCityInput] = useState<CityParams>(() => cityParams({ seed: query.get("city") || undefined, era: "medieval" }));
-  const [cityLanguage, setCityLanguage] = useState<Language | null>(null);
-  const [city, setCity] = useState<City | null>(null);
-  const [cityTheme, setCityTheme] = useState<CityThemeId>("ink");
-  const [cityLayers, setCityLayers] = useState<Record<CityLayerId, boolean>>(allOn(CITY_LAYERS));
-  const [citySelection, setCitySelection] = useState<CitySelection>(null);
-  const [cityTime, setCityTime] = useState(0);
-  const [fromBurg, setFromBurg] = useState<number | null>(null);
-
-  const later = (work: () => void) => {
-    setBusy(true);
-    // Let the "shaping the world" note paint before the work starts.
-    setTimeout(() => {
-      work();
-      setBusy(false);
-    }, 30);
+  const ctx: LevelContext = {
+    t,
+    nm,
+    locale,
+    script,
+    focus: (x, y) => setFocus({ x, y, nonce: Date.now() }),
+    run: (work) => {
+      setBusy(true);
+      setTimeout(() => {
+        work();
+        setBusy(false);
+      }, 30);
+    },
+    show: setView,
   };
-  const generate = (next: PlanetParams) =>
-    later(() => {
-      const started = performance.now();
-      const made = generatePlanet(next);
-      setTime(Math.round(performance.now() - started));
-      setPlanet(made);
-      setParams(made.params);
-      setSelection(null);
-      setFromBurg(null);
-      history.replaceState(null, "", `?seed=${encodeURIComponent(made.params.seed)}`);
-    });
-  const buildCity = (next: CityParams, language: Language | null) =>
-    later(() => {
-      const started = performance.now();
-      const made = generateCity(next, language ?? createLanguage(createRng(next.seed).fork("language")));
-      setCityTime(Math.round(performance.now() - started));
-      setCity(made);
-      setCityInput({ ...made.params, name: next.name });
-      setCitySelection(null);
-    });
+  const go = (to: LevelId, from: LevelId) => {
+    setCameFrom((current) => ({ ...current, [to]: from }));
+  };
+
+  const building = useBuildingLevel(ctx, cameFrom.building ? () => setView(cameFrom.building!) : null);
+  const city = useCityLevel(
+    ctx,
+    query.get("city") || undefined,
+    (made, index) => {
+      go("building", "city");
+      building.openFromCity(made, index);
+    },
+    cameFrom.city ? () => setView(cameFrom.city!) : null,
+  );
+  const planet = usePlanetLevel(ctx, query.get("seed") || undefined, (made, burg) => {
+    go("city", "planet");
+    city.openFromBurg(made, burg);
+  });
+  const levels: Level[] = [planet, city, building];
+  const level = levels.find((item) => item.id === view) ?? planet;
+
   useEffect(() => {
-    generate(params);
-    if (view === "city") buildCity(cityInput, null);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    level.ensure();
+    const params = new URLSearchParams();
+    params.set("view", level.id);
+    if (planet.seed) params.set("seed", planet.seed);
+    if (view === "city") params.set("city", city.seed);
+    history.replaceState(null, "", `?${params}`);
+  }, [view, planet.seed, city.seed]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const openCity = (burgId: number) => {
-    if (!planet) return;
-    const { params: next, language } = cityFromBurg(planet, burgId, cityInput.era);
-    setCityLanguage(language);
-    setFromBurg(burgId);
-    setCityTheme(defaultCityTheme(next.era));
-    setView("city");
-    buildCity(next, language);
-  };
-  const showCity = () => {
-    setView("city");
-    if (!city) buildCity(cityInput, cityLanguage);
-  };
-
-  const highlight = selection && (selection.kind === "state" || selection.kind === "province" || selection.kind === "culture") ? { kind: selection.kind, id: selection.id } : null;
-  const planetSvg = useMemo(() => (planet ? renderPlanet(planet, { theme, layers, script, highlight }) : ""), [planet, theme, layers, script, highlight?.kind, highlight?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-  const citySvg = useMemo(() => (city ? renderCity(city, { theme: cityTheme, layers: cityLayers, script, highlight: citySelection?.kind === "ward" ? citySelection.id : null }) : ""), [city, cityTheme, cityLayers, script, citySelection]);
-
-  const set = <K extends keyof PlanetParams>(key: K, value: PlanetParams[K]) => setParams((current) => ({ ...current, [key]: value }));
-  const setCityParam = <K extends keyof CityParams>(key: K, value: CityParams[K]) => setCityInput((current) => ({ ...current, [key]: value }));
-  const onCity = view === "city";
-  const svg = onCity ? citySvg : planetSvg;
-  const size = onCity ? city?.params : planet?.params;
-  const title = onCity ? city?.name : planet?.name;
-  const fileName = `${(title ?? "map").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-")}-${onCity ? cityInput.seed.replace(/\W+/gu, "-") : params.seed}`;
-  const seedValue = onCity ? cityInput.seed : params.seed;
+  const fileName = `${(level.title ?? level.id).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-")}-${level.seed.replace(/\W+/gu, "-")}`;
+  const map = level.map;
+  let stage: ReactNode = null;
+  if (map) stage = <MapView key={map.key} svg={map.svg} width={map.width} height={map.height} focus={focus} onPick={map.onPick} />;
 
   return (
     <div className="app">
@@ -173,48 +102,24 @@ export function App() {
           <strong>{t("app.title")}</strong>
         </div>
         <nav className="views">
-          <button type="button" aria-pressed={!onCity} onClick={() => setView("planet")}>
-            🌍 {t("view.planet")}
-            {planet ? `: ${nm(planet.name)}` : ""}
-          </button>
-          <button type="button" aria-pressed={onCity} onClick={showCity}>
-            🏰 {t("view.city")}
-            {city ? `: ${nm(city.name)}` : ""}
-          </button>
+          {levels.map((item) => (
+            <button key={item.id} type="button" aria-pressed={item.id === view} onClick={() => setView(item.id)}>
+              {item.icon} {t(`view.${item.id}`)}
+              {item.title ? `: ${nm(item.title)}` : ""}
+            </button>
+          ))}
         </nav>
         <label className="seed">
           {t("field.seed")}
-          <input
-            value={seedValue}
-            onChange={(event) => (onCity ? setCityParam("seed", event.target.value) : set("seed", event.target.value))}
-            onKeyDown={(event) => event.key === "Enter" && (onCity ? buildCity(cityInput, cityLanguage) : generate(params))}
-            title={t("seed.copy")}
-          />
+          <input value={level.seed} onChange={(event) => level.setSeed(event.target.value)} onKeyDown={(event) => event.key === "Enter" && level.generate()} title={t("seed.copy")} />
         </label>
-        <button type="button" onClick={() => (onCity ? buildCity({ ...cityInput, seed: randomSeed() }, cityLanguage) : generate({ ...params, seed: randomSeed() }))} title={t("action.random")}>
+        <button type="button" onClick={() => level.generate(randomSeed())} title={t("action.random")}>
           🎲
         </button>
-        <button type="button" className="primary" onClick={() => (onCity ? buildCity(cityInput, cityLanguage) : generate(params))} disabled={busy}>
+        <button type="button" className="primary" onClick={() => level.generate()} disabled={busy}>
           {t("action.generate")}
         </button>
         <span className="grow" />
-        {!onCity ? (
-          <select
-            value={theme}
-            aria-label={t("field.theme")}
-            onChange={(event) => {
-              const next = event.target.value as ThemeId;
-              setTheme(next);
-              setLayers(defaultLayers(next));
-            }}
-          >
-            {THEMES.map((id) => (
-              <option key={id} value={id}>
-                {t(`theme.${id}`)}
-              </option>
-            ))}
-          </select>
-        ) : null}
         <select value={script} aria-label={t("field.script")} onChange={(event) => setScript(event.target.value as "latin" | "cyrillic")}>
           <option value="latin">{t("script.latin")}</option>
           <option value="cyrillic">{t("script.cyrillic")}</option>
@@ -222,17 +127,17 @@ export function App() {
         <details className="menu">
           <summary>{t("action.export")}</summary>
           <div>
-            <button type="button" disabled={!svg} onClick={() => download(`${fileName}.svg`, new Blob([svg], { type: "image/svg+xml" }))}>
+            <button type="button" disabled={!map} onClick={() => map && download(`${fileName}.svg`, new Blob([map.svg], { type: "image/svg+xml" }))}>
               {t("action.exportSvg")}
             </button>
-            <button type="button" disabled={!svg || !size} onClick={async () => size && download(`${fileName}.png`, await svgToPng(svg, size.width, size.height))}>
+            <button type="button" disabled={!map} onClick={async () => map && download(`${fileName}.png`, await svgToPng(map.svg, map.width, map.height))}>
               {t("action.exportPng")}
             </button>
             <button
               type="button"
-              disabled={onCity ? !city : !planet}
+              disabled={!map}
               onClick={() => {
-                const data = onCity && city ? { format: "new-world-atlas/city", version: 1, ...city, language: undefined } : planet ? planetToJson(planet) : null;
+                const data = level.data();
                 if (data) download(`${fileName}.json`, new Blob([JSON.stringify(data)], { type: "application/json" }));
               }}
             >
@@ -244,121 +149,13 @@ export function App() {
           {locale === "ru" ? "EN" : "RU"}
         </button>
       </header>
-
-      <aside className="controls">
-        {onCity ? (
-          <>
-            {fromBurg !== null && planet ? (
-              <button type="button" className="back" onClick={() => setView("planet")}>
-                ← {t("action.backToPlanet")}
-              </button>
-            ) : null}
-            <CityControls params={cityInput} set={setCityParam} theme={cityTheme} setTheme={setCityTheme} layers={cityLayers} setLayers={setCityLayers} t={t} ru={locale === "ru"} />
-          </>
-        ) : (
-          <>
-            <h2>{t("panel.world")}</h2>
-            <label>
-              {t("field.template")}
-              <select value={params.template} onChange={(event) => set("template", event.target.value as PlanetParams["template"])}>
-                {TEMPLATES.map((id) => (
-                  <option key={id} value={id}>
-                    {t(`template.${id}`)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              {t("field.cells")}
-              <select value={params.cells} onChange={(event) => set("cells", Number(event.target.value))}>
-                {[3000, 5000, 10000, 20000, 30000, 50000].map((count) => (
-                  <option key={count} value={count}>
-                    {count.toLocaleString()}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {NUMBER_FIELDS.map(({ key, min, max, step }) => (
-              <label key={key}>
-                {t(`field.${key}`)}
-                <input type="number" min={min} max={max} step={step} value={params[key] as number} onChange={(event) => set(key, Number(event.target.value) as never)} />
-              </label>
-            ))}
-            <h2>{t("panel.layers")}</h2>
-            {LAYERS.map((id) => (
-              <label key={id} className="check">
-                <input type="checkbox" checked={layers[id]} onChange={(event) => setLayers({ ...layers, [id]: event.target.checked })} />
-                {t(`layer.${id}`)}
-              </label>
-            ))}
-          </>
-        )}
-      </aside>
-
+      <aside className="controls">{level.controls}</aside>
       <main className="stage">
-        {onCity && city ? (
-          <MapView
-            key={`city-${city.params.seed}-${city.params.era}-${cityTime}`}
-            svg={citySvg}
-            width={city.params.width}
-            height={city.params.height}
-            focus={focus}
-            onPick={(x, y) => {
-              const landmark = city.landmarks.find((item) => Math.hypot(item.x - x, item.y - y) < 8);
-              if (landmark) return setCitySelection({ kind: "landmark", id: landmark.id });
-              const ward = city.wards.find((item) => pointInPolygon([x, y], item.polygon));
-              setCitySelection(ward ? { kind: "ward", id: ward.id } : null);
-            }}
-          />
-        ) : null}
-        {!onCity && planet ? (
-          <MapView
-            key={`planet-${planet.params.seed}-${time}`}
-            svg={planetSvg}
-            width={planet.params.width}
-            height={planet.params.height}
-            focus={focus}
-            onPick={(x, y) => {
-              const cell = planet.mesh.find(x, y);
-              const marker = planet.markers.slice(1).find((item) => Math.hypot(item.x - x, item.y - y) < planet.mesh.spacing * 0.3);
-              const burg = planet.burg[cell];
-              setSelection(marker ? { kind: "marker", id: marker.id } : burg && Math.hypot(planet.burgs[burg].x - x, planet.burgs[burg].y - y) < planet.mesh.spacing * 0.4 ? { kind: "burg", id: burg } : { kind: "cell", id: cell });
-              setTab("place");
-            }}
-          />
-        ) : null}
+        {stage}
         {busy ? <div className="busy">{t("generating")}</div> : null}
-        {onCity && city ? <div className="status">{t("city.summary", { wards: city.wards.filter((ward) => ward.urban).length, buildings: city.buildings.filter((b) => b.kind !== "tree" && b.kind !== "field" && b.kind !== "grave").length, landmarks: city.landmarks.length, time: cityTime })}</div> : null}
-        {!onCity && planet ? <div className="status">{t("stats.summary", { states: planet.states.length - 1, burgs: planet.burgs.length - 1, rivers: planet.rivers.length - 1, time })}</div> : null}
+        {level.status ? <div className="status">{level.status}</div> : null}
       </main>
-
-      {onCity && city ? (
-        <CityInspector
-          city={city}
-          t={t}
-          nm={nm}
-          selection={citySelection}
-          onSelect={(next, at) => {
-            setCitySelection(next);
-            if (at) setFocus({ x: at[0], y: at[1], nonce: Date.now() });
-          }}
-        />
-      ) : null}
-      {!onCity && planet ? (
-        <Inspector
-          planet={planet}
-          t={t}
-          nm={nm}
-          selection={selection}
-          tab={tab}
-          setTab={setTab}
-          onOpenCity={openCity}
-          onSelect={(next, at) => {
-            setSelection(next);
-            if (at) setFocus({ x: at[0], y: at[1], nonce: Date.now() });
-          }}
-        />
-      ) : null}
+      {level.inspector ?? <aside className="inspector" />}
     </div>
   );
 }

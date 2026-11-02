@@ -371,3 +371,13 @@ button.back {
   margin-left: auto;
   max-width: 110px;
 }
+
+.floor-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.floor-tabs button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}

@@ -19,3 +19,6 @@ export * from "./voronoi";
 export * from "./city/model";
 export * from "./city/generate";
 export * from "./render/city-svg";
+export * from "./building/plan";
+export * from "./render/building-svg";
+export * from "./building/from-city";
