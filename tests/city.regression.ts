@@ -1,6 +1,6 @@
 // City-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { CITY_THEMES, generateDistrict, cityFromBurg, distanceToPolyline, ERAS, generateCity, generatePlanet, pointInPolygon, renderCity } from "../src/core/index";
+import { CITY_THEMES, cityTiers, renderTier, generateDistrict, cityFromBurg, distanceToPolyline, ERAS, generateCity, generatePlanet, pointInPolygon, renderCity } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -78,6 +78,17 @@ test("a quarter opens up close as blocks of houses round courtyards, inside the 
   assert.ok(district.buildings.some((b) => b.kind === "yard"), "blocks have courtyards");
   for (const b of district.buildings) for (const [x, y] of b.polygon) assert.ok(x > -1 && y > -1 && x < 1201 && y < 901, `a ${b.kind} sits outside the frame`);
   assert.doesNotMatch(renderCity(district), /NaN|undefined|Infinity/u);
+});
+
+test("a cyberpunk city has an upper tier and an undercity; an old town has catacombs and no roofs to walk", () => {
+  const sprawl = generateCity({ seed: "tiers", era: "cyberpunk", population: 1200, river: 0.3, coast: null });
+  const high = cityTiers(sprawl);
+  assert.ok(high.upper.roofs.length > 0 && high.upper.bridges.length > 0 && high.upper.pads.length <= 30);
+  assert.ok(high.under.halls.length > 0 && high.under.shafts.length >= high.under.halls.length && high.under.tunnels.length > 0);
+  for (const tier of ["upper", "under"] as const) assert.doesNotMatch(renderTier(sprawl, high, tier), /NaN|undefined|Infinity/u);
+  const old = cityTiers(port);
+  assert.equal(old.upper.roofs.length, 0);
+  assert.ok(old.under.halls.some((hall) => hall.purpose === "ossuary"));
 });
 
 console.log(`city: ${passed} regressions passed`);

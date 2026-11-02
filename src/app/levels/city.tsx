@@ -1,6 +1,6 @@
 // The city level: a city of its own or one opened from a planet town.
 import { useMemo, useRef, useState } from "react";
-import { buildingAt, generateDistrict, cityFromBurg, cityParams, CITY_LAYERS, createLanguage, createRng, defaultCityTheme, generateCity, pointInPolygon, renameCity, renderCity, type City, type CityLayerId, type CityParams, type CityThemeId, type Language, type Planet } from "../../core/index";
+import { buildingAt, cityTiers, generateDistrict, renderTier, type Tier, cityFromBurg, cityParams, CITY_LAYERS, createLanguage, createRng, defaultCityTheme, generateCity, pointInPolygon, renameCity, renderCity, type City, type CityLayerId, type CityParams, type CityThemeId, type Language, type Planet } from "../../core/index";
 import { CityControls, CityInspector, type CitySelection } from "../CityPanels";
 import type { Level, LevelContext } from "./types";
 
@@ -20,6 +20,7 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
   const [selection, setSelection] = useState<CitySelection>(null);
   const [time, setTime] = useState(0);
   const [parents, setParents] = useState<City[]>([]);
+  const [tier, setTier] = useState<Tier>("street");
 
   const build = (next: CityParams, tongue: Language | null) => {
     pending.current = true;
@@ -35,7 +36,9 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
     });
   };
   const set = <K extends keyof CityParams>(key: K, value: CityParams[K]) => setInput((current) => ({ ...current, [key]: value }));
-  const svg = useMemo(() => (city ? renderCity(city, { theme, layers, script: ctx.script, highlight: selection?.kind === "ward" ? selection.id : null }) : ""), [city, theme, layers, ctx.script, selection]);
+  const tiers = useMemo(() => (city && tier !== "street" ? cityTiers(city) : null), [city, tier]);
+  const svg = useMemo(() => (city ? (tiers ? renderTier(city, tiers, tier, { theme, layers, script: ctx.script }) : renderCity(city, { theme, layers, script: ctx.script, highlight: selection?.kind === "ward" ? selection.id : null })) : ""), [city, tiers, tier, theme, layers, ctx.script, selection]);
+  const highTier = city ? city.params.era === "modern" || city.params.era === "cyberpunk" : false;
 
   return {
     id: "city",
@@ -101,6 +104,17 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
             ← {t("action.back")}
           </button>
         ) : null}
+        {city ? (
+          <div className="floor-tabs">
+            {(["upper", "street", "under"] as Tier[])
+              .filter((item) => item !== "upper" || highTier)
+              .map((item) => (
+                <button key={item} type="button" aria-pressed={tier === item} onClick={() => setTier(item)}>
+                  {t(`tier.${item}${item === "under" && !highTier ? ".old" : ""}`)}
+                </button>
+              ))}
+          </div>
+        ) : null}
         <CityControls
           params={input}
           set={set}
@@ -115,7 +129,23 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
         />
       </>
     ),
-    inspector: city ? (
+    inspector: tiers && tier === "under" ? (
+      <aside className="inspector">
+        <h4 className="muted">{t(highTier ? "tier.under" : "tier.under.old")}</h4>
+        <ul className="list keyed">
+          {tiers.under.halls.map((hall) => (
+            <li key={hall.id} onClick={() => ctx.focus(hall.center[0], hall.center[1])}>
+              <span className="badge">{hall.id}</span>
+              <span className="grow">
+                <b>{ctx.nm(hall.name)}</b>
+                <small className="line">{t(`hall.${hall.purpose}`)}</small>
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p className="muted">{t("tier.shafts", { count: tiers.under.shafts.length })}</p>
+      </aside>
+    ) : city ? (
       <CityInspector
         city={city}
         t={t}
