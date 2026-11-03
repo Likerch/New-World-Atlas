@@ -7,7 +7,7 @@
 // their look and smell, and three rumours (one false); shops have a craft, an owner and an address.
 import { centroid, distanceToPolyline, pointInPolygon } from "../polygon";
 import type { Point } from "../geometry";
-import { makeFactions, makeNpc, roleFits, rumoursOf, type Faction, type FactionKind, type Hearsay, type Npc, type Role, type Rumour } from "../people";
+import { makeFactions, makeNpc, roleFits, rumoursOf, WANTS, type Faction, type FactionKind, type Hearsay, type Npc, type Role, type Rumour } from "../people";
 import { createRng } from "../random";
 import { craftFor, type Craft } from "../building/crafts";
 import { buildingTypeOf } from "../building/from-city";
@@ -68,7 +68,6 @@ export interface CitySociety {
   council: Npc[];
   places: PlaceInfo[];
   wards: WardInfo[];
-  shops: ShopInfo[];
 }
 
 const COLORS = ["#c0392b", "#2f7fd0", "#2e9e5b", "#c98a1a", "#8a4fc9", "#1abc9c", "#d35400", "#7f8c8d"];
@@ -321,23 +320,13 @@ export function citySociety(city: City): CitySociety {
     const other = factions.filter((f) => f !== faction);
     if (other.length) lies.push({ key: "rumour.owner-faction", vars: { name: owner.name, faction: rng.pick(other).name, kind: `@faction-kind.${rng.pick(other).kind}` } });
     lies.push({ key: "rumour.person", vars: { name: owner.name, secret: `@secret.${rng.pick(["debt", "affair", "crime", "cult", "spy", "smuggling", "murder"].filter((s) => s !== owner.secret))}` } });
+    truths.push({ key: "rumour.want", vars: { name: owner.name, want: `@want.${owner.want}` } });
+    lies.push({ key: "rumour.want", vars: { name: owner.name, want: `@want.${rng.pick(WANTS.filter((want) => want !== owner.want))}` } });
     const rival = faction ? faction.rivals.map((id) => byId.get(id)).find(Boolean) : undefined;
     const kind = rng.pick(CITY_HOOKS.filter((h) => h !== "feud" || rival));
     const hook: Hearsay = { key: `hook.city.${kind}`, vars: { name: owner.name, faction: faction?.name ?? "", rival: rival?.name ?? "", where: `@landmark.${landmark.kind}@${era}` } };
     return { landmark: landmark.id, owner, staff, faction: faction?.id ?? null, hook, rumours: rumoursOf(`${seed}/landmark-${landmark.id}`, truths, lies) };
   });
-
-  // Shops: houses of the trading and craft quarters that open as shops, each with its craft and owner.
-  const shops: ShopInfo[] = [];
-  city.buildings.forEach((building, index) => {
-    if (PROPS.includes(building.kind) || building.kind === "shed") return;
-    const type = buildingTypeOf(city, index);
-    if (type !== "shop" && type !== "store" && type !== "trading-post") return;
-    const craft = craftFor(`${seed}/building-${index}`, era);
-    if (!craft) return;
-    shops.push({ building: index, ward: building.ward, craft, owner: makeNpc(`${seed}/building-${index}/owner`, tongue, roleFits("merchant", era) ? "merchant" : "steward"), address: null });
-  });
-  for (const shop of shops) shop.address = addressOf(city, shop.building);
 
   // Quarters: their people, trades, holder, headman, look, a hook and rumours.
   const weight = (kind: WardKind) => (["plaza", "temple", "castle", "cemetery", "park", "farm", "wild", "spaceport", "wasteland"].includes(kind) ? 0.3 : kind === "slum" || kind === "megablock" || kind === "settlement" ? 2 : 1);
@@ -346,7 +335,7 @@ export function citySociety(city: City): CitySociety {
   const wards: WardInfo[] = city.wards.map((ward) => {
     const rng = createRng(`${seed}/ward-${ward.id}/profile`);
     const { faction, share } = wardHolder(factions, ward.id);
-    const trades = [...new Set(shops.filter((shop) => shop.ward === ward.id).map((shop) => shop.craft))].slice(0, 4);
+    const trades = tradesOf(city, ward.id);
     const headRole = fits(organicEra(era) ? ["elder", "steward"] : ["steward", "boss", "fixer"])[0] ?? "elder";
     const headman = makeNpc(`${seed}/ward-${ward.id}/headman`, tongue, headRole, faction ? { faction: faction.id } : {});
     const traits = rng.shuffle([...(TRAITS[ward.kind] ?? ANY_TRAITS)]).slice(0, 2).map((trait) => `wardtrait.${trait}`);
@@ -362,6 +351,7 @@ export function citySociety(city: City): CitySociety {
       }
     }
     if (headman.secret) truths.push({ key: "rumour.person", vars: { name: headman.name, secret: `@secret.${headman.secret}` } });
+    truths.push({ key: "rumour.want", vars: { name: headman.name, want: `@want.${headman.want}` } });
     lies.push({ key: "rumour.person", vars: { name: headman.name, secret: `@secret.${rng.pick(["debt", "affair", "crime", "cult", "spy"].filter((s) => s !== headman.secret))}` } });
     const here = city.landmarks.filter((landmark) => landmark.ward === ward.id);
     if (here.length) {
@@ -373,7 +363,38 @@ export function citySociety(city: City): CitySociety {
     const hook: Hearsay = { key: `hook.city.${hookKind}`, vars: { name: headman.name, faction: faction?.name ?? "", rival: rival?.name ?? "", where: `@ward.${ward.kind}@${era}` } };
     return { ward: ward.id, people: ward.urban ? Math.round((city.params.population * 1000 * ward.buildings * weight(ward.kind)) / total) : Math.round(ward.buildings * 4), trades, faction: faction?.id ?? null, share, headman, traits, hook, rumours: rumoursOf(`${seed}/ward-${ward.id}`, truths, lies) };
   });
-  return { factions, council, places, wards, shops };
+  return { factions, council, places, wards };
+}
+
+/** The crafts plied in a quarter, most common first (at most four). */
+function tradesOf(city: City, ward: number): Craft[] {
+  const counts = new Map<Craft, number>();
+  city.buildings.forEach((building, index) => {
+    if (building.ward !== ward || PROPS.includes(building.kind) || building.kind === "shed") return;
+    const type = buildingTypeOf(city, index);
+    if (type !== "shop" && type !== "store" && type !== "trading-post") return;
+    const craft = craftFor(`${city.params.seed}/building-${building.key ?? index}`, city.params.era);
+    if (craft) counts.set(craft, (counts.get(craft) ?? 0) + 1);
+  });
+  return [...counts].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([craft]) => craft);
+}
+
+/** The city's directory of shops: every house of the trading and craft quarters that opens as a shop, with its craft,
+ * its owner (the same person as in its plan) and its address. */
+export function cityShops(city: City): ShopInfo[] {
+  const seed = city.params.seed;
+  const era = city.params.era;
+  const shops: ShopInfo[] = [];
+  city.buildings.forEach((building, index) => {
+    if (PROPS.includes(building.kind) || building.kind === "shed") return;
+    const type = buildingTypeOf(city, index);
+    if (type !== "shop" && type !== "store" && type !== "trading-post") return;
+    const id = building.key ?? String(index);
+    const craft = craftFor(`${seed}/building-${id}`, era);
+    if (!craft) return;
+    shops.push({ building: index, ward: building.ward, craft, owner: makeNpc(`${seed}/building-${id}/owner`, city.language, roleFits("merchant", era) ? "merchant" : "steward"), address: addressOf(city, index) });
+  });
+  return shops;
 }
 
 /** The colour of the faction holding each quarter, for the influence layer of the map. */

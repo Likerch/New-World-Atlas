@@ -13,7 +13,6 @@ import {
   generatePlanet,
   legendSvg,
   levelsOf,
-  localFromLandmark,
   localFromMarker,
   localFromStar,
   localParams,
@@ -226,6 +225,8 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     setView("local");
   };
   const building = useBuildingLevel(ctx, back("building"), (link, entity) => openLocal(building, link, entity));
+  // "Deeper" from a town: the underworld of the planet it hangs from (set once the planet level exists, below).
+  const cityBelow = useRef<(() => void) | null>(null);
   const city = useCityLevel(
     ctx,
     undefined,
@@ -238,7 +239,8 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
       setView("building");
     },
     back("city"),
-    (made, landmark) => openLocal(city, localFromLandmark(made, landmark), `landmark:${landmark}`),
+    (link, entity) => openLocal(city, link, entity),
+    cityBelow,
   );
   const openCity = (from: Level, made: Planet, burg: number) => {
     // A town of a close-up is its planet's town: it opens as the same city, hanging from the planet.
@@ -308,6 +310,14 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     setView("galaxy");
   });
   const levels: Level[] = [universe, galaxy, system, planet, region, underworld, city, building, local];
+  const cityParent = city.worldKey ? world.maps[city.worldKey]?.parent : null;
+  cityBelow.current =
+    planet.planet && cityParent && world.maps[cityParent]?.level === "planet"
+      ? () => {
+          linkTo("underworld", planet, "underworld", null);
+          underworld.open(planet.planet!);
+        }
+      : null;
   const byId = Object.fromEntries(levels.map((item) => [item.id, item])) as Record<LevelId, Level>;
   const level = byId[view] ?? byId[world.top];
   function levelKey(id: LevelId): string | null {

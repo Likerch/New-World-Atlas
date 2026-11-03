@@ -17,7 +17,7 @@ export function belowTheme(era: Era): LocalTheme {
   return organicEra(era) ? "sewer" : "metro";
 }
 
-const HALL_THEME: Record<HallPurpose, LocalTheme> = { market: "mall", turf: "bunker", metro: "metro", flooded: "sewer", cult: "temple", ossuary: "crypt", smugglers: "sewer", squat: "sewer" };
+const HALL_THEME: Record<HallPurpose, LocalTheme> = { market: "mall", turf: "bunker", metro: "metro", flooded: "sewer", cult: "temple", ossuary: "crypt", smugglers: "sewer", squat: "sewer", cistern: "sewer", vault: "vault", bunker: "bunker" };
 
 /** A hall of the city's underside. */
 export function localFromHall(city: City, tiers: Tiers, hallId: number): LocalLink | null {

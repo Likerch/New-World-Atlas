@@ -4,7 +4,8 @@
 import type { City, CityParams, Landmark, LandmarkKind, WardKind } from "../city/model";
 import { pathData, smooth, type Point } from "../geometry";
 import { toCyrillic } from "../language";
-import { centroid } from "../polygon";
+import { centroid, distanceToPolyline } from "../polygon";
+import { heightField } from "../city/layout";
 import { renderCoatOfArms } from "./heraldry-svg";
 import { present, type LegendEntry, type LegendSection, type Swatch } from "./legend";
 
@@ -172,6 +173,39 @@ const esc = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;"
 const r1 = (value: number) => Math.round(value * 10) / 10;
 const poly = (points: Point[]) => pathData([...points, points[0]], true);
 
+/** Contour lines of a height field over the frame (marching squares), every tenth from 0.1 to 0.9, as short segments. */
+function contours(height: (at: Point) => number, W: number, H: number): Point[][] {
+  const step = 12;
+  const cols = Math.ceil(W / step) + 1,
+    rows = Math.ceil(H / step) + 1;
+  const h: number[] = [];
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) h.push(height([i * step, j * step]));
+  const out: Point[][] = [];
+  for (let level = 0.1; level < 0.95; level += 0.1) {
+    for (let j = 0; j < rows - 1; j++)
+      for (let i = 0; i < cols - 1; i++) {
+        const corners: [number, Point][] = [
+          [h[j * cols + i], [i * step, j * step]],
+          [h[j * cols + i + 1], [(i + 1) * step, j * step]],
+          [h[(j + 1) * cols + i + 1], [(i + 1) * step, (j + 1) * step]],
+          [h[(j + 1) * cols + i], [i * step, (j + 1) * step]],
+        ];
+        const cuts: Point[] = [];
+        for (let k = 0; k < 4; k++) {
+          const [a, pa] = corners[k];
+          const [b, pb] = corners[(k + 1) % 4];
+          if (a < level !== b < level) {
+            const t = (level - a) / (b - a);
+            cuts.push([pa[0] + (pb[0] - pa[0]) * t, pa[1] + (pb[1] - pa[1]) * t]);
+          }
+        }
+        if (cuts.length >= 2) out.push([cuts[0], cuts[1]]);
+        if (cuts.length === 4) out.push([cuts[2], cuts[3]]);
+      }
+  }
+  return out;
+}
+
 export function renderCity(city: City, options: CityRenderOptions = {}): string {
   const themeId = options.theme ?? defaultCityTheme(city.params.era);
   const th = THEMES[themeId];
@@ -195,6 +229,9 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
     }
   }
   if (city.lake) out.push(`<path d="${pathData(smooth([...city.lake, city.lake[0]], true, 2), true)}" fill="${th.water}" stroke="${th.shore}" stroke-width="1.2"/>`);
+  // Contours of a hilly town, every tenth of its height.
+  const height = layers.fields ? heightField(city.params) : null;
+  if (height) out.push(`<path d="${contours(height, W, H).map((line) => `M${line.map(([x, y]) => `${r1(x)},${r1(y)}`).join("L")}`).join("")}" fill="none" stroke="${th.fieldLine}" stroke-width="0.7" opacity="0.55"/>`);
   const byKind = (kind: string) => city.buildings.filter((b) => b.kind === kind);
   if (layers.fields) {
     out.push(`<g stroke="${th.fieldLine}" stroke-width="0.5">`);
@@ -334,6 +371,33 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
       shapes.push(`<path d="${d}" fill="${fill}" stroke="${stroke}" stroke-width="${th.glow && tall ? 0.8 : 0.45}"${th.glow && building.floors > 60 ? ` filter="url(#glow)"` : ""}/>`);
     });
     out.push(`<g>${shadows.join("")}</g><g stroke-linejoin="round">${shapes.join("")}</g>`);
+    // Up close, every house shows its front: the wall that faces the street, and the door in it.
+    if (city.scale < 0.8) {
+      const fronts = city.streets.filter((street) => ["main", "street", "road", "avenue", "alley", "boulevard"].includes(street.kind));
+      const marks: string[] = [];
+      for (const building of city.buildings) {
+        if (!["house", "landmark", "tower", "industrial"].includes(building.kind) || building.polygon.length < 3 || !fronts.length) continue;
+        let best = -1;
+        let near = Infinity;
+        building.polygon.forEach((a, k) => {
+          const b = building.polygon[(k + 1) % building.polygon.length];
+          const mid: Point = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+          for (const street of fronts) {
+            const d = distanceToPolyline(mid, street.points) - street.width / 2;
+            if (d < near) ((near = d), (best = k));
+          }
+        });
+        if (best < 0 || near > m(12)) continue;
+        const a = building.polygon[best];
+        const b = building.polygon[(best + 1) % building.polygon.length];
+        const mx = (a[0] + b[0]) / 2,
+          my = (a[1] + b[1]) / 2;
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+        const door = Math.min(len * 0.25, m(1.2));
+        marks.push(`M${r1(a[0])},${r1(a[1])}L${r1(mx - ((b[0] - a[0]) / len) * door)},${r1(my - ((b[1] - a[1]) / len) * door)}M${r1(mx + ((b[0] - a[0]) / len) * door)},${r1(my + ((b[1] - a[1]) / len) * door)}L${r1(b[0])},${r1(b[1])}`);
+      }
+      if (marks.length) out.push(`<path d="${marks.join("")}" fill="none" stroke="${th.line}" stroke-width="${r1(Math.max(1, m(0.5)))}" stroke-linecap="butt"/>`);
+    }
   }
 
   if (layers.streets) {
@@ -358,6 +422,12 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
         continue;
       }
       const width = wall.citadel ? m(5) : m(6.5);
+      if (wall.old) {
+        // An old wall the town grew past: lower, broken in places, its towers stubs.
+        out.push(`<path d="${pathData(ring, true)}" fill="none" stroke="${th.wall}" stroke-width="${r1(Math.max(1.2, width * 0.7))}" stroke-linejoin="round" stroke-dasharray="${r1(Math.max(6, m(40)))} ${r1(Math.max(2, m(8)))}" opacity="0.6"/>`);
+        for (const p of wall.towers) out.push(`<circle cx="${r1(p[0])}" cy="${r1(p[1])}" r="${r1(Math.max(m(3.5), 1.6))}" fill="${th.wall}" opacity="0.6"/>`);
+        continue;
+      }
       out.push(`<path d="${pathData(ring, true)}" fill="none" stroke="${th.wall}" stroke-width="${r1(Math.max(1.6, width))}" stroke-linejoin="round"/>`);
       if (wall.bastions) {
         // Star-fort bastions: arrowheads at each corner, pointing outwards.
@@ -508,6 +578,8 @@ export function cityLegend(city: City, options: CityRenderOptions = {}): LegendS
   if (city.sea) water.push({ key: "legend.sea", swatch: { fill: th.water, stroke: th.shore } });
   if (city.river) water.push({ key: "legend.river", swatch: { line: th.water, width: 4.5 } });
   if (city.lake) water.push({ key: "legend.lake", swatch: { fill: th.water, stroke: th.shore, round: true } });
+  if ((city.params.relief ?? 0) > 0 && layers.fields) water.push({ key: "legend.contours", swatch: { svg: `<path d="M2,11C7,4 17,4 22,11M5,13C9,8 15,8 19,13" fill="none" stroke="${th.fieldLine}" stroke-width="0.8"/>` } });
+  if (city.walls.some((wall) => wall.old) && layers.walls) water.push({ key: "legend.oldWall", swatch: { line: th.wall, width: 2, dash: "6 2", opacity: 0.6 } });
   const defences: LegendEntry[] = [];
   if (layers.walls && city.walls.length) {
     if (era === "stone") defences.push({ key: "legend.palisade", swatch: { line: "#7a5634", width: 2.4, dash: "1.2 0.8" } });

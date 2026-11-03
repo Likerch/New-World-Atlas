@@ -78,7 +78,7 @@ function lockKind(plan: BuildingPlan, a: Room | undefined, b: Room | undefined, 
   const has = (...list: RoomKind[]) => kinds.some((kind) => kind && list.includes(kind));
   if (era === "stone" || type === "hut" || type === "longhouse") return "none";
   const digital = era === "cyberpunk" || era === "modern" ? "keycard" : era === "far-future" ? "biometric" : null;
-  const warded = magic >= 1 && !MACHINE.includes(era) && has("study", "vault", "sacristy", "ritual-room") && rng.chance(magic >= 2 ? 0.7 : 0.35);
+  const warded = magic >= 1 && !MACHINE.includes(era) && has("study", "vault", "sacristy", "ritual-room") && rng.chance(type === "mage-tower" ? 0.8 : magic >= 3 ? 0.7 : magic >= 2 ? 0.35 : 0.08);
   if (warded) return "magic";
   if (has("vault")) return digital === "keycard" ? "biometric" : digital ?? "master";
   if (has("cell")) return digital ?? "good";
@@ -246,7 +246,7 @@ export function dress(plan: BuildingPlan): BuildingPlan {
     for (const floor of plan.floors)
       for (const room of floor.rooms) {
         if (!["study", "lab", "cellar", "sacristy", "vault", "chapel"].includes(room.kind) || room.furniture.some((f) => f.kind === "circle")) continue;
-        if (rng.chance(params.type === "mage-tower" ? 0.8 : magic * 0.12)) put(plan, floor, room, "circle", 1.6, 1.6, rng, true) || put(plan, floor, room, "circle", 1.1, 1.1, rng, true);
+        if (rng.chance(params.type === "mage-tower" ? 0.8 : magic >= 2 ? magic * 0.12 : 0.04)) put(plan, floor, room, "circle", 1.6, 1.6, rng, true) || put(plan, floor, room, "circle", 1.1, 1.1, rng, true);
       }
   }
   return plan;

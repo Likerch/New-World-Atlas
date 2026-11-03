@@ -46,8 +46,9 @@ export type WardKind =
   | "ruins"
   | "settlement"
   | "wasteland"
-  // Nomads' tents outside the walls.
-  | "camp";
+  // Nomads' tents outside the walls, and a village's farmsteads.
+  | "camp"
+  | "farmstead";
 
 /** A road of the world leaving town: its heading (radians), the town it leads to, and what kind of road it is. */
 export interface CityRoad {
@@ -192,6 +193,8 @@ export interface Wall {
   /** Star-fort bastions at the corners (renaissance). */
   bastions: boolean;
   citadel: boolean;
+  /** An old wall a grown town has built past: it still stands inside the new one. */
+  old?: boolean;
 }
 
 export type LandmarkKind =

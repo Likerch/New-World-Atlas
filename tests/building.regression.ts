@@ -1,6 +1,6 @@
 // Building-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { PROPS, tierLegend, cityTiers, generateDistrict, BUILDING_THEMES, BUILDING_TYPES, buildingAt, buildingFromCity, centroid, ERA_BUILDINGS, generateBuilding, generateCity, generateRoom, pointInPolygon, renderBuilding, renderRoom, hashString, BUILDING_SHAPES, buildingKey, CRAFT_IDS, CRAFTS, shopInventory, craftFor, craftsOf, editBuilding, localFromHatch, placeOwnerKey, citySociety } from "../src/core/index";
+import { PROPS, tierLegend, cityTiers, generateDistrict, BUILDING_THEMES, BUILDING_TYPES, buildingAt, buildingFromCity, centroid, ERA_BUILDINGS, generateBuilding, generateCity, generateRoom, pointInPolygon, renderBuilding, renderRoom, hashString, BUILDING_SHAPES, buildingKey, CRAFT_IDS, CRAFTS, shopInventory, craftFor, craftsOf, editBuilding, localFromHatch, placeOwnerKey, citySociety, cityShops } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -320,7 +320,7 @@ test("a house opened from the city knows its street, its quarter's wealth, its c
   const place = citySociety(city).places.find((p) => p.landmark === tavern.id)!;
   assert.equal(buildingKey(generateBuilding(params), city.language).owner.name, place.owner.name, "the same person in the city and in the house");
   assert.ok(typeof params.wealth === "number");
-  const shop = citySociety(city).shops[0];
+  const shop = cityShops(city)[0];
   if (shop) assert.equal(buildingFromCity(city, shop.building).craft, shop.craft, "the directory and the plan agree on the craft");
 });
 

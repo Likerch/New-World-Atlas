@@ -5,7 +5,7 @@
 // building always keeps the same people and the same secrets.
 import type { Era } from "../city/model";
 import { createLanguage, type Language } from "../language";
-import { makeNpc, roleFits, rumoursOf, type Hearsay, type Npc, type Role, type Rumour } from "../people";
+import { makeNpc, roleFits, rumoursOf, WANTS, type Hearsay, type Npc, type Role, type Rumour } from "../people";
 import { createRng, type Rng } from "../random";
 import { shopInventory, type ShopItem } from "./crafts";
 import type { BuildingPlan, BuildingType, Floor, Room, RoomKind } from "./plan";
@@ -239,7 +239,10 @@ export function buildingKey(plan: BuildingPlan, language?: Language | null, salt
   if (hoard) truths.push({ key: "rumour.room-treasure", vars: { what: `@${hoard.valuables.find((v) => v.hidden)!.key}`, where: roomName(hoard.level, hoard.room) } });
   if (params.hatch) truths.push({ key: "rumour.hatch", vars: {} });
   if (params.owner?.faction) truths.push({ key: "rumour.owner-faction", vars: { name: owner.name, faction: params.owner.faction.name, kind: `@faction-kind.${params.owner.faction.kind}` } });
+  // When the house hides little, people still talk about what its owner is after.
+  truths.push({ key: "rumour.want", vars: { name: owner.name, want: `@want.${owner.want}` } });
   const fib = createRng(`${base}/lies`);
+  lies.push({ key: "rumour.want", vars: { name: owner.name, want: `@want.${fib.pick(WANTS.filter((want) => want !== owner.want))}` } });
   const wrong = fib.pick(["debt", "affair", "crime", "cult", "spy", "smuggling", "murder", "curse"].filter((s) => s !== owner.secret));
   lies.push({ key: "rumour.person", vars: { name: owner.name, secret: `@secret.${wrong}` } });
   if (entries.length) lies.push({ key: "rumour.room-treasure", vars: { what: `@valuable.${fib.pick(loot)[0]}`, where: roomName(fib.pick(entries).level, fib.pick(entries).room) } });
