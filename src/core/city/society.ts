@@ -7,7 +7,7 @@
 // their look and smell, and three rumours (one false); shops have a craft, an owner and an address.
 import { centroid, distanceToPolyline, pointInPolygon } from "../polygon";
 import type { Point } from "../geometry";
-import { makeFactions, makeNpc, roleFits, rumoursOf, WANTS, type Faction, type FactionKind, type Hearsay, type Npc, type Role, type Rumour } from "../people";
+import { makeFactions, makeNpc, OWNER_SECRET, roleFits, rumoursOf, WANTS, type Faction, type FactionKind, type Hearsay, type Npc, type Role, type Rumour } from "../people";
 import { createRng } from "../random";
 import { craftFor, type Craft } from "../building/crafts";
 import { buildingTypeOf } from "../building/from-city";
@@ -307,7 +307,7 @@ export function citySociety(city: City): CitySociety {
   // Places: their owners, their people, whom they answer to, what they want of heroes and what is said of them.
   const places: PlaceInfo[] = city.landmarks.map((landmark) => {
     const faction = placeFaction(city, landmark);
-    const owner = makeNpc(placeOwnerKey(city, landmark.id), tongue, placeOwnerRole(city, landmark), { secretChance: 0.55, ...(faction ? { faction: faction.id } : {}) });
+    const owner = makeNpc(placeOwnerKey(city, landmark.id), tongue, placeOwnerRole(city, landmark), { secretChance: OWNER_SECRET, ...(faction ? { faction: faction.id } : {}) });
     const rng = createRng(`${seed}/landmark-${landmark.id}/people`);
     const roles = fits(STAFF[landmark.kind] ?? ["servant"]);
     const staff = roles.length ? Array.from({ length: rng.int(1, Math.min(3, roles.length + 1)) }, (_, k) => makeNpc(`${seed}/landmark-${landmark.id}/staff-${k}`, tongue, roles[k % roles.length], faction && k === 0 ? { faction: faction.id } : {})) : [];
@@ -318,7 +318,9 @@ export function citySociety(city: City): CitySociety {
     if (someone) truths.push({ key: "rumour.person", vars: { name: someone.name, secret: `@secret.${someone.secret}` } });
     if (faction) truths.push({ key: "rumour.owner-faction", vars: { name: owner.name, faction: faction.name, kind: `@faction-kind.${faction.kind}` } });
     const other = factions.filter((f) => f !== faction);
-    if (other.length) lies.push({ key: "rumour.owner-faction", vars: { name: owner.name, faction: rng.pick(other).name, kind: `@faction-kind.${rng.pick(other).kind}` } });
+    // One faction, picked once: its name and its kind together.
+    const wrong = other.length ? rng.pick(other) : null;
+    if (wrong) lies.push({ key: "rumour.owner-faction", vars: { name: owner.name, faction: wrong.name, kind: `@faction-kind.${wrong.kind}` } });
     lies.push({ key: "rumour.person", vars: { name: owner.name, secret: `@secret.${rng.pick(["debt", "affair", "crime", "cult", "spy", "smuggling", "murder"].filter((s) => s !== owner.secret))}` } });
     truths.push({ key: "rumour.want", vars: { name: owner.name, want: `@want.${owner.want}` } });
     lies.push({ key: "rumour.want", vars: { name: owner.name, want: `@want.${rng.pick(WANTS.filter((want) => want !== owner.want))}` } });
@@ -392,7 +394,7 @@ export function cityShops(city: City): ShopInfo[] {
     const id = building.key ?? String(index);
     const craft = craftFor(`${seed}/building-${id}`, era);
     if (!craft) return;
-    shops.push({ building: index, ward: building.ward, craft, owner: makeNpc(`${seed}/building-${id}/owner`, city.language, roleFits("merchant", era) ? "merchant" : "steward"), address: addressOf(city, index) });
+    shops.push({ building: index, ward: building.ward, craft, owner: makeNpc(`${seed}/building-${id}/owner`, city.language, roleFits("merchant", era) ? "merchant" : "steward", { secretChance: OWNER_SECRET }), address: addressOf(city, index) });
   });
   return shops;
 }

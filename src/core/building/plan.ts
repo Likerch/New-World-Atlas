@@ -221,6 +221,9 @@ export interface Rect {
 export interface Furniture extends Rect {
   kind: FurnitureKind;
   round: boolean;
+  /** Part of the house rather than of the room's use (the hatch down, a craft's tools, a chalked circle): it stays when
+   * the room falls in or is furnished anew. */
+  fixed?: boolean;
 }
 
 export interface Room extends Rect {
@@ -585,19 +588,19 @@ export function slice(rect: Rect, rooms: [RoomKind, number][], out: { rect: Rect
 export const BACK_ROOMS = new Set<RoomKind>(["storage", "pantry", "cellar", "stairs", "attic"]);
 export const CIRCULATION = new Set<RoomKind>(["corridor", "hall", "common-room", "lobby", "shop-floor", "nave", "stairs", "dance-floor", "living-room", "waiting-room", "workshop", "storage", "cellar", "throne-room", "atrium", "garden", "ticket-hall", "platform", "machine-hall", "canteen", "gym", "changing-room", "airlock", "grow-room", "vestibule", "passage", "ballroom", "gallery", "auditorium", "arena-floor", "stands", "guard-room", "mill-room", "attic"]);
 
-/** The wall two rooms share, if they touch along at least a door's width. */
-export function sharedWall(a: Rect, b: Rect): { from: Point; to: Point; horizontal: boolean } | null {
+/** The wall two rooms share, if they touch along at least a door's width (or `least` metres). */
+export function sharedWall(a: Rect, b: Rect, least = 1.2): { from: Point; to: Point; horizontal: boolean } | null {
   const eps = 0.01;
   const overlap = (a0: number, a1: number, b0: number, b1: number) => [Math.max(a0, b0), Math.min(a1, b1)];
   if (Math.abs(a.x + a.w - b.x) < eps || Math.abs(b.x + b.w - a.x) < eps) {
     const x = Math.abs(a.x + a.w - b.x) < eps ? b.x : a.x;
     const [y0, y1] = overlap(a.y, a.y + a.h, b.y, b.y + b.h);
-    if (y1 - y0 >= 1.2) return { from: [x, y0], to: [x, y1], horizontal: false };
+    if (y1 - y0 >= least) return { from: [x, y0], to: [x, y1], horizontal: false };
   }
   if (Math.abs(a.y + a.h - b.y) < eps || Math.abs(b.y + b.h - a.y) < eps) {
     const y = Math.abs(a.y + a.h - b.y) < eps ? b.y : a.y;
     const [x0, x1] = overlap(a.x, a.x + a.w, b.x, b.x + b.w);
-    if (x1 - x0 >= 1.2) return { from: [x0, y], to: [x1, y], horizontal: true };
+    if (x1 - x0 >= least) return { from: [x0, y], to: [x1, y], horizontal: true };
   }
   return null;
 }
