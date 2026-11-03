@@ -27,7 +27,7 @@ export interface Layout {
 }
 
 /** People per hectare in the built-up area, by era. */
-const DENSITY = { medieval: 220, renaissance: 260, industrial: 300, modern: 90, cyberpunk: 420 };
+const DENSITY = { stone: 60, ancient: 200, medieval: 220, renaissance: 260, industrial: 300, modern: 90, cyberpunk: 420, "far-future": 160, "post-apocalypse": 4 };
 
 const isSeaAt = (sea: Point[] | null, p: Point) => !!sea && pointInPolygon(p, sea);
 
@@ -38,7 +38,8 @@ export function layoutCity(params: CityParams, rng: Rng): Layout {
   const radius = Math.min(W, H) * 0.3;
   const builtArea = (params.population * 1000) / (DENSITY[params.era] / 10_000);
   const scale = Math.sqrt(builtArea / Math.PI) / radius;
-  const wardCount = organic ? Math.round(Math.min(70, Math.max(5, 4 + Math.sqrt(params.population) * 3.2))) : Math.round(Math.min(32, Math.max(7, 5 + Math.sqrt(params.population) * 0.75)));
+  // A dead city keeps the districts of the city it was, however few live there now.
+  const wardCount = params.era === "post-apocalypse" ? 18 : organic ? Math.round(Math.min(70, Math.max(5, 4 + Math.sqrt(params.population) * 3.2))) : Math.round(Math.min(32, Math.max(7, 5 + Math.sqrt(params.population) * 0.75)));
 
   // Keep the town away from the sea; the centre shifts inland.
   let center: Point = [W / 2, H / 2];
@@ -127,8 +128,17 @@ export function layoutCity(params: CityParams, rng: Rng): Layout {
     taken.add(ward);
   };
 
-  if (organic) {
-    if (params.market) assign(urbanOrder[0], "plaza");
+  if (params.era === "stone") {
+    // A camp: the gathering place with its fire, a sacred place, huts all round, gardens and pens outside.
+    assign(urbanOrder[0], "plaza");
+    if (params.temple || wardCount > 6) assign(urbanOrder.find((ward) => !taken.has(ward) && edgeOfTown(ward)), "temple");
+    for (const ward of urbanOrder) {
+      wealth[ward] = rng.float(0.1, 0.5);
+      if (!taken.has(ward)) kinds[ward] = "craftsmen";
+    }
+    for (const ward of land) if (!urban[ward]) kinds[ward] = near(ward, (other) => urban[other]) && rng.chance(0.5) ? "farm" : "wild";
+  } else if (organic) {
+    if (params.market || params.era === "ancient") assign(urbanOrder[0], "plaza");
     if (params.temple) assign(urbanOrder.find((ward) => !taken.has(ward)), "temple");
     if (params.citadel) {
       const rim = urbanOrder.filter((ward) => edgeOfTown(ward) && !taken.has(ward) && !coastal(ward));
@@ -158,16 +168,27 @@ export function layoutCity(params: CityParams, rng: Rng): Layout {
   } else {
     const cyber = params.era === "cyberpunk";
     const modern = params.era === "modern";
-    assign(urbanOrder[0], cyber ? "arcology" : params.era === "industrial" ? "old-town" : "downtown");
-    if (cyber || modern) for (const ward of urbanOrder.slice(1, 4)) assign(ward, cyber ? "commercial" : "downtown");
+    const future = params.era === "far-future";
+    const fallen = params.era === "post-apocalypse";
+    assign(urbanOrder[0], cyber || future ? "arcology" : params.era === "industrial" ? "old-town" : fallen ? "ruins" : "downtown");
+    if (cyber || modern || future) for (const ward of urbanOrder.slice(1, 4)) assign(ward, cyber || future ? "commercial" : "downtown");
+    // After the fall the survivors hold a ward or two of the dead city behind barricades.
+    if (fallen) for (const ward of urbanOrder.slice(Math.floor(urbanOrder.length * 0.25)).filter((w) => !taken.has(w) && !coastal(w)).slice(0, params.population > 8 ? 2 : 1)) assign(ward, "settlement");
     if (params.port && sea) for (const ward of urbanOrder.filter((w) => coastal(w) && !taken.has(w)).slice(0, 2)) assign(ward, "port");
-    if (modern) assign(urbanOrder.slice(Math.floor(urbanOrder.length / 3)).find((ward) => !taken.has(ward)), "campus");
+    if (modern || future) assign(urbanOrder.slice(Math.floor(urbanOrder.length / 3)).find((ward) => !taken.has(ward)), "campus");
+    if (future) assign(urbanOrder.filter((ward) => edgeOfTown(ward) && !taken.has(ward) && !coastal(ward)).pop(), "spaceport");
+    const holds = urbanOrder.filter((ward) => kinds[ward] === "settlement");
     for (const ward of urbanOrder) {
       const rank = urbanOrder.indexOf(ward) / Math.max(1, urbanOrder.length - 1);
       wealth[ward] = Math.max(0, Math.min(1, 1 - rank + rng.float(-0.25, 0.25)));
       angles[ward] = rng.float(0, Math.PI / 2);
       if (taken.has(ward)) continue;
-      if (rank < 0.35) kinds[ward] = cyber ? "commercial" : "commercial";
+      if (fallen) {
+        kinds[ward] = holds.some((hold) => diagram.neighbors[ward].includes(hold)) && rng.chance(0.5) ? "farm" : rng.chance(0.15) ? "wasteland" : rng.chance(0.08) ? "industrial" : "ruins";
+        continue;
+      }
+      if (future && rng.chance(0.22)) kinds[ward] = "park";
+      else if (rank < 0.35) kinds[ward] = "commercial";
       else if ((riverside(ward) || coastal(ward) || rank > 0.8) && rng.chance(params.era === "industrial" ? 0.6 : 0.35)) kinds[ward] = "industrial";
       else if (rng.chance(cyber ? 0.03 : 0.1)) kinds[ward] = "park";
       else if (cyber) kinds[ward] = rank > 0.7 && rng.chance(0.5) ? "combat-zone" : "megablock";
@@ -177,7 +198,7 @@ export function layoutCity(params: CityParams, rng: Rng): Layout {
       if (urban[ward]) continue;
       angles[ward] = rng.float(0, Math.PI / 2);
       const next = near(ward, (other) => urban[other]);
-      kinds[ward] = next ? (cyber ? "combat-zone" : modern ? "suburb" : "farm") : dist(ward) < radius * 2 && !cyber ? "farm" : "wild";
+      kinds[ward] = fallen ? (next && rng.chance(0.25) ? "slum" : "wild") : future ? (next && rng.chance(0.5) ? "park" : dist(ward) < radius * 2 ? "farm" : "wild") : next ? (cyber ? "combat-zone" : modern ? "suburb" : "farm") : dist(ward) < radius * 2 && !cyber ? "farm" : "wild";
     }
   }
   for (let ward = 0; ward < n; ward++) if (water[ward]) kinds[ward] = "wild";
@@ -219,6 +240,12 @@ export function layoutCity(params: CityParams, rng: Rng): Layout {
       }
       walls.push({ ring: points, towers: points.filter((_, index) => index % 2 === 0), gates: gates.map((corner) => diagram.corners[corner]), bastions: params.era === "renaissance", citadel: false });
     }
+  }
+  // Barricades round the survivors' holds: scrap walls with a gate, no towers.
+  for (let ward = 0; ward < n; ward++) {
+    if (kinds[ward] !== "settlement") continue;
+    const ring = diagram.cells[ward];
+    walls.push({ ring, towers: ring.filter((_, index) => index % 3 === 0), gates: [ring[Math.floor(rng.float(0, ring.length))]], bastions: false, citadel: false });
   }
   const castle = kinds.indexOf("castle");
   if (castle >= 0) walls.push({ ring: diagram.cells[castle], towers: diagram.cells[castle], gates: [], bastions: params.era === "renaissance", citadel: true });

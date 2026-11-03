@@ -1,6 +1,8 @@
 // What stands in each ward. Walled towns cut their quarters into narrow lots fronting the streets; planned cities lay
 // a street grid in every district (each at its own angle) and fill the blocks by purpose — houses, towers, factories,
-// megablocks, an arcology. Fields, parks and graveyards get their own patterns. Nothing is built in the water.
+// megablocks, an arcology. Fields, parks and graveyards get their own patterns. Nothing is built in the water. A stone-age
+// camp is a scatter of huts; antiquity lays its houses on one street grid; the far future raises green towers far
+// apart; after the fall the city is a field of ruins round the survivors' crowded holds.
 import type { Point } from "../geometry";
 import { area, centroid, ccw, clipConvex, distanceToPolyline, insetConvex, longestEdge, pointInPolygon, rotate, splitConvex } from "../polygon";
 import type { Rng } from "../random";
@@ -43,6 +45,21 @@ const RULES: Partial<Record<WardKind, Rule>> = {
 };
 
 const MODERN_SUBURB: Rule = { lot: 230, empty: 0.12, floors: [1, 2], kind: "house", gap: 5, block: 120 };
+/** Towers of the far future stand far apart among gardens. */
+const FUTURE_RULES: Partial<Record<WardKind, Rule>> = {
+  commercial: { lot: 2000, empty: 0.15, floors: [30, 150], kind: "tower", gap: 12, block: 110 },
+  residential: { lot: 1500, empty: 0.3, floors: [12, 60], kind: "tower", gap: 14, block: 130 },
+  "rich-residential": { lot: 2500, empty: 0.45, floors: [4, 20], kind: "tower", gap: 18, block: 150 },
+  industrial: { lot: 4000, empty: 0.2, floors: [2, 6], kind: "industrial", gap: 10, block: 190 },
+};
+/** The dead city: blocks of broken buildings, scrapyards, and the survivors' shacks packed inside their barricades. */
+const FALLEN_RULES: Partial<Record<WardKind, Rule>> = {
+  ruins: { lot: 900, empty: 0.38, floors: [0, 6], kind: "ruin", gap: 5, block: 100 },
+  industrial: { lot: 3000, empty: 0.45, floors: [0, 2], kind: "ruin", gap: 8, block: 170 },
+  port: { lot: 2800, empty: 0.4, floors: [0, 2], kind: "ruin", gap: 8, block: 165 },
+  settlement: { lot: 60, empty: 0.05, floors: [1, 2], kind: "house", gap: 0.8 },
+  slum: { lot: 70, empty: 0.3, floors: [1, 1], kind: "house", gap: 1.2 },
+};
 
 /** Cuts a convex polygon into lots of about a target area, splitting across its longest side each time. */
 export function lots(poly: Point[], target: number, rng: Rng, out: Point[][], depth = 0): void {
@@ -123,6 +140,8 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
   const majorHalf = m(organic ? 5 : params.era === "cyberpunk" ? 13 : params.era === "modern" ? 10 : 7);
   const wallGap = params.walls && organic ? m(9) : streetHalf;
   const roads = net.streets.filter((street) => street.kind === "road" || street.kind === "main");
+  // Antiquity lays every house block on one grid, whatever the ward's shape.
+  const gridAngle = rng.fork("grid").float(0, Math.PI / 2);
 
   for (let ward = 0; ward < diagram.sites.length; ward++) {
     const kind = kinds[ward];
@@ -163,6 +182,26 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
       continue;
     }
     if (kind === "wild") continue;
+    if (params.era === "stone") {
+      // Huts scattered round the gathering place; the sacred place keeps a single standing stone.
+      if (kind === "temple") {
+        const stone = insetConvex(inner, Math.sqrt(area(inner)) * 0.44);
+        if (stone) push(stone, "landmark", 1);
+      } else if (kind !== "plaza") scatter(inner, span(12, 4.5), own, [span(2.6, 1.4), span(4.2, 2.2)], "hut", ward, out);
+      continue;
+    }
+    if (kind === "wasteland") {
+      scatter(inner, span(60, 12), own, [span(4, 1.5), span(14, 4)], "ruin", ward, out);
+      continue;
+    }
+    if (kind === "spaceport") {
+      // Launch pads in a row, hangars along the edge.
+      for (const block of grid(inner, angles[ward], span(120, 14), span(40, 5))) {
+        const pad = insetConvex(block, m(18));
+        if (pad) push(pad, own.chance(0.6) ? "landmark" : "industrial", 1);
+      }
+      continue;
+    }
     if (kind === "cemetery") {
       const chapel = insetConvex(inner, Math.sqrt(area(inner)) * 0.38);
       if (chapel) push(chapel, "landmark", 1);
@@ -208,9 +247,14 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
       continue;
     }
 
-    const rule = !organic && kind === "suburb" ? MODERN_SUBURB : RULES[kind] ?? RULES.craftsmen!;
+    const rule = (params.era === "far-future" ? FUTURE_RULES[kind] : params.era === "post-apocalypse" ? FALLEN_RULES[kind] : undefined) ?? (!organic && kind === "suburb" ? MODERN_SUBURB : RULES[kind] ?? RULES.craftsmen!);
     const nearRoad = (poly: Point[]) => roads.some((road) => distanceToPolyline(centroid(poly), road.points) < m(45));
-    const cells = rule.block && !organic && kind !== "old-town" ? grid(inner, angles[ward], span(rule.block, 9), span(params.era === "cyberpunk" ? 12 : params.era === "modern" ? 10 : 8, 1.2)) : [inner];
+    const cells =
+      params.era === "ancient"
+        ? grid(inner, gridAngle, span(38, 8), span(5, 1))
+        : rule.block && !organic && kind !== "old-town"
+          ? grid(inner, angles[ward], span(rule.block, 9), span(params.era === "cyberpunk" ? 12 : params.era === "modern" ? 10 : 8, 1.2))
+          : [inner];
     for (const block of cells) {
       const parts: Point[][] = [];
       if (kind === "megablock") parts.push(block);
@@ -222,7 +266,9 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
         const shape = insetConvex(lot, m(rule.gap));
         if (!shape || area(shape) < Math.min(lotArea(12), 3)) continue;
         const floors = own.int(rule.floors[0], rule.floors[1]) + (organic ? Math.round(wealth[ward]) : 0);
-        push(shape, rule.kind === "tower" && floors < 8 ? "house" : rule.kind, floors);
+        // A ruin keeps only part of its walls.
+        const ruined = rule.kind === "ruin" ? insetConvex(shape, m(own.float(0, rule.gap))) : shape;
+        if (ruined) push(ruined, rule.kind === "tower" && floors < 8 ? "house" : rule.kind, floors);
       }
     }
   }

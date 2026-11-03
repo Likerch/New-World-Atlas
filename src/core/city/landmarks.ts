@@ -1,6 +1,7 @@
 // Places in town a game master can send players to: the well on the market square, the cathedral, taverns by the
 // gates, the docks — or, centuries later, the station, the stadium, a ripperdoc's back room, the way down to the
-// undercity.
+// undercity. A stone-age camp has its fire and its chief's hut, a polis its agora and theatre, a city of the far future
+// its launch pads and AI core, and a dead city its barter market, water still and the raiders' fort.
 import type { Point } from "../geometry";
 import { name } from "../language";
 import { area, centroid, distanceToPolyline } from "../polygon";
@@ -32,7 +33,62 @@ export function placeLandmarks(params: CityParams, layout: Layout, buildings: Bu
   const byRiver = (b: Building) => !!layout.river && distanceToPolyline(centroid(b.polygon), layout.river.points) < layout.river.width * 2;
   const taverns = Math.max(1, Math.min(6, Math.round(1 + Math.sqrt(params.population))));
 
+  const centre = (kinds: WardKind[]) => {
+    const ward = layout.kinds.findIndex((kind) => kinds.includes(kind));
+    return ward >= 0 ? ward : -1;
+  };
   switch (params.era) {
+    case "stone": {
+      const plaza = centre(["plaza"]);
+      if (plaza >= 0) add("fire-pit", centroid(layout.diagram.cells[plaza]), plaza);
+      place("chief-hut", ["craftsmen"], true, true);
+      place("sacred-stone", ["temple"], true, true);
+      place("flint-workshop", ["craftsmen"], false);
+      place("animal-pen", ["craftsmen", "farm"], false);
+      break;
+    }
+    case "ancient": {
+      const plaza = centre(["plaza"]);
+      if (plaza >= 0) add("agora", centroid(layout.diagram.cells[plaza]), plaza, true);
+      place("temple", ["temple"], true, true);
+      place("keep", ["castle"], true, true);
+      place("theatre", ["patriciate", "merchants", "administration"], true, true);
+      if (params.population > 20) place("arena", ["craftsmen", "merchants", "suburb"], true, true);
+      place("gymnasium", ["patriciate", "merchants"], false, true);
+      if (params.population > 10) place("library", ["administration", "patriciate", "merchants"], false, true);
+      place("bathhouse", ["merchants", "craftsmen"], false, true);
+      for (let k = 0; k < Math.ceil(taverns / 2); k++) place("tavern", ["merchants", "craftsmen", "slum"], false, true);
+      place("smithy", ["craftsmen", "military"], false, true);
+      place("barracks", ["military"], true);
+      place("docks", ["harbour"], true, true);
+      if (params.port) place("lighthouse", ["harbour"], false, true);
+      break;
+    }
+    case "far-future":
+      place("ai-core", ["arcology"], true, true);
+      place("launch-pad", ["spaceport"], true, true);
+      place("station", ["commercial", "arcology", "residential"], true);
+      place("lab", ["campus", "industrial"], true, true);
+      place("university", ["campus"], false, true);
+      place("hospital", ["residential", "commercial"], true, true);
+      place("garden-dome", ["park", "rich-residential", "residential"], true, true);
+      place("museum", ["commercial"], false, true);
+      for (let k = 0; k < Math.ceil(taverns / 2); k++) place("club", ["commercial", "residential"], false, true);
+      place("av-port", ["commercial", "arcology"], true);
+      place("undercity", ["industrial", "residential"], false);
+      place("docks", ["port"], true);
+      break;
+    case "post-apocalypse":
+      place("barter-market", ["settlement"], false, true);
+      place("water-still", ["settlement"], false, true);
+      place("ripperdoc", ["settlement"], false, true);
+      for (let k = 0; k < Math.ceil(taverns / 2); k++) place("tavern", ["settlement", "slum"], false, true);
+      place("raider-fort", ["ruins", "industrial"], true, true);
+      place("scrapyard", ["industrial", "ruins", "port"], true, true);
+      place("radio-tower", ["ruins"], false, true);
+      for (let k = 0; k < 2; k++) place("vault-door", ["ruins", "wasteland"], false, true);
+      place("docks", ["port"], true);
+      break;
     case "medieval":
     case "renaissance": {
       const plaza = layout.kinds.indexOf("plaza");

@@ -102,11 +102,11 @@ export function CityInspector({ city, t, nm, selection, onSelect, onOpenBuilding
   const wardTitle = (id: number) => {
     const ward = city.wards.find((w) => w.id === id);
     if (!ward) return "";
-    return `${t(`ward.${ward.kind}`)}${ward.name ? ` ${nm(ward.name)}` : ""}`;
+    return `${t(`ward.${ward.kind}@${city.params.era}`)}${ward.name ? ` ${nm(ward.name)}` : ""}`;
   };
   const landmarkTitle = (id: number) => {
     const landmark = city.landmarks.find((l) => l.id === id)!;
-    return `${t(`landmark.${landmark.kind}`)}${landmark.name ? ` «${nm(landmark.name)}»` : ""}`;
+    return `${t(`landmark.${landmark.kind}@${city.params.era}`)}${landmark.name ? ` «${nm(landmark.name)}»` : ""}`;
   };
 
   let card = <p className="muted">{t("city.hint")}</p>;
@@ -191,7 +191,7 @@ export function CityInspector({ city, t, nm, selection, onSelect, onOpenBuilding
               </button>
             </b>
           </div>
-          {landmark.kind === "undercity" ? (
+          {landmark.kind === "undercity" || landmark.kind === "vault-door" ? (
             <button type="button" className="primary wide" onClick={() => onOpenLocal(landmark.id)}>
               🗺️ {t("action.openLocal")}
             </button>

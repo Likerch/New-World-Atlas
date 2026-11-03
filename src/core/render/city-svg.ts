@@ -1,12 +1,13 @@
 // A city as an SVG string: water, fields and parks, buildings (towers cast shadows), streets and highways, bridges,
-// walls with towers and gates, landmark icons and names, with a scale bar in metres.
+// walls with towers and gates, landmark icons and names, with a scale bar in metres. A stone-age camp gets a wooden
+// palisade, the survivors' holds of a dead city scrap barricades; ruins are drawn broken.
 import type { City, CityParams, LandmarkKind, WardKind } from "../city/model";
 import { pathData, smooth, type Point } from "../geometry";
 import { toCyrillic } from "../language";
 import { centroid } from "../polygon";
 
-export type CityThemeId = "ink" | "color" | "parchment" | "blueprint" | "neon";
-export const CITY_THEMES: CityThemeId[] = ["ink", "color", "parchment", "blueprint", "neon"];
+export type CityThemeId = "ink" | "color" | "parchment" | "blueprint" | "neon" | "future" | "wasteland";
+export const CITY_THEMES: CityThemeId[] = ["ink", "color", "parchment", "blueprint", "neon", "future", "wasteland"];
 
 export type CityLayerId = "wards" | "fields" | "trees" | "buildings" | "streets" | "walls" | "labels" | "landmarks" | "frame";
 export const CITY_LAYERS: CityLayerId[] = ["wards", "fields", "trees", "buildings", "streets", "walls", "labels", "landmarks", "frame"];
@@ -59,6 +60,10 @@ const COLOR_TINT: Partial<Record<WardKind, string>> = {
   arcology: "#d9dbe4",
   megablock: "#dcdad8",
   "combat-zone": "#d6cbc0",
+  spaceport: "#dfe3ea",
+  ruins: "#d8d2c8",
+  settlement: "#e6d6b8",
+  wasteland: "#d4cab4",
 };
 
 const THEMES: Record<CityThemeId, CityTheme> = {
@@ -66,11 +71,13 @@ const THEMES: Record<CityThemeId, CityTheme> = {
   color: { paper: "#f2ede1", water: "#9cc4e0", shore: "#5a7d99", field: ["#e2e6b8", "#d8e0a8"], fieldLine: "#a9b07a", tree: "#9cc68a", treeLine: "#5c8a4e", building: "#d9a582", rich: "#cf9670", landmark: "#b5674a", line: "#6a4a3a", tower: "#b9a7a0", shadow: "rgba(30,30,40,0.22)", street: "#fbf8f1", casing: "#b9ab92", highway: "#f6d27a", wall: "#6b5a4a", label: "#2a2520", halo: "#fbf8f1", tint: COLOR_TINT, font: "'Segoe UI', Arial, sans-serif", glow: false, plaza: "#ead8ae", pier: "#b08a5c" },
   parchment: { paper: "#ecdfc0", water: "#cdbf98", shore: "#5d4a30", field: ["#e4d5b0", "#ddcca4"], fieldLine: "#a8936a", tree: "#d6c79f", treeLine: "#6d5a3d", building: "#c9b48a", rich: "#bfa77b", landmark: "#a48b5f", line: "#4a3a26", tower: "#b5a07a", shadow: null, street: "#ecdfc0", casing: "#8f7a55", highway: "#efe2c4", wall: "#4a3a26", label: "#3a2c1c", halo: "#ecdfc0", tint: {}, font: "'Palatino Linotype', Georgia, serif", glow: false, plaza: "#e0d0aa", pier: "#bfa77b" },
   blueprint: { paper: "#1d3f6e", water: "#163257", shore: "#9cc3ef", field: ["#22477a", "#244a7e"], fieldLine: "#3f68a0", tree: "#24497c", treeLine: "#8fb5e6", building: "#2a5288", rich: "#2d5890", landmark: "#3a69a8", line: "#cfe3ff", tower: "#33609c", shadow: null, street: "#1d3f6e", casing: "#8fb5e6", highway: "#cfe3ff", wall: "#ffffff", label: "#e8f2ff", halo: "#1d3f6e", tint: {}, font: "'Segoe UI', Arial, sans-serif", glow: false, plaza: "#244a7e", pier: "#3a69a8" },
+  future: { paper: "#eef3f6", water: "#b9e2f2", shore: "#4fa9c9", field: ["#d9efdc", "#cfe9d4"], fieldLine: "#9cc9a6", tree: "#a8dbb5", treeLine: "#4f9a6a", building: "#ffffff", rich: "#f4fbff", landmark: "#bfe9f7", line: "#5c7d93", tower: "#e6f2fa", shadow: "rgba(40,80,110,0.16)", street: "#ffffff", casing: "#b7cbd8", highway: "#38c6e8", wall: "#38c6e8", label: "#1f3a4d", halo: "#eef3f6", tint: { arcology: "#dff2fb", commercial: "#e7f3f9", park: "#cdebd3", campus: "#e3f0e6", spaceport: "#dde6ee", industrial: "#e2e7eb", farm: "#d6eedb" }, font: "'Segoe UI', Arial, sans-serif", glow: false, plaza: "#e3eef4", pier: "#a9c6d6" },
+  wasteland: { paper: "#d6c8a8", water: "#8e9a86", shore: "#4b4a3a", field: ["#c9bb8e", "#c2b384"], fieldLine: "#8c7d55", tree: "#a6a07a", treeLine: "#5d5a3f", building: "#a99b80", rich: "#b3a586", landmark: "#c0623a", line: "#3d342a", tower: "#9a8c74", shadow: "rgba(40,30,20,0.25)", street: "#cbbd9c", casing: "#8b7c60", highway: "#bba982", wall: "#5a3e2a", label: "#2e261d", halo: "#d6c8a8", tint: { settlement: "#e2cfa6", wasteland: "#c4b38c", ruins: "#cdbf9f" }, font: "'Segoe UI', Arial, sans-serif", glow: false, plaza: "#cdbd98", pier: "#7d6e55" },
   neon: { paper: "#0b0d14", water: "#06121f", shore: "#1f8fff", field: ["#11161d", "#131920"], fieldLine: "#1f2a33", tree: "#0f2a1f", treeLine: "#1fbf7f", building: "#161a26", rich: "#1b2030", landmark: "#2a1838", line: "#2b3a55", tower: "#1a1f33", shadow: "rgba(0,0,0,0.55)", street: "#0b0d14", casing: "#232c40", highway: "#ffcc33", wall: "#ff3d7f", label: "#e6f1ff", halo: "#0b0d14", tint: {}, font: "'Segoe UI', Arial, sans-serif", glow: true, plaza: "#141826", pier: "#1a2a3a" },
 };
 
 export function defaultCityTheme(era: CityParams["era"]): CityThemeId {
-  return era === "cyberpunk" ? "neon" : era === "modern" || era === "industrial" ? "color" : "ink";
+  return era === "cyberpunk" ? "neon" : era === "far-future" ? "future" : era === "post-apocalypse" ? "wasteland" : era === "modern" || era === "industrial" ? "color" : era === "stone" ? "parchment" : "ink";
 }
 
 const LANDMARK_GLYPH: Record<LandmarkKind, string> = {
@@ -102,6 +109,26 @@ const LANDMARK_GLYPH: Record<LandmarkKind, string> = {
   "av-port": "✈",
   undercity: "▼",
   "gang-hq": "☠",
+  "fire-pit": "♨",
+  "chief-hut": "⌂",
+  "flint-workshop": "⚒",
+  "animal-pen": "⊞",
+  "sacred-stone": "⊓",
+  agora: "◉",
+  theatre: "◠",
+  arena: "◎",
+  gymnasium: "⚑",
+  library: "✎",
+  lab: "⚗",
+  "garden-dome": "◓",
+  "ai-core": "⌬",
+  "launch-pad": "⇑",
+  "barter-market": "⚖",
+  "water-still": "≈",
+  "raider-fort": "☠",
+  "vault-door": "⊟",
+  scrapyard: "⚙",
+  "radio-tower": "⫯",
 };
 
 export interface CityRenderOptions {
@@ -184,6 +211,15 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
         shapes.push(`<path d="${d}" fill="${th.rich}" stroke="none" opacity="0.7"/>`);
         return;
       }
+      if (building.kind === "ruin") {
+        shapes.push(`<path d="${d}" fill="${th.building}" fill-opacity="0.45" stroke="${th.line}" stroke-width="0.6" stroke-dasharray="${r1(Math.max(1.5, m(4)))} ${r1(Math.max(1, m(2.5)))}"/>`);
+        return;
+      }
+      if (building.kind === "hut") {
+        const [cx, cy] = centroid(building.polygon);
+        shapes.push(`<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(Math.hypot(building.polygon[0][0] - cx, building.polygon[0][1] - cy))}" fill="${th.building}" stroke="${th.line}" stroke-width="0.5"/>`);
+        return;
+      }
       if (building.kind === "stall") {
         shapes.push(`<path d="${d}" fill="${themeId === "color" ? (index % 3 ? "#d9634a" : "#e0b04a") : th.landmark}" stroke="${th.line}" stroke-width="0.3"/>`);
         return;
@@ -206,15 +242,24 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
     for (const street of city.streets) {
       const d = streetPath(street.kind === "highway" ? smooth(street.points, false, 2) : street.points);
       if (street.kind === "highway") out.push(`<path d="${d}" fill="none" stroke="${th.casing}" stroke-width="${r1(street.width + 2.5)}" stroke-linecap="round"/><path d="${d}" fill="none" stroke="${th.highway}" stroke-width="${r1(street.width)}" stroke-linecap="round"${th.glow ? ` filter="url(#glow)"` : ""}/>`);
+      else if (street.kind === "rail" && city.params.era === "far-future") out.push(`<path d="${d}" fill="none" stroke="#38c6e8" stroke-width="${r1(Math.max(2, street.width * 0.7))}" opacity="0.35"/><path d="${d}" fill="none" stroke="#1f8fb3" stroke-width="${r1(Math.max(0.8, street.width * 0.25))}"/>`);
       else if (street.kind === "rail") out.push(`<path d="${d}" fill="none" stroke="${th.line}" stroke-width="${r1(Math.max(1.2, street.width * 0.6))}"/><path d="${d}" fill="none" stroke="${th.paper}" stroke-width="${r1(Math.max(0.6, street.width * 0.3))}" stroke-dasharray="3 3"/>`);
       else if (street.kind === "skyway") out.push(`<path d="${d}" fill="none" stroke="${th.glow ? "#38e1ff" : th.line}" stroke-width="${r1(Math.max(1.5, street.width * 0.5))}" stroke-dasharray="6 3" opacity="0.85"${th.glow ? ` filter="url(#glow)"` : ""}/>`);
     }
   }
 
   if (layers.walls) {
+    const era = city.params.era;
     for (const wall of city.walls) {
-      const width = wall.citadel ? m(5) : m(6.5);
       const ring = [...wall.ring, wall.ring[0]];
+      // A palisade of stakes round a camp; scrap barricades round a hold after the fall.
+      if (era === "stone" || era === "post-apocalypse") {
+        const stakes = era === "stone";
+        out.push(`<path d="${pathData(ring, true)}" fill="none" stroke="${stakes ? "#7a5634" : th.wall}" stroke-width="${r1(Math.max(1.4, m(stakes ? 1.5 : 3)))}" stroke-dasharray="${stakes ? "1.2 0.8" : "5 2 2 2"}" stroke-linejoin="round"/>`);
+        for (const p of wall.gates) out.push(`<circle cx="${r1(p[0])}" cy="${r1(p[1])}" r="${r1(Math.max(2, m(4)))}" fill="${th.paper}" stroke="${stakes ? "#7a5634" : th.wall}" stroke-width="1"/>`);
+        continue;
+      }
+      const width = wall.citadel ? m(5) : m(6.5);
       out.push(`<path d="${pathData(ring, true)}" fill="none" stroke="${th.wall}" stroke-width="${r1(Math.max(1.6, width))}" stroke-linejoin="round"/>`);
       if (wall.bastions) {
         // Star-fort bastions: arrowheads at each corner, pointing outwards.

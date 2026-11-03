@@ -1,6 +1,6 @@
 // City-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { CITY_THEMES, cityTiers, renderTier, generateDistrict, cityFromBurg, distanceToPolyline, ERAS, generateCity, generatePlanet, pointInPolygon, renderCity } from "../src/core/index";
+import { buildingFromCity, generateBuilding, SETTINGS, CITY_THEMES, cityTiers, renderTier, generateDistrict, cityFromBurg, distanceToPolyline, ERAS, generateCity, generatePlanet, pointInPolygon, renderCity } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -89,6 +89,27 @@ test("a cyberpunk city has an upper tier and an undercity; an old town has catac
   const old = cityTiers(port);
   assert.equal(old.upper.roofs.length, 0);
   assert.ok(old.under.halls.some((hall) => hall.purpose === "ossuary"));
+});
+
+test("a camp, a polis, a city of the far future and a dead city each look their age; a planet town opens in its world's age", () => {
+  const camp = generateCity({ seed: "ages", era: "stone", population: 0.4, walls: true });
+  assert.ok(camp.buildings.some((b) => b.kind === "hut") && !camp.buildings.some((b) => b.kind === "house" || b.kind === "tower"), "huts only");
+  assert.ok(camp.landmarks.some((l) => l.kind === "fire-pit"));
+  const hut = generateBuilding(buildingFromCity(camp, camp.buildings.findIndex((b) => b.kind === "hut")));
+  const things = hut.floors.flatMap((floor) => floor.rooms.flatMap((room) => room.furniture.map((item) => item.kind)));
+  assert.ok(things.includes("hearth") && !things.includes("table") && !things.includes("bed"), "a hearth, mats and furs, no tables or beds");
+  const polis = generateCity({ seed: "ages", era: "ancient", population: 40 });
+  assert.ok(polis.landmarks.some((l) => l.kind === "agora") && polis.walls.length > 0, "an agora inside walls");
+  const future = generateCity({ seed: "ages", era: "far-future", population: 900 });
+  assert.ok(future.wards.some((w) => w.kind === "spaceport") && future.landmarks.some((l) => l.kind === "ai-core"), "a spaceport and an AI core");
+  assert.ok(future.streets.some((street) => street.kind === "rail"), "maglev lines");
+  const fallen = generateCity({ seed: "ages", era: "post-apocalypse", population: 6 });
+  assert.ok(fallen.wards.some((w) => w.kind === "settlement") && fallen.buildings.filter((b) => b.kind === "ruin").length > fallen.buildings.filter((b) => b.kind === "house").length, "a hold among ruins");
+  for (const city of [camp, polis, future, fallen]) assert.doesNotMatch(renderCity(city), /NaN|undefined|Infinity/u);
+  const world = generatePlanet({ seed: "ages", cells: 3000, setting: SETTINGS["far-future"] });
+  const capital = world.burgs.find((b) => b.capital)!;
+  assert.equal(cityFromBurg(world, capital.id).params.era, "far-future");
+  assert.equal(cityFromBurg(world, capital.id).params.population, Math.round(capital.population * 100) / 100, "a town sized by its age keeps its people");
 });
 
 console.log(`city: ${passed} regressions passed`);

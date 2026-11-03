@@ -1,13 +1,14 @@
 // Buildings and interiors. A footprint becomes floors (a cellar, the ground floor, upper floors) whose rooms follow
 // the building's purpose — a tavern's common room and guest rooms, a temple's nave, a keep's hall and cells, an
 // office tower's open floors. Doors join every room to the way in, windows open the outer walls, furniture fills the
-// rooms, and a fenced yard surrounds the house. Coordinates are metres.
+// rooms, and a fenced yard surrounds the house. Coordinates are metres. The age furnishes them: furs and a hearth in a
+// stone-age hut, holo-tables and sleep pods in the far future, mattresses and crates after the fall.
 import type { Era } from "../city/model";
 import type { Point } from "../geometry";
 import { createRng, type Rng } from "../random";
 
-export type BuildingType = "house" | "manor" | "tavern" | "shop" | "smithy" | "temple" | "keep" | "warehouse" | "apartment" | "office" | "clinic" | "club";
-export const BUILDING_TYPES: BuildingType[] = ["house", "manor", "tavern", "shop", "smithy", "temple", "keep", "warehouse", "apartment", "office", "clinic", "club"];
+export type BuildingType = "house" | "manor" | "tavern" | "shop" | "smithy" | "temple" | "keep" | "warehouse" | "apartment" | "office" | "clinic" | "club" | "hut";
+export const BUILDING_TYPES: BuildingType[] = ["house", "manor", "tavern", "shop", "smithy", "temple", "keep", "warehouse", "apartment", "office", "clinic", "club", "hut"];
 
 export type RoomKind =
   | "hall"
@@ -73,7 +74,16 @@ export type FurnitureKind =
   | "plant"
   | "booth"
   | "carpet"
-  | "pillar";
+  | "pillar"
+  // The stone age, the far future and the fallen world.
+  | "furs"
+  | "mat"
+  | "log"
+  | "pot"
+  | "holo-table"
+  | "pod"
+  | "replicator"
+  | "mattress";
 
 export interface Rect {
   x: number;
@@ -157,6 +167,7 @@ const SIZES: Record<BuildingType, [number, number, number, number]> = {
   office: [24, 36, 18, 26],
   clinic: [11, 15, 9, 12],
   club: [18, 26, 13, 18],
+  hut: [4, 7, 4, 7],
 };
 
 /** Floor counts each type usually has. */
@@ -173,6 +184,7 @@ export const BUILDING_FLOORS: Record<BuildingType, [number, number]> = {
   office: [5, 20],
   clinic: [1, 2],
   club: [1, 2],
+  hut: [1, 1],
 };
 
 /** Rooms of each floor: [kind, share of the floor]; "corridor" floors line their rooms along a central hallway. */
@@ -207,8 +219,17 @@ function program(type: BuildingType, level: number, top: number, rng: Rng, moder
       return level === 0 ? { rooms: [["waiting-room", 0.34], ["operating-room", 0.34], ["storage", 0.14], ["office", 0.18]] } : { rooms: [["bedroom", 0.5], ["server-room", 0.5]] };
     case "club":
       return level === 0 ? { rooms: [["dance-floor", 0.5], ["bar", 0.2], ["vip", 0.15], ["toilet", 0.15]] } : { rooms: [["vip", 0.5], ["office", 0.5]] };
+    case "hut":
+      return { rooms: [["hall", 1]] };
   }
 }
+
+/** What each age has in place of the middle ages' furniture; null where it has nothing. */
+const AGE_FURNITURE: Partial<Record<Era, Partial<Record<FurnitureKind, FurnitureKind | null>>>> = {
+  stone: { bed: "furs", bunk: "furs", table: "mat", "round-table": "mat", desk: "mat", counter: "mat", chair: "log", bench: "log", pew: "log", sofa: "furs", chest: "pot", wardrobe: "pot", shelf: "pot", barrel: "pot", crate: "pot", stove: "hearth", carpet: "furs", tub: null, toilet: null, screen: null, throne: "furs", forge: "hearth", anvil: "log" },
+  "far-future": { table: "holo-table", desk: "holo-table", "round-table": "holo-table", bed: "pod", bunk: "pod", stove: "replicator", hearth: "replicator", chest: "crate", barrel: "crate" },
+  "post-apocalypse": { bed: "mattress", bunk: "mattress", sofa: "mattress", desk: "crate", wardrobe: "crate", screen: null, carpet: null, plant: null, stove: "barrel" },
+};
 
 /** Slices a rectangle into rooms with areas in proportion to their shares, keeping them as square as it can. */
 function slice(rect: Rect, rooms: [RoomKind, number][], out: { rect: Rect; kind: RoomKind }[], along?: "x" | "y"): void {
@@ -410,13 +431,13 @@ export function buildingParams(input: Partial<BuildingParams> = {}): BuildingPar
   return {
     seed,
     type,
-    era: input.era ?? (["apartment", "office", "clinic", "club"].includes(type) ? "modern" : "medieval"),
+    era: input.era ?? (["apartment", "office", "clinic", "club"].includes(type) ? "modern" : type === "hut" ? "stone" : "medieval"),
     name: "",
     width: Math.round(rng.float(w0, w1)),
     depth: Math.round(rng.float(d0, d1)),
     floors: rng.int(f0, f1),
-    cellar: type !== "temple" && rng.chance(0.6),
-    yard: ["house", "manor", "tavern", "smithy", "shop", "clinic"].includes(type),
+    cellar: type !== "temple" && type !== "hut" && rng.chance(0.6),
+    yard: ["house", "manor", "tavern", "smithy", "shop", "clinic", "hut"].includes(type),
     ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)),
   };
 }
@@ -424,7 +445,7 @@ export function buildingParams(input: Partial<BuildingParams> = {}): BuildingPar
 export function generateBuilding(input: Partial<BuildingParams> = {}): BuildingPlan {
   const params = buildingParams(input);
   const rng = createRng(params.seed).fork("building");
-  const modern = params.era === "modern" || params.era === "cyberpunk" || params.era === "industrial";
+  const modern = params.era === "modern" || params.era === "cyberpunk" || params.era === "industrial" || params.era === "far-future" || params.era === "post-apocalypse";
   // The long side runs along x; the street (and the front door) is on the bottom side, y = depth.
   const W = Math.max(params.width, params.depth, 5);
   const D = Math.max(4, Math.min(params.width, params.depth));
@@ -510,7 +531,10 @@ export function generateBuilding(input: Partial<BuildingParams> = {}): BuildingP
         }
       }
     }
-    for (const room of rooms) room.furniture = furnish(room, doors.filter((door) => door.rooms.includes(room.id)), params.type, modern, own);
+    for (const room of rooms) room.furniture = furnish(room, doors.filter((door) => door.rooms.includes(room.id)), params.type, modern, own).flatMap((item) => {
+   const swap = AGE_FURNITURE[params.era]?.[item.kind];
+   return swap === null ? [] : swap ? [{ ...item, kind: swap, round: swap === "pot" || item.round }] : [item];
+ });
     floors.push({ level, rooms, doors, windows });
   }
 

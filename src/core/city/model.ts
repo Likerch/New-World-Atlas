@@ -3,11 +3,13 @@
 // converts them to metres.
 import type { Point } from "../geometry";
 import type { Language } from "../language";
+import { ERA_IDS, type EraId } from "../setting";
 
-/** Organic eras grow quarter by quarter; the later ones are planned on street grids. */
-export type Era = "medieval" | "renaissance" | "industrial" | "modern" | "cyberpunk";
-export const ERAS: Era[] = ["medieval", "renaissance", "industrial", "modern", "cyberpunk"];
-export const organicEra = (era: Era) => era === "medieval" || era === "renaissance";
+/** A city's age is the world's: stone-age camps and walled towns grow quarter by quarter (antiquity lays its houses on a
+ * grid inside the walls); the machine ages plan whole districts on street grids, and after the fall they lie in ruins. */
+export type Era = EraId;
+export const ERAS: Era[] = ERA_IDS;
+export const organicEra = (era: Era) => era === "stone" || era === "ancient" || era === "medieval" || era === "renaissance";
 
 export type WardKind =
   // Walled towns.
@@ -37,7 +39,12 @@ export type WardKind =
   | "old-town"
   | "arcology"
   | "megablock"
-  | "combat-zone";
+  | "combat-zone"
+  // The far future and the fallen city.
+  | "spaceport"
+  | "ruins"
+  | "settlement"
+  | "wasteland";
 
 export interface CityParams {
   seed: string;
@@ -74,7 +81,8 @@ export interface Ward {
   buildings: number;
 }
 
-export type BuildingKind = "house" | "landmark" | "tower" | "industrial" | "field" | "tree" | "grave" | "stall" | "pier" | "yard" | "shed";
+/** A hut is a stone-age dwelling; a ruin is what is left of a building after the fall. */
+export type BuildingKind = "house" | "landmark" | "tower" | "industrial" | "field" | "tree" | "grave" | "stall" | "pier" | "yard" | "shed" | "hut" | "ruin";
 
 export interface Building {
   polygon: Point[];
@@ -132,7 +140,27 @@ export type LandmarkKind =
   | "club"
   | "av-port"
   | "undercity"
-  | "gang-hq";
+  | "gang-hq"
+  | "fire-pit"
+  | "chief-hut"
+  | "flint-workshop"
+  | "animal-pen"
+  | "sacred-stone"
+  | "agora"
+  | "theatre"
+  | "arena"
+  | "gymnasium"
+  | "library"
+  | "lab"
+  | "garden-dome"
+  | "ai-core"
+  | "launch-pad"
+  | "barter-market"
+  | "water-still"
+  | "raider-fort"
+  | "vault-door"
+  | "scrapyard"
+  | "radio-tower";
 
 export interface Landmark {
   id: number;

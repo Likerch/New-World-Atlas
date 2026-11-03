@@ -121,6 +121,22 @@ export function piece(f: Furniture, th: Theme, px = PX): string {
       return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#b0463c" fill-opacity="0.35" stroke="#b0463c" stroke-width="1.2" stroke-dasharray="4 2"/>`;
     case "pillar":
       return circle(th.stone);
+    case "furs":
+      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.min(w, h) / 3}" fill="#9a7650" stroke="${th.line}" stroke-width="0.6"/>`;
+    case "mat":
+      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#d8c08a" fill-opacity="0.6" stroke="#a88a50" stroke-width="0.8" stroke-dasharray="3 2"/>`;
+    case "log":
+      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.min(w, h) / 2}" fill="#7a5634" stroke="${th.line}" stroke-width="0.6"/>`;
+    case "pot":
+      return circle("#b8734a");
+    case "holo-table":
+      return rect("#e6f6fb") + `<rect x="${x + w * 0.15}" y="${y + h * 0.15}" width="${w * 0.7}" height="${h * 0.7}" fill="none" stroke="#38c6e8" stroke-width="1.2"/>`;
+    case "pod":
+      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${Math.min(w, h) / 2}" fill="#ffffff" stroke="#38c6e8" stroke-width="1.2"/>`;
+    case "replicator":
+      return rect("#c9d3da") + `<rect x="${x + w * 0.3}" y="${y + h * 0.25}" width="${w * 0.4}" height="${h * 0.5}" fill="#38c6e8"/>`;
+    case "mattress":
+      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#e9e1cc" stroke="${th.line}" stroke-width="0.6" stroke-dasharray="2 1.5"/>`;
   }
 }
 

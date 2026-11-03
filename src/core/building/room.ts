@@ -62,7 +62,7 @@ export function generateRoom(plan: BuildingPlan, floorIndex: number, roomId: num
   const room = floor.rooms.find((r) => r.id === roomId)!;
   const seed = `${plan.params.seed}/floor-${floor.level}/room-${roomId}`;
   const rng = createRng(seed);
-  const modern = plan.params.era === "modern" || plan.params.era === "cyberpunk" || plan.params.era === "industrial";
+  const modern = plan.params.era === "modern" || plan.params.era === "cyberpunk" || plan.params.era === "industrial" || plan.params.era === "far-future";
   const local = (x: number, y: number): Point => [x - room.x, y - room.y];
   const furniture = room.furniture.map((f) => ({ ...f, x: f.x - room.x, y: f.y - room.y }));
   const items: RoomItem[] = [];

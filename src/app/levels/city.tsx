@@ -38,7 +38,7 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
   const set = <K extends keyof CityParams>(key: K, value: CityParams[K]) => setInput((current) => ({ ...current, [key]: value }));
   const tiers = useMemo(() => (city && tier !== "street" ? cityTiers(city) : null), [city, tier]);
   const svg = useMemo(() => (city ? (tiers ? renderTier(city, tiers, tier, { theme, layers, script: ctx.script }) : renderCity(city, { theme, layers, script: ctx.script, highlight: selection?.kind === "ward" ? selection.id : null })) : ""), [city, tiers, tier, theme, layers, ctx.script, selection]);
-  const highTier = city ? city.params.era === "modern" || city.params.era === "cyberpunk" : false;
+  const highTier = city ? city.params.era === "modern" || city.params.era === "cyberpunk" || city.params.era === "far-future" : false;
 
   return {
     id: "city",
@@ -56,14 +56,15 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
     selected: !city
       ? null
       : selection?.kind === "ward"
-        ? { key: `ward:${selection.id}`, label: city.wards.find((w) => w.id === selection.id)?.name || t(`ward.${city.wards.find((w) => w.id === selection.id)?.kind}`) }
+        ? { key: `ward:${selection.id}`, label: city.wards.find((w) => w.id === selection.id)?.name || t(`ward.${city.wards.find((w) => w.id === selection.id)?.kind}@${city.params.era}`) }
         : selection?.kind === "landmark"
-          ? { key: `landmark:${selection.id}`, label: city.landmarks.find((l) => l.id === selection.id)?.name || t(`landmark.${city.landmarks.find((l) => l.id === selection.id)?.kind}`) }
+          ? { key: `landmark:${selection.id}`, label: city.landmarks.find((l) => l.id === selection.id)?.name || t(`landmark.${city.landmarks.find((l) => l.id === selection.id)?.kind}@${city.params.era}`) }
           : selection?.kind === "building"
             ? { key: `building:${selection.id}`, label: t(`bkind.${city.buildings[selection.id]?.kind}`) }
             : { key: "world", label: city.name },
     openFromBurg: (planet, burg) => {
-      const { params, language: tongue } = cityFromBurg(planet, burg, input.era);
+      // A town opens in its world's own age; the era picker can show it in another.
+      const { params, language: tongue } = cityFromBurg(planet, burg);
       setLanguage(tongue);
       setTheme(defaultCityTheme(params.era));
       build(params, tongue);

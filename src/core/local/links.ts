@@ -41,8 +41,8 @@ export function localFromMarker(planet: Planet, markerId: number): LocalLink | n
 
 export function localFromLandmark(city: City, landmarkId: number): LocalLink | null {
   const landmark = city.landmarks.find((item) => item.id === landmarkId);
-  if (!landmark || landmark.kind !== "undercity") return null;
-  const future = city.params.era === "cyberpunk" || city.params.era === "modern";
+  if (!landmark || (landmark.kind !== "undercity" && landmark.kind !== "vault-door")) return null;
+  const future = ["modern", "cyberpunk", "far-future", "post-apocalypse"].includes(city.params.era);
   return { params: { seed: `${city.params.seed}/landmark-${landmarkId}`, kind: "dungeon", theme: future ? "bunker" : "sewer", danger: 3 }, language: city.language };
 }
 

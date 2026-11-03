@@ -115,7 +115,7 @@ export function buildStreets(params: CityParams, layout: Layout, language: City[
       });
       if (!route) continue;
       for (let k = 1; k < route.length; k++) major.add(edgeKey(route[k - 1], route[k]));
-      add("main", route.map((corner) => corners[corner]), metres(9), true);
+      add("main", route.map((corner) => corners[corner]), metres(params.era === "stone" ? 3 : 9), params.era !== "stone");
       // Out of the gate, a road to the edge of the map, heading away from the centre.
       const p = corners[gate];
       const away = Math.atan2(p[1] - center[1], p[0] - center[0]);
@@ -127,11 +127,11 @@ export function buildStreets(params: CityParams, layout: Layout, language: City[
         const turn = 1 - Math.cos(heading - away);
         return length * (1 + turn * 1.5) * (crossesRiver(a, b) ? 3 : 1);
       });
-      if (road) add("road", road.map((corner) => corners[corner]), metres(6));
+      if (road) add("road", road.map((corner) => corners[corner]), metres(params.era === "stone" ? 2 : 6));
     }
   } else {
     // Avenues on every border between town districts.
-    const arterial = metres(params.era === "cyberpunk" ? 26 : params.era === "modern" ? 20 : 14);
+    const arterial = metres(params.era === "cyberpunk" ? 26 : params.era === "modern" || params.era === "post-apocalypse" ? 20 : params.era === "far-future" ? 22 : 14);
     const segments: [number, number][] = [];
     for (let ward = 0; ward < n; ward++) {
       if (!urban[ward]) continue;
@@ -162,7 +162,7 @@ export function buildStreets(params: CityParams, layout: Layout, language: City[
         if (line.length > 3 && !inSea(line[line.length - 1])) add(kind, line, width);
       }
     };
-    if (params.era === "modern" || params.era === "cyberpunk") {
+    if (params.era === "modern" || params.era === "cyberpunk" || params.era === "post-apocalypse") {
       const ringRadius = radius * 1.08;
       let arc: Point[] = [];
       for (let k = 0; k <= 96; k++) {
@@ -177,7 +177,9 @@ export function buildStreets(params: CityParams, layout: Layout, language: City[
       spokes(rng.int(4, 6), "highway", metres(30), ringRadius);
     }
     if (params.era === "industrial") spokes(2, "rail", metres(6), radius * 0.15);
-    if (params.era === "cyberpunk") {
+    // Maglev lines run out from the heart of a city of the far future.
+    if (params.era === "far-future") spokes(rng.int(3, 5), "rail", metres(10), 0);
+    if (params.era === "cyberpunk" || params.era === "far-future") {
       const hubs = diagram.sites.filter((_, ward) => layout.kinds[ward] === "arcology" || layout.kinds[ward] === "commercial");
       for (let k = 1; k < hubs.length; k++) add("skyway", [hubs[0], hubs[k]], metres(10));
     }

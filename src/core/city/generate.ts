@@ -2,6 +2,7 @@
 // keeps its river, its coast, its walls and its people's language.
 import { createLanguage, name } from "../language";
 import { createRng, randomSeed } from "../random";
+import { ageOf, isClassic, peopleOf, settingOf, SETTINGS } from "../setting";
 import type { Planet } from "../planet/model";
 import { buildBuildings } from "./buildings";
 import { placeLandmarks } from "./landmarks";
@@ -13,13 +14,14 @@ export function cityParams(input: Partial<CityParams> = {}): CityParams {
   const seed = input.seed || randomSeed();
   const rng = createRng(seed).fork("city-params");
   const era: Era = input.era ?? rng.pick(ERAS);
-  const big = era === "modern" || era === "cyberpunk";
+  const big = era === "modern" || era === "cyberpunk" || era === "far-future";
+  const population = big ? Math.round(rng.float(200, 2500)) : Math.round(rng.float(3, 60) * 10) / 10;
   return {
     seed,
     name: "",
     width: 1200,
     height: 900,
-    population: big ? Math.round(rng.float(200, 2500)) : Math.round(rng.float(3, 60) * 10) / 10,
+    population: era === "stone" ? Math.round(population * 10) / 1000 : era === "post-apocalypse" ? Math.round(population * 3) / 10 : population,
     era,
     coast: rng.chance(0.45) ? rng.float(0, Math.PI * 2) : null,
     river: rng.chance(0.6) ? rng.float(0, Math.PI * 2) : null,
@@ -74,8 +76,13 @@ export function generateCity(input: Partial<CityParams> = {}, language = createL
   };
 }
 
-/** City parameters for a town of a generated planet: its size, river, coast, defences and people. */
-export function cityFromBurg(planet: Planet, burgId: number, era: Era): { params: CityParams; language: City["language"] } {
+/** The city age of a planet's world: its setting's age. */
+export function cityEraOf(planet: Planet): Era {
+  return ageOf(settingOf(planet.params.setting));
+}
+
+/** City parameters for a town of a generated planet: its size, river, coast, defences and people; by default in the world's own age. */
+export function cityFromBurg(planet: Planet, burgId: number, era: Era = cityEraOf(planet)): { params: CityParams; language: City["language"] } {
   const burg = planet.burgs[burgId];
   const { mesh } = planet;
   const cell = burg.cell;
@@ -90,12 +97,16 @@ export function cityFromBurg(planet: Planet, burgId: number, era: Era): { params
     const to = at + 1 < path.length ? path[at + 1] : null;
     river = to === null ? Math.atan2(planet.rivers[riverId].mouth[1] - mesh.y[from], planet.rivers[riverId].mouth[0] - mesh.x[from]) : Math.atan2(mesh.y[to] - mesh.y[from], mesh.x[to] - mesh.x[from]);
   }
+  // A town already sized by its world's age keeps its people; one seen in another age grows or shrinks to it. The classic
+  // world keeps its old rule, so its towns open as they always did.
+  const world = settingOf(planet.params.setting);
   const modern = era === "modern" || era === "cyberpunk";
+  const population = isClassic(world) ? (modern ? burg.population * 25 : burg.population) : (burg.population * peopleOf(SETTINGS[era]).urban) / peopleOf(world).urban;
   return {
     params: cityParams({
       seed: `${planet.params.seed}/burg-${burgId}`,
       name: burg.name,
-      population: Math.max(0.5, modern ? burg.population * 25 : burg.population),
+      population: Math.max(era === "stone" ? 0.03 : 0.5, isClassic(world) ? population : Math.round(population * 100) / 100),
       era,
       coast,
       river,

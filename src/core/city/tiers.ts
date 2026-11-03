@@ -53,7 +53,7 @@ export function cityTiers(city: City): Tiers {
 
   // Below: tunnels under the main streets, halls under the crowded quarters.
   const tunnels = city.streets.filter((s) => s.kind === "main" || s.kind === "avenue" || s.kind === "highway" || s.kind === "rail").map((s) => ({ points: s.points, width: Math.max(m(old ? 3 : 9), 2) }));
-  const crowded = city.wards.filter((w) => w.urban && ["slum", "craftsmen", "merchants", "temple", "megablock", "combat-zone", "industrial", "residential", "downtown", "commercial", "old-town", "harbour", "port"].includes(w.kind));
+  const crowded = city.wards.filter((w) => w.urban && ["slum", "craftsmen", "merchants", "temple", "megablock", "combat-zone", "industrial", "residential", "downtown", "commercial", "old-town", "harbour", "port", "ruins", "settlement"].includes(w.kind));
   const halls: Hall[] = [];
   const purposes: HallPurpose[] = old ? ["ossuary", "smugglers", "cult", "flooded", "market", "squat"] : ["market", "turf", "metro", "flooded", "cult", "smugglers", "squat"];
   for (const ward of rng.shuffle([...crowded]).slice(0, Math.max(2, Math.round(crowded.length * 0.45)))) {

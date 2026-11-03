@@ -49,6 +49,19 @@ const BY_LANDMARK: Record<string, BuildingType> = {
   "gang-hq": "club",
   museum: "manor",
   university: "office",
+  "chief-hut": "hut",
+  "flint-workshop": "hut",
+  theatre: "temple",
+  library: "manor",
+  gymnasium: "manor",
+  agora: "shop",
+  lab: "clinic",
+  "ai-core": "office",
+  "garden-dome": "manor",
+  "barter-market": "shop",
+  "water-still": "warehouse",
+  "raider-fort": "keep",
+  scrapyard: "warehouse",
 };
 
 /** The building at a map point, if any (not trees, fields, graves or piers). */
@@ -60,9 +73,10 @@ export function buildingFromCity(city: City, index: number): BuildingParams {
   const building = city.buildings[index];
   const ward = city.wards.find((w) => w.id === building.ward);
   const landmark = city.landmarks.find((l) => l.ward === building.ward && pointInPolygon([l.x, l.y], building.polygon));
-  const modern = city.params.era === "modern" || city.params.era === "cyberpunk" || city.params.era === "industrial";
+  const modern = ["modern", "cyberpunk", "industrial", "far-future", "post-apocalypse"].includes(city.params.era);
   let type: BuildingType = "house";
-  if (landmark && BY_LANDMARK[landmark.kind]) type = BY_LANDMARK[landmark.kind];
+  if (building.kind === "hut") type = "hut";
+  else if (landmark && BY_LANDMARK[landmark.kind]) type = BY_LANDMARK[landmark.kind];
   else if (building.kind === "landmark") type = ward?.kind === "temple" || ward?.kind === "cemetery" ? "temple" : ward?.kind === "castle" ? "keep" : "manor";
   else if (building.kind === "tower") type = ward && ["megablock", "residential", "combat-zone"].includes(ward.kind) ? "apartment" : "office";
   else if (building.kind === "industrial") type = "warehouse";
@@ -72,6 +86,7 @@ export function buildingFromCity(city: City, index: number): BuildingParams {
     else if (ward.kind === "craftsmen") type = (index * 2654435761) % 5 === 0 ? "smithy" : (index % 3 === 0 ? "shop" : "house");
     else if (ward.kind === "residential" || ward.kind === "megablock") type = modern && building.floors >= 3 ? "apartment" : "house";
     else if (ward.kind === "harbour" || ward.kind === "port") type = "warehouse";
+    else if (ward.kind === "settlement") type = "house";
   }
   const [a, b] = footprint(building.polygon);
   const width = Math.max(5, Math.min(60, Math.round(Math.max(a, b) * city.scale)));
