@@ -1,6 +1,7 @@
 // A new world in one go: its name and seed, its age, how much of the planet the map covers (the whole sphere, a
 // hemisphere, a continent or a region), relief, climate, peoples and realms, and how far its map may be zoomed out
 // and in. Nothing is made until the game master presses Create.
+import { hintOf } from "./i18n";
 import { Modal } from "./Modal";
 import { useState } from "react";
 import { randomSeed, TEMPLATES, type PlanetParams } from "../core/index";
@@ -21,9 +22,9 @@ function coverageOf(params: PlanetParams): Coverage {
   return (Object.entries(SPAN).find(([, value]) => Math.abs(value - span) < 1)?.[0] as Coverage | undefined) ?? "custom";
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
-    <label>
+    <label title={hint}>
       {label}
       {children}
     </label>
@@ -66,7 +67,7 @@ export function WorldForm({ t, initial, zoom, onCreate, onClose }: { t: T; initi
           <Field label={t("world.name")}>
             <input value={params.name ?? ""} placeholder={t("world.namePlaceholder")} onChange={(event) => set("name", event.target.value)} />
           </Field>
-          <Field label={t("field.seed")}>
+          <Field label={t("field.seed")} hint={hintOf(t, "seed")}>
             <span className="inline">
               <input value={params.seed} onChange={(event) => set("seed", event.target.value)} />
               <button type="button" onClick={() => set("seed", randomSeed())} title={t("action.random")}>
@@ -103,12 +104,12 @@ export function WorldForm({ t, initial, zoom, onCreate, onClose }: { t: T; initi
           ) : null}
           {coverage === "custom" ? (
             <>
-              <Field label={t("field.latitudeNorth")}>{number("latitudeNorth", -90, 90)}</Field>
-              <Field label={t("field.latitudeSouth")}>{number("latitudeSouth", -90, 90)}</Field>
+              <Field label={t("field.latitudeNorth")} hint={hintOf(t, "latitudeNorth")}>{number("latitudeNorth", -90, 90)}</Field>
+              <Field label={t("field.latitudeSouth")} hint={hintOf(t, "latitudeSouth")}>{number("latitudeSouth", -90, 90)}</Field>
             </>
           ) : null}
           <p className="muted">{t("world.size", { w: wide, h: tall })}</p>
-          <Field label={t("field.template")}>
+          <Field label={t("field.template")} hint={hintOf(t, "template")}>
             <select value={params.template} onChange={(event) => set("template", event.target.value as PlanetParams["template"])}>
               {TEMPLATES.map((id) => (
                 <option key={id} value={id}>
@@ -117,7 +118,7 @@ export function WorldForm({ t, initial, zoom, onCreate, onClose }: { t: T; initi
               ))}
             </select>
           </Field>
-          <Field label={t("field.cells")}>
+          <Field label={t("field.cells")} hint={hintOf(t, "cells")}>
             <select value={params.cells} onChange={(event) => set("cells", Number(event.target.value))}>
               {[3000, 5000, 10000, 20000, 30000, 50000].map((count) => (
                 <option key={count} value={count}>
@@ -126,20 +127,20 @@ export function WorldForm({ t, initial, zoom, onCreate, onClose }: { t: T; initi
               ))}
             </select>
           </Field>
-          <Field label={t("field.peakHeight")}>{number("peakHeight", 500, 12000, 100)}</Field>
+          <Field label={t("field.peakHeight")} hint={hintOf(t, "peakHeight")}>{number("peakHeight", 500, 12000, 100)}</Field>
           <h3>{t("world.climate")}</h3>
-          <Field label={t("field.temperatureEquator")}>{number("temperatureEquator", -20, 50)}</Field>
-          <Field label={t("field.temperaturePole")}>{number("temperaturePole", -60, 20)}</Field>
-          <Field label={t("field.precipitation")}>{number("precipitation", 0.1, 3, 0.1)}</Field>
+          <Field label={t("field.temperatureEquator")} hint={hintOf(t, "temperatureEquator")}>{number("temperatureEquator", -20, 50)}</Field>
+          <Field label={t("field.temperaturePole")} hint={hintOf(t, "temperaturePole")}>{number("temperaturePole", -60, 20)}</Field>
+          <Field label={t("field.precipitation")} hint={hintOf(t, "precipitation")}>{number("precipitation", 0.1, 3, 0.1)}</Field>
         </section>
         <section>
           <h3>{t("world.peoples")}</h3>
-          <Field label={t("field.cultures")}>{number("cultures", 1, 40)}</Field>
-          <Field label={t("field.states")}>{number("states", 1, 60)}</Field>
-          <Field label={t("field.towns")}>{number("towns", 0, 2000, 10)}</Field>
-          <Field label={t("field.provinceShare")}>{number("provinceShare", 0, 1, 0.05)}</Field>
-          <Field label={t("field.growth")}>{number("growth", 0.3, 3, 0.1)}</Field>
-          <Field label={t("history.depth")}>
+          <Field label={t("field.cultures")} hint={hintOf(t, "cultures")}>{number("cultures", 1, 40)}</Field>
+          <Field label={t("field.states")} hint={hintOf(t, "states")}>{number("states", 1, 60)}</Field>
+          <Field label={t("field.towns")} hint={hintOf(t, "towns")}>{number("towns", 0, 2000, 10)}</Field>
+          <Field label={t("field.provinceShare")} hint={hintOf(t, "provinceShare")}>{number("provinceShare", 0, 1, 0.05)}</Field>
+          <Field label={t("field.growth")} hint={hintOf(t, "growth")}>{number("growth", 0.3, 3, 0.1)}</Field>
+          <Field label={t("history.depth")} hint={hintOf(t, "history")}>
             <select value={params.history ?? 0} onChange={(event) => set("history", Number(event.target.value) || undefined)}>
               {[0, 200, 400, 700, 1000].map((years) => (
                 <option key={years} value={years}>

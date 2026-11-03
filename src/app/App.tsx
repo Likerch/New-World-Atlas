@@ -61,7 +61,7 @@ import { usePlanetLevel } from "./levels/planet";
 import { useGalaxyLevel, useSystemLevel, useUniverseLevel, type SpaceLinks } from "./levels/space";
 import type { Level, LevelContext, LevelId } from "./levels/types";
 import { MapView, type Focus } from "./MapView";
-import { LEVEL_ICON, WorldLibrary } from "./WorldLibrary";
+import { WorldLibrary } from "./WorldLibrary";
 import { useWorlds, type Worlds } from "./worlds";
 import { useListKeys } from "./keys";
 import { setUnits } from "./format";
@@ -69,6 +69,7 @@ import { printAtlas } from "./book";
 import { Handbook } from "./Handbook";
 import { Search } from "./Search";
 import { CheatSheet, Tour } from "./Help";
+import { LevelIcon } from "./LevelIcon";
 import { growPlanet } from "./work";
 
 function download(name: string, blob: Blob) {
@@ -698,7 +699,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
             .filter((item) => shown.includes(item.id))
             .map((item) => (
               <button key={item.id} type="button" aria-pressed={item.id === view} onClick={() => showLevel(item.id)}>
-                {item.icon} {t(`view.${item.id}`)}
+                <LevelIcon level={item.id} /> {t(`view.${item.id}`)}
                 {item.title ? `: ${nm(item.title)}` : ""}
               </button>
             ))}
@@ -835,14 +836,39 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
         <button type="button" className="ghost" onClick={() => setLibrary(true)}>
           📚 {world.name || t("worlds.unnamed")}
         </button>
-        {trail.map(([key, map]) => (
-          <span key={key}>
-            <span className="crumb-sep">›</span>
-            <button type="button" className="ghost" aria-current={key === here ? "page" : undefined} onClick={() => openMap(key)}>
-              {LEVEL_ICON[map.level]} {nm(map.title) || t(`view.${map.level}`)}
-            </button>
-          </span>
-        ))}
+        {trail.map(([key, map]) => {
+          // The maps beside this one: opened from the same map, of the same level.
+          const beside = map.parent ? Object.entries(world.maps).filter(([other, item]) => other !== key && item.parent === map.parent && item.level === map.level) : [];
+          return (
+            <span key={key}>
+              <span className="crumb-sep">›</span>
+              <button type="button" className="ghost" aria-current={key === here ? "page" : undefined} onClick={() => openMap(key)}>
+                <LevelIcon level={map.level} /> {nm(map.title) || t(`view.${map.level}`)}
+              </button>
+              {beside.length ? (
+                <details className="crumb-more">
+                  <summary title={t("worlds.beside")} aria-label={t("worlds.beside")}>
+                    ▾
+                  </summary>
+                  <div>
+                    {beside.map(([other, item]) => (
+                      <button
+                        key={other}
+                        type="button"
+                        onClick={(event) => {
+                          (event.currentTarget.closest("details") as HTMLDetailsElement).open = false;
+                          openMap(other);
+                        }}
+                      >
+                        <LevelIcon level={item.level} /> {nm(item.title) || t(`view.${item.level}`)}
+                      </button>
+                    ))}
+                  </div>
+                </details>
+              ) : null}
+            </span>
+          );
+        })}
       </nav>
       <aside className="controls">{level.controls}</aside>
       <main className="stage">

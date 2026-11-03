@@ -2523,6 +2523,22 @@ const TERMS: Record<string, [string, string]> = {
   "map.zoomIn": ["Zoom in", "Приблизить"],
   "map.zoomOut": ["Zoom out", "Отдалить"],
   "map.fit": ["Fit the whole map", "Показать карту целиком"],
+  "worlds.beside": ["Other maps opened beside this one", "Другие карты рядом с этой"],
+  "hint.seed": ["The same seed and settings always grow the same world", "Одинаковый сид и настройки всегда дают один и тот же мир"],
+  "hint.template": ["The shape of the land: one continent or many, islands, a sea within", "Форма суши: один материк или несколько, острова, внутреннее море"],
+  "hint.cells": ["Detail of the map: more cells draw finer coasts and more towns, and take longer", "Детальность карты: больше клеток — тоньше берега и больше городов, но дольше"],
+  "hint.latitudeNorth": ["Latitude of the map's top edge; 90 is the north pole", "Широта верхнего края карты; 90 — северный полюс"],
+  "hint.latitudeSouth": ["Latitude of the map's bottom edge; −90 is the south pole", "Широта нижнего края карты; −90 — южный полюс"],
+  "hint.temperatureEquator": ["The year's mean warmth at the equator, °C (Earth: about 27)", "Среднегодовая температура на экваторе, °C (Земля: около 27)"],
+  "hint.temperaturePole": ["The year's mean warmth at the poles, °C (Earth: about −28)", "Среднегодовая температура на полюсах, °C (Земля: около −28)"],
+  "hint.precipitation": ["Rain: 1 is Earth-like, 0.3 a dry world, 2 a wet one", "Осадки: 1 — как на Земле, 0,3 — сухой мир, 2 — влажный"],
+  "hint.peakHeight": ["Height of the highest peak, metres", "Высота высочайшей вершины, м"],
+  "hint.cultures": ["How many peoples settle the world", "Сколько народов заселяет мир"],
+  "hint.states": ["How many realms (or, with history, how many first polities)", "Сколько держав (а с историей — сколько первых держав)"],
+  "hint.towns": ["Towns besides capitals; 0 picks a number from the map's size", "Города кроме столиц; 0 — по размеру карты"],
+  "hint.provinceShare": ["Share of towns that head a province", "Доля городов, которые возглавляют провинцию"],
+  "hint.growth": ["How far realms reach: more for great empires, less for many small lands", "Размах держав: больше — великие империи, меньше — много малых земель"],
+  "hint.history": ["Years of history lived before the map: realms, towns, wars and rulers come out of it", "Сколько лет истории прожито до карты: из неё выходят державы, города, войны и правители"],
   "app.large": ["Larger type", "Крупный шрифт"],
   "app.settings": ["Settings", "Настройки"],
   "app.inspector": ["What is there", "Что там"],
@@ -4028,6 +4044,12 @@ function formOf(locale: Locale, count: number): number {
   if (n % 10 === 1 && n % 100 !== 11) return 0;
   if (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) return 1;
   return 2;
+}
+
+/** A field's hint, when the dictionary has one: shown as the field's tooltip. */
+export function hintOf(t: T, field: string): string | undefined {
+  const text = t(`hint.${field}`);
+  return text === `hint.${field}` ? undefined : text;
 }
 
 export function translator(locale: Locale) {

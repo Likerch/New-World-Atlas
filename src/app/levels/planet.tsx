@@ -10,6 +10,7 @@ import type { T } from "../i18n";
 import { describePlanet, searchPlanet } from "../planetText";
 import { growPlanet } from "../work";
 import { Tables } from "../Tables";
+import { hintOf } from "../i18n";
 import { Section } from "../Section";
 import { useLayers } from "./layers";
 import type { Level, LevelContext } from "./types";
@@ -485,7 +486,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
           </select>
         </label>
         {NUMBER_FIELDS.map(({ key, min, max, step }) => (
-          <label key={key}>
+          <label key={key} title={hintOf(t, key)}>
             {t(`field.${key}`)}
             <NumberInput min={min} max={max} step={step} value={params[key] as number} onChange={(value) => set(key, value as never)} />
           </label>
