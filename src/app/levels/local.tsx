@@ -13,6 +13,8 @@ export interface LocalLinks {
   openDeeper?: (link: LocalLink, entity: string) => void;
   /** Shows the cave in the underworld it belongs to, if it is part of one. */
   toUnderworld?: (map: LocalMap) => boolean;
+  /** The next map of this place (a floor down, the sheet beside) hangs from this one in the world. */
+  follow?: (entity: string) => void;
 }
 
 const COMPASS = ["n", "ne", "e", "se", "s", "sw", "w", "nw"];
@@ -91,6 +93,7 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null, link
     if (!raw) return;
     const to: [number, number] = [sheet[0] + dx, sheet[1] + dy];
     const { sheet: _old, ...rest } = raw.params;
+    links.follow?.(`sheet:${to[0]},${to[1]}`);
     build(localParams({ ...rest, ...(to[0] || to[1] ? { sheet: to } : {}) }), language);
   };
   const compass = (x: number, y: number) => {
@@ -160,6 +163,7 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null, link
             onClick={() => {
               const depth = (raw.params.depth ?? 1) + 1;
               setAbove([...above, raw]);
+              links.follow?.(`depth:${depth}`);
               // The same place one level deeper: its name, its ruler (who waits on the last level) and how deep it goes.
               build(localParams({ ...raw.params, seed: `${raw.params.seed.replace(/\/depth-\d+$/u, "")}/depth-${depth}`, depth, danger: Math.min(3, raw.params.danger + 1), rooms: raw.params.rooms + 2, name: raw.name }), language);
             }}

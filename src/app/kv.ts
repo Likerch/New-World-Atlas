@@ -42,9 +42,14 @@ export async function kvGet<T>(key: string): Promise<T | null> {
   const db = await open();
   if (!db) return local.get<T>(key);
   return new Promise((resolve) => {
-    const request = db.transaction(STORE).objectStore(STORE).get(key);
-    request.onsuccess = () => resolve((request.result as T | undefined) ?? null);
-    request.onerror = () => resolve(null);
+    try {
+      const request = db.transaction(STORE).objectStore(STORE).get(key);
+      request.onsuccess = () => resolve((request.result as T | undefined) ?? null);
+      request.onerror = () => resolve(null);
+    } catch {
+      // A connection the browser closed: what is kept beside it, if anything.
+      resolve(local.get<T>(key));
+    }
   });
 }
 

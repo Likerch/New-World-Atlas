@@ -93,13 +93,19 @@ export function useWorlds(defaultName: string) {
   const [state, setState] = useState<{ world: WorldDoc; list: WorldLine[]; trash: Trashed[] } | null>(null);
   const [saving, setSaving] = useState<SaveState>("saved");
   const past = useRef<WorldDoc[]>([]);
+  const [generation, setGeneration] = useState(0);
   const future = useRef<WorldDoc[]>([]);
   const lastChange = useRef(0);
   const current = useRef<WorldDoc | null>(null);
   current.current = state?.world ?? null;
 
   useEffect(() => {
-    startUp(defaultName).then(setState);
+    startUp(defaultName)
+      .then(setState)
+      .catch((problem: unknown) => {
+        console.error(problem);
+        setState({ world: firstWorld(defaultName), list: [], trash: [] });
+      });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Save the open world shortly after each change, and keep its line in the list current.
@@ -174,14 +180,14 @@ export function useWorlds(defaultName: string) {
       if (!before || !current.current) return;
       future.current.push(current.current);
       lastChange.current = 0;
-      setWorld(before);
+      setWorld({ ...before, maps: current.current.maps, last: current.current.last });
     },
     redo: () => {
       const next = future.current.pop();
       if (!next || !current.current) return;
       past.current.push(current.current);
       lastChange.current = 0;
-      setWorld(next);
+      setWorld({ ...next, maps: current.current.maps, last: current.current.last });
     },
     open: async (id: string) => {
       if (id === state?.world.id) return;
@@ -282,7 +288,10 @@ export function useWorlds(defaultName: string) {
       past.current = [...past.current.slice(-UNDO_DEPTH + 1), current.current];
       future.current = [];
       setWorld({ ...shot.world, id: current.current.id, updated: Date.now() });
+      setGeneration((count) => count + 1);
     },
+    /** Bumped when the open world is replaced in place (back to a snapshot): its view starts afresh. */
+    generation,
     /** A snapshot as a world of its own: a branch to try another way. */
     branch: (shot: Snapshot, name: string) => openDoc({ ...shot.world, id: newId(), name, created: Date.now(), updated: Date.now() }),
     /** A world as a file, to keep or to give to another game master. */
@@ -291,7 +300,7 @@ export function useWorlds(defaultName: string) {
      * file coming in as a copy. */
     load: async (data: unknown, merge = false) => {
       const doc = readWorld(data);
-      const exists = state?.list.some((item) => item.id === doc.id);
+      const exists = state?.list.some((item) => item.id === doc.id) || state?.trash.some((entry) => entry.line.id === doc.id);
       if (exists && merge) {
         const mine = state && doc.id === state.world.id ? state.world : await readDoc(doc.id);
         if (mine) return openDoc(mergeWorlds(mine, doc));
@@ -302,7 +311,7 @@ export function useWorlds(defaultName: string) {
     has: (data: unknown) => {
       try {
         const id = readWorld(data).id;
-        return !!state?.list.some((item) => item.id === id);
+        return !!state?.list.some((item) => item.id === id) || !!state?.trash.some((entry) => entry.line.id === id);
       } catch {
         return false;
       }

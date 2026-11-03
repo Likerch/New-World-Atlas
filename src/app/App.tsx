@@ -1,7 +1,7 @@
 // New World Atlas: the game master's map table. One world (a saved project) is open at a time: its top map and every
 // map reached from it by following links down. Every level (planet, city, building, …) supplies its settings, map and
 // inspector; the shell holds the world and its outline, the tabs, the seed, export, the names' script and the language.
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   GENERATOR,
   pageKey,
@@ -151,7 +151,35 @@ export function App() {
   const worlds = useWorlds(t("worlds.firstName"));
   if (!worlds.ready) return <div className="loading">{t("worlds.loading")}</div>;
   // A world opened anew starts with fresh levels.
-  return <WorldView key={worlds.world.id} t={t} locale={locale} setLocale={setLocale} worlds={worlds} />;
+  return (
+    <Guard t={t}>
+      <WorldView key={`${worlds.world.id}:${worlds.generation}`} t={t} locale={locale} setLocale={setLocale} worlds={worlds} />
+    </Guard>
+  );
+}
+
+/** A fault in a map or a panel shows a way out instead of a blank page: try again, or open the world library. */
+class Guard extends Component<{ t: T; children: ReactNode }, { problem: string | null }> {
+  state = { problem: null as string | null };
+  static getDerivedStateFromError(error: Error) {
+    return { problem: error.message || String(error) };
+  }
+  componentDidCatch(error: Error) {
+    console.error(error);
+  }
+  render() {
+    const { t } = this.props;
+    if (!this.state.problem) return this.props.children;
+    return (
+      <div className="loading crashed" role="alert">
+        <p>{t("app.crashed")}</p>
+        <code>{this.state.problem}</code>
+        <button type="button" className="primary" onClick={() => this.setState({ problem: null })}>
+          {t("app.retry")}
+        </button>
+      </div>
+    );
+  }
 }
 
 function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; setLocale: (locale: Locale) => void; worlds: Worlds }) {
@@ -166,7 +194,11 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   const [failed, setFailed] = useState("");
   // A long task in the background: how far it has come, and how to stop it.
   const [progress, setProgress] = useState<{ share: number; stage: string } | null>(null);
-  const stopTask = useRef<(() => void) | null>(null);
+  const jobs = useRef(new Set<() => void>());
+  const stopTasks = () => {
+    for (const cancel of jobs.current) cancel();
+    jobs.current.clear();
+  };
   const [focus, setFocus] = useState<Focus | null>(null);
   const [library, setLibrary] = useState(false);
   const store = worldStore(world, worlds.update);
@@ -234,7 +266,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     nm,
     locale,
     script,
-    focus: (x, y) => setFocus({ x, y, nonce: Date.now() }),
+    focus: (x, y) => setFocus({ x, y, nonce: performance.now() }),
     run: (work) => {
       setBusy(true);
       setTimeout(() => {
@@ -250,12 +282,17 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
         }
       }, 30);
     },
-    task: (start, done) => {
-      stopTask.current?.();
+    regrow: (from, to) => {
+      if (!from || from === to || world.top !== "planet" || rootOf(world)?.[0] !== from) return true;
+      if (!Object.values(world.maps).some((map) => map.parent === from)) return true;
+      return confirm(t("worlds.confirmRegrow"));
+    },
+    task: (start, done, alongside = false) => {
+      if (!alongside) stopTasks();
       setBusy(true);
       setProgress({ share: 0, stage: "" });
       const job = start((share, stage) => setProgress({ share, stage }));
-      stopTask.current = job.cancel;
+      jobs.current.add(job.cancel);
       job.promise
         .then((value) => {
           done(value);
@@ -268,8 +305,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
           }
         })
         .finally(() => {
-          if (stopTask.current === job.cancel) {
-            stopTask.current = null;
+          if (jobs.current.delete(job.cancel) && !jobs.current.size) {
             setBusy(false);
             setProgress(null);
           }
@@ -302,6 +338,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   const local = useLocalLevel(ctx, back("local"), {
     // A room that opens into another place opens it below this map.
     openDeeper: (link, entity) => openLocal(local, link, entity),
+    follow: (entity) => linkTo("local", local, entity, null),
     // A cave of the underworld (or a planet's cave over a way down) is shown in the planet's underworld.
     toUnderworld: (made) => {
       const above = planet.planet;
@@ -481,6 +518,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   function openMap(key: string) {
     const map = world.maps[key];
     if (!map) return;
+    delete pending.current[map.level];
     setView(map.level);
     if (levelKey(map.level) === key) return;
     if (map.level === "region" || map.level === "underworld") return reopenFromPlanet(key);
@@ -505,9 +543,11 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     const map = world.maps[key];
     const patch = world.patches[key];
     if (map?.level === "planet") {
+      if (planet.planet && planet.worldKey === key) return done(planet.planet);
       ctx.task(
         (report) => growPlanet(map.params as Partial<PlanetParams>, patch?.edits?.terrain, report, patch?.edits?.image),
         (grown) => done(renamePlanet(editPlanet(grown, patch?.edits ?? null), patch?.names ?? {})),
+        true,
       );
     } else if (map?.level === "region" && map.parent) {
       madeOf(map.parent, (planet) => {
@@ -574,7 +614,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   useEffect(() => {
     const onPop = () => {
       const next = new URLSearchParams(location.search).get("view") as LevelId | null;
-      if (!next || next === view || !byId[next]) return;
+      if (!next || next === view || !byId[next] || !shown.includes(next)) return;
       popping.current = true;
       showLevel(next);
     };
@@ -585,18 +625,20 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const typing = (event.target as Element | null)?.closest?.("input, textarea, select, [contenteditable], dialog");
-      if (typing) return;
+      if (typing || document.querySelector("dialog[open]")) return;
+      if (event.key === "Escape" && drawer) return setDrawer(null);
       if (!event.ctrlKey && !event.metaKey && !event.altKey) {
         // ? for help, / to search, 1–9 for the levels in the bar.
         const tabs = levels.filter((item) => shown.includes(item.id));
-        if (event.key === "?") setHelp(true);
-        else if (event.key === "/") setSearching(true);
-        else if (/^[1-9]$/u.test(event.key) && tabs[Number(event.key) - 1]) showLevel(tabs[Number(event.key) - 1].id);
+        const digit = /^Digit[1-9]$/u.test(event.code) ? Number(event.code.slice(5)) : 0;
+        if (event.key === "?" || (event.code === "Slash" && event.shiftKey)) setHelp(true);
+        else if (event.code === "Slash" || event.key === "/") setSearching(true);
+        else if (digit && tabs[digit - 1]) showLevel(tabs[digit - 1].id);
         else return;
         event.preventDefault();
         return;
       }
-      const key = event.key.toLowerCase();
+      const key = event.code === "KeyK" ? "k" : event.code === "KeyZ" ? "z" : event.code === "KeyY" ? "y" : event.key.toLowerCase();
       if (key === "k") setSearching(true);
       else if (key === "z" && !event.shiftKey) worlds.undo();
       else if (key === "y" || (key === "z" && event.shiftKey)) worlds.redo();
@@ -638,7 +680,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
 
   const here = levelKey(level.id);
   const trail = here && world.maps[here] ? pathTo(world, here) : [];
-  const isTop = level.id === world.top;
+  const isTop = level.id === world.top && !(here && world.maps[here]?.parent);
   const fileName = `${(level.title ?? level.id).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-")}-${level.seed.replace(/\W+/gu, "-")}`;
   const map = level.map;
   const sheetKey = level.sheetKey === undefined ? level.mapKey : level.sheetKey;
@@ -695,7 +737,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
         open={mode === "inspect" ? map.open : undefined}
         menu={map.menu}
         measure={map.measure}
-        memory={`${level.worldKey ?? level.mapKey ?? map.key}|${map.width}x${map.height}`}
+        memory={`${level.sheetKey ?? level.worldKey ?? level.mapKey ?? map.key}|${map.width}x${map.height}`}
         labels={{ zoomIn: t("map.zoomIn"), zoomOut: t("map.zoomOut"), fit: t("map.fit"), ruler: t("map.ruler"), minimap: t("map.minimap") }}
       />
     );
@@ -892,6 +934,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
       </nav>
       <aside className="controls">{level.controls}</aside>
       <main className="stage">
+        {drawer ? <div className="drawer-back" onClick={() => setDrawer(null)} aria-hidden="true" /> : null}
         <div className="drawer-toggles">
           <button type="button" aria-pressed={drawer === "controls"} onClick={() => setDrawer(drawer === "controls" ? null : "controls")}>
             ☰ {t("app.settings")}
@@ -911,8 +954,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
               type="button"
               className="ghost"
               onClick={() => {
-                stopTask.current?.();
-                stopTask.current = null;
+                stopTasks();
                 setBusy(false);
                 setProgress(null);
               }}

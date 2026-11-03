@@ -2523,6 +2523,9 @@ const TERMS: Record<string, [string, string]> = {
   "map.zoomIn": ["Zoom in", "Приблизить"],
   "map.zoomOut": ["Zoom out", "Отдалить"],
   "map.fit": ["Fit the whole map", "Показать карту целиком"],
+  "worlds.confirmRegrow": ["Growing the world anew drops the maps opened from it (their names and notes stay, unused). Go on?", "Новый рост мира уберёт открытые от него карты (их имена и заметки сохранятся, но не будут видны). Продолжить?"],
+  "app.crashed": ["Something went wrong while drawing this. Your world is saved.", "При отрисовке что-то пошло не так. Ваш мир сохранён."],
+  "app.retry": ["Try again", "Попробовать снова"],
   "editor.geo": ["Relief and names from GeoJSON (Azgaar, GIS)", "Рельеф и названия из GeoJSON (Azgaar, ГИС)"],
   "editor.geoHint": ["Azgaar's Fantasy Map Generator: Export → GeoJSON → cells (the relief), then burgs (the towns' names). Any GIS file of polygons with a height and of named points works too.", "Azgaar's Fantasy Map Generator: Экспорт → GeoJSON → cells (рельеф), затем burgs (названия городов). Подойдёт и любой ГИС-файл: многоугольники с высотой и точки с названиями."],
   "editor.geoNothing": ["Nothing to read in this file: it has neither cells with a height nor named places.", "В этом файле нечего взять: нет ни ячеек с высотой, ни мест с названиями."],
@@ -4092,7 +4095,8 @@ export function translator(locale: Locale) {
     // {{name}} is a value (numbers in the reader's way of writing them); {{name#one|few|many}} is the number with the
     // word in the form it takes (two forms in English).
     return template.replace(/\{\{(\w+)(?:#([^}]+))?\}\}/gu, (_match, name: string, forms?: string) => {
-      if (!forms) return show(vars[name]);
+      // A year is a date, not an amount: written without separators ("1025", not "1 025").
+      if (!forms) return /^year/u.test(name) && typeof vars[name] === "number" ? String(vars[name]) : show(vars[name]);
       const words = forms.split("|");
       return `${show(vars[name])} ${words[Math.min(words.length - 1, formOf(locale, Number(vars[name]) || 0))]}`;
     });

@@ -5,7 +5,11 @@ import { markdown, titleOf, type WorldDoc } from "../core/index";
 import { download } from "./Handbook";
 import type { T } from "./i18n";
 
-const escape = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
+const escape = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;").replace(/"/gu, "&quot;");
+/** A page's picture only as image data: anything else (a file may say anything) is left out. */
+const picture = (image?: string) => (image && /^data:image\/(png|jpe?g|gif|webp);base64,[a-z0-9+/=]+$/iu.test(image) ? `<img src="${image}" alt="">` : "");
+/** Each map's ids made its own, so one map's clip paths and symbols do not stand in for another's on one page. */
+const scoped = (svg: string, prefix: string) => svg.replace(/\bid="([^"]+)"/gu, `id="${prefix}$1"`).replace(/url\(#([^)]+)\)/gu, `url(#${prefix}$1)`).replace(/href="#([^"]+)"/gu, `href="#${prefix}$1"`);
 
 export function printAtlas(t: T, nm: (name: string) => string, world: WorldDoc, maps: { title: string; svg: string }[], withSecrets: boolean) {
   const pages = Object.values(world.pages ?? {}).sort((a, b) => titleOf(a).localeCompare(titleOf(b)));
@@ -27,8 +31,8 @@ export function printAtlas(t: T, nm: (name: string) => string, world: WorldDoc, 
 </style></head><body>
 <section class="cover"><div><h1>${escape(nm(world.name))}</h1><p>${escape(t("book.atlasOf"))}</p><p>${new Date().toLocaleDateString(t.locale)}</p></div></section>
 <section><h2>${escape(t("book.contents"))}</h2><ol>${maps.map((map) => `<li>${escape(map.title)}</li>`).join("")}${pages.length ? `<li>${escape(t("book.title.book"))}</li>` : ""}${names.length ? `<li>${escape(t("book.index"))}</li>` : ""}</ol></section>
-${maps.map((map) => `<section class="map"><h2>${escape(map.title)}</h2>${map.svg}</section>`).join("\n")}
-${pages.length ? `<section><h2>${escape(t("book.title.book"))}</h2>${pages.map((page) => `<div class="page"><h3>${escape(nm(titleOf(page)))}</h3>${page.image ? `<img src="${page.image}" alt="">` : ""}${markdown(page.text)}${withSecrets && page.secret ? `<div class="secret">${markdown(page.secret)}</div>` : ""}</div>`).join("")}</section>` : ""}
+${maps.map((map, k) => `<section class="map"><h2>${escape(map.title)}</h2>${scoped(map.svg, `m${k}-`)}</section>`).join("\n")}
+${pages.length ? `<section><h2>${escape(t("book.title.book"))}</h2>${pages.map((page) => `<div class="page"><h3>${escape(nm(titleOf(page)))}</h3>${picture(page.image)}${markdown(page.text)}${withSecrets && page.secret ? `<div class="secret">${markdown(page.secret)}</div>` : ""}</div>`).join("")}</section>` : ""}
 ${names.length ? `<section><h2>${escape(t("book.index"))}</h2><div class="index">${names.map((name) => `<div>${escape(nm(name))}</div>`).join("")}</div></section>` : ""}
 </body></html>`;
   const view = window.open("", "_blank");

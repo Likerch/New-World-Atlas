@@ -4,7 +4,7 @@
 // zoom and place while the page is open. The SVG is drawn once per render and moved with a CSS transform, so panning
 // stays smooth on large maps; a very large one is shown as a single picture, which the browser draws far faster than
 // tens of thousands of shapes.
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 interface View {
   x: number;
@@ -25,6 +25,8 @@ export interface MenuItem {
 
 /** Each map's zoom and place, by its key, for as long as the page is open. */
 const remembered = new Map<string, View>();
+/** The last jump made, across maps: a map opened afterwards does not repeat it. */
+let lastFocus = -1;
 
 /** ponytail: above this the map is shown as a picture (no per-shape hover); a WebGL renderer is the upgrade path. */
 const PICTURE_ABOVE = 3_000_000;
@@ -66,8 +68,13 @@ export function MapView({ svg, overlay, width, height, focus, onPick, onDrag, on
   const [minimap, setMinimap] = useState(true);
 
   // The picture of the map, for a very large one and for the minimap.
-  const picture = useMemo(() => (svg ? URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" })) : ""), [svg]);
-  useEffect(() => () => URL.revokeObjectURL(picture), [picture]);
+  const [picture, setPicture] = useState("");
+  useEffect(() => {
+    if (!svg) return setPicture("");
+    const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+    setPicture(url);
+    return () => URL.revokeObjectURL(url);
+  }, [svg]);
   const asPicture = svg.length > PICTURE_ABOVE;
 
   const zoomAround = (px: number, py: number, factor: number) =>
@@ -92,18 +99,28 @@ export function MapView({ svg, overlay, width, height, focus, onPick, onDrag, on
   useEffect(() => {
     if (memory) remembered.set(memory, view);
   }, [view, memory]);
-  useEffect(() => {
-    const onResize = () => fitView();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [width, height]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Only jumps asked for while this map is shown; an older one must not move a freshly opened map.
-  const applied = useRef(focus?.nonce);
+  const size = useRef<[number, number]>([0, 0]);
   useEffect(() => {
     const el = box.current;
-    if (!focus || !el || focus.nonce === applied.current) return;
-    applied.current = focus.nonce;
+    if (el) size.current = [el.clientWidth, el.clientHeight];
+    const onResize = () => {
+      const box2 = box.current;
+      if (!box2) return;
+      const [w0, h0] = size.current;
+      const [w1, h1] = [box2.clientWidth, box2.clientHeight];
+      size.current = [w1, h1];
+      setFit(Math.min(w1 / width, h1 / height));
+      setView((v) => ({ ...v, x: v.x + (w1 - w0) / 2, y: v.y + (h1 - h0) / 2 }));
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [width, height]);
+
+  // Only jumps asked for while this map is shown; an older one must not move a freshly opened map.
+  useEffect(() => {
+    const el = box.current;
+    if (!focus || !el || focus.nonce <= lastFocus) return;
+    lastFocus = focus.nonce;
     const k = Math.max(view.k, fit * 3);
     setView({ k, x: el.clientWidth / 2 - focus.x * k, y: el.clientHeight / 2 - focus.y * k });
   }, [focus]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -123,7 +140,7 @@ export function MapView({ svg, overlay, width, height, focus, onPick, onDrag, on
   // Keys on the map: + and − zoom, 0 fits, arrows pan, R takes the ruler, M the minimap, Esc puts tools down.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.ctrlKey || event.metaKey || event.altKey || (event.target as Element | null)?.closest?.("input, textarea, select, [contenteditable], dialog")) return;
+      if (event.ctrlKey || event.metaKey || event.altKey || (event.target as Element | null)?.closest?.("input, textarea, select, [contenteditable], dialog") || document.querySelector("dialog[open]")) return;
       const step = 80;
       const key = event.key;
       if (key === "+" || key === "=") zoomCentre(1.4);
@@ -166,7 +183,7 @@ export function MapView({ svg, overlay, width, height, focus, onPick, onDrag, on
         touches.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
         drag.current = { x: event.clientX, y: event.clientY, moved: false };
         try {
-          (event.target as Element).setPointerCapture?.(event.pointerId);
+          event.currentTarget.setPointerCapture?.(event.pointerId);
         } catch {
           // A pointer the browser no longer tracks: the drag still works without capture.
         }
@@ -222,7 +239,10 @@ export function MapView({ svg, overlay, width, height, focus, onPick, onDrag, on
         touches.current.delete(event.pointerId);
         drag.current = null;
       }}
-      onPointerLeave={() => setTip(null)}
+      onPointerLeave={() => {
+        cancelAnimationFrame(tipFrame.current);
+        setTip(null);
+      }}
       onDoubleClick={(event) => {
         if (!open || ruler.on) return;
         const [x, y] = toMap(event.clientX, event.clientY);
@@ -261,7 +281,7 @@ export function MapView({ svg, overlay, width, height, focus, onPick, onDrag, on
         </div>
       ) : null}
       {items ? (
-        <div className="map-menu" role="menu" style={{ left: items.x, top: items.y }} onPointerDown={(event) => event.stopPropagation()}>
+        <div className="map-menu" role="menu" style={{ left: items.x, top: items.y }} onPointerDown={(event) => event.stopPropagation()} onPointerUp={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
           {items.items.map((item) => (
             <button
               key={item.label}
@@ -282,6 +302,8 @@ export function MapView({ svg, overlay, width, height, focus, onPick, onDrag, on
           className="minimap"
           style={{ aspectRatio: `${width} / ${height}` }}
           title={labels.minimap}
+          onPointerUp={(event) => event.stopPropagation()}
+          onDoubleClick={(event) => event.stopPropagation()}
           onPointerDown={(event) => {
             event.stopPropagation();
             const r = event.currentTarget.getBoundingClientRect();
@@ -294,7 +316,7 @@ export function MapView({ svg, overlay, width, height, focus, onPick, onDrag, on
           <span style={{ left: `${(seen.x / width) * 100}%`, top: `${(seen.y / height) * 100}%`, width: `${(seen.w / width) * 100}%`, height: `${(seen.h / height) * 100}%` }} />
         </div>
       ) : null}
-      <div className="map-tools">
+      <div className="map-tools" onPointerDown={(event) => event.stopPropagation()} onPointerUp={(event) => event.stopPropagation()} onDoubleClick={(event) => event.stopPropagation()}>
         <button type="button" onClick={() => zoomCentre(1.4)} aria-label={labels.zoomIn} title={`${labels.zoomIn} (+)`}>
           +
         </button>

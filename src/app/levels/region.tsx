@@ -84,8 +84,8 @@ export function useRegionLevel(
   const ghost = useMemo(() => (region && layers.underground ? underworldGhostSvg(generateUnderworld(region)) : undefined), [region, layers.underground]);
   const svg = useMemo(() => (region ? renderPlanet(region, { theme, layers, script: ctx.script, highlight, words: ctx.words, ghost }) : ""), [region, theme, layers, ctx.script, highlight?.kind, highlight?.id, t, ghost]); // eslint-disable-line react-hooks/exhaustive-deps
   const legend = useMemo(() => (region ? planetLegend(region, { theme, layers }) : undefined), [region, theme, layers]);
-  const actions = useMemo(
-    () =>
+  // Made anew each render, so the openers see the world as it is now.
+  const actions =
       region
         ? planetActions(region, t, ctx.nm, {
             city: (burg) => links.openCity(region, burg),
@@ -94,9 +94,7 @@ export function useRegionLevel(
             descend: (marker) => links.openUnderworld(region, marker),
             building: (marker) => links.openBuilding(region, marker),
           })
-        : null,
-    [region, t], // eslint-disable-line react-hooks/exhaustive-deps
-  );
+        : null;
 
   return {
     id: "region",

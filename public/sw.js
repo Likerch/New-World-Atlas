@@ -1,10 +1,21 @@
 // The Atlas offline: the page and its files are kept as they are fetched, so it opens without the network. The page
 // itself is asked for afresh first (a new version arrives as soon as there is one), its files from the cache first
 // (their names change with every build).
-const CACHE = "atlas-v1";
+const CACHE = "atlas-v2";
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(["./", "./manifest.webmanifest", "./icon.svg"])));
+  // The page, and every file of the build as the build lists them (precache.json), kept before the first use.
+  event.waitUntil(
+    caches.open(CACHE).then(async (cache) => {
+      await cache.addAll(["./", "./manifest.webmanifest", "./icon.svg"]);
+      try {
+        const files = await (await fetch("./precache.json", { cache: "no-store" })).json();
+        await cache.addAll(files.filter((file) => typeof file === "string").map((file) => `./${file}`));
+      } catch {
+        // No list (a development server): files are kept as they are fetched.
+      }
+    }),
+  );
   self.skipWaiting();
 });
 

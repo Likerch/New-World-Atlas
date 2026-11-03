@@ -188,4 +188,45 @@ test("golden prints: the generator draws the same maps until its version says ot
   assert.deepEqual(now, golden, now.generator === golden.generator ? "the maps changed: bump GENERATOR and the prints" : "a new GENERATOR: update the prints");
 });
 
+test("review fixes: a dungeon's next floor keeps the world, a bad file is mended, notes and pages follow new keys", () => {
+  let crypt = emptyWorld({ id: "w9", name: "Crypt", top: "local", now: 1 });
+  crypt = visit(crypt, "local:c", { level: "local", parent: null, step: null, title: "Crypt", base: null, params: { seed: "c" } }, 2);
+  crypt = visit(crypt, "local:c/depth-2", { level: "local", parent: "local:c", step: { entity: "depth:2" }, title: "Crypt", base: null, params: { seed: "c/depth-2" } }, 3);
+  crypt = visit(crypt, "local:c", { level: "local", parent: null, step: null, title: "Crypt", base: null, params: { seed: "c" } }, 4);
+  assert.ok(crypt.maps["local:c"] && crypt.maps["local:c/depth-2"], "going back up dropped the floor below");
+  crypt = visit(crypt, "local:c/depth-2", { level: "local", parent: null, step: null, title: "Crypt", base: null, params: { seed: "c/depth-2" } }, 5);
+  assert.equal(crypt.maps["local:c/depth-2"].parent, "local:c", "a floor met again lost its place under the top");
+  assert.ok(crypt.maps["local:c"], "the top was dropped");
+
+  const world = planetWorld();
+  const bad = JSON.parse(JSON.stringify(world));
+  bad.last = { key: "nowhere" };
+  bad.maps["x:1"] = { level: "dragon", params: {} };
+  bad.pages = { "p|1": { map: "p", entity: "1", text: 5, image: 'x" onerror="alert(1)' } };
+  const mended = readWorld(bad);
+  assert.equal(mended.last.key, null);
+  assert.deepEqual(mended.last.byLevel, {});
+  assert.ok(!mended.maps["x:1"], "a map of no level was kept");
+  assert.equal(mended.pages!["p|1"].text, "");
+  assert.deepEqual(mended.pages!["p|1"].tags, []);
+  assert.equal(mended.pages!["p|1"].image, undefined, "a picture that is not image data was kept");
+
+  const fogged = { ...world, patches: { "planet:x": { ...emptyPatch(), fog: { enabled: true, revealed: [[1, 2, 3], [4, 5, 6]] as [number, number, number][] } } } };
+  const twice = mergeWorlds(mergeWorlds(fogged, fogged), fogged);
+  assert.equal(twice.patches["planet:x"].fog.revealed.length, 2, "merging the same world doubled its fog");
+
+  const plain = planetParams({ seed: "pages" });
+  const params = asRecord({ ...plain, cells: 3000 });
+  let old = emptyWorld({ id: "w3", name: "Old", top: "planet", now: 1 });
+  old = visit(old, "planet:pages", { level: "planet", parent: null, step: null, title: "P", base: null, params }, 2);
+  old = visit(old, "city:pages/burg-3", { level: "city", parent: "planet:pages", step: { entity: "burg:3" }, title: "T", base: {}, params: {} }, 3);
+  old = { ...old, patches: { "underworld:pages/underworld": { ...emptyPatch(), names: { "cavern:1": "Deep" } } }, pages: { "planet:pages|burg:3": { ...emptyPage("planet:pages", "burg:3", "T"), text: "A town" } } };
+  const moved = rekey(old);
+  const key = mapKeyOf("planet", params);
+  assert.equal(moved.pages![`${key}|burg:3`]?.text, "A town", "a handbook page stayed on the old key");
+  assert.equal(moved.pages![`${key}|burg:3`].map, key);
+  assert.ok(moved.patches[`underworld:${key.slice("planet:".length)}/underworld`], "the underworld's notes stayed behind");
+  assert.ok(moved.maps["city:pages/burg-3"], "a city's key (made from the seed alone) was moved");
+});
+
 console.log(`world: ${passed} regressions passed`);

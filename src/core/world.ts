@@ -230,23 +230,39 @@ export function rekey(world: WorldDoc): WorldDoc {
   );
   if (sites) world = { ...world, maps: steps };
   if (!moves.size) return world;
-  const to = (key: string | null) => (key !== null ? moves.get(key) ?? key : null);
+  // Keys derived from a moved one follow it: its underworld (`underworld:<body>/…`), a room's scene
+  // (`local:<body>/room-4`), its handbook pages (`<key>|<entity>`).
+  const bodies = [...moves].map(([from, next]) => [from.slice(0, from.indexOf(":")), from.slice(from.indexOf(":") + 1), next.slice(next.indexOf(":") + 1)] as const);
+  const derived = (key: string): string => {
+    if (moves.has(key)) return moves.get(key)!;
+    const bar = key.indexOf("|");
+    if (bar > 0 && moves.has(key.slice(0, bar))) return `${moves.get(key.slice(0, bar))}${key.slice(bar)}`;
+    const colon = key.indexOf(":");
+    const body = key.slice(colon + 1);
+    // Only keys made from the moved key itself (a city's is made from its planet's seed alone, and stays).
+    const level = key.slice(0, colon);
+    for (const [kind, from, next] of bodies) if ((level === kind || (level === "underworld" && kind === "planet")) && body.startsWith(`${from}/`)) return `${level}:${next}${body.slice(from.length)}`;
+    return key;
+  };
+  const to = (key: string | null) => (key !== null ? derived(key) : null);
   const maps = Object.fromEntries(Object.entries(world.maps).map(([key, map]) => [to(key)!, { ...map, parent: to(map.parent) }]));
-  const patches = { ...world.patches };
-  for (const [from, next] of moves) {
-    if (!patches[from] || patches[next]) continue;
-    patches[next] = patches[from];
-    delete patches[from];
+  const patches: typeof world.patches = {};
+  for (const [key, patch] of Object.entries(world.patches)) {
+    const next = to(key)!;
+    if (next === key || !world.patches[next]) patches[next] = patch;
+    else patches[key] = patch;
   }
+  const pages = world.pages ? Object.fromEntries(Object.entries(world.pages).map(([key, page]) => [to(key)!, { ...page, map: to(page.map)! }])) : undefined;
   const byLevel = Object.fromEntries(Object.entries(world.last.byLevel).map(([level, key]) => [level, to(key ?? null)]));
-  return { ...world, maps, patches, last: { key: to(world.last.key), byLevel } };
+  return { ...world, maps, patches, ...(pages ? { pages } : {}), last: { key: to(world.last.key), byLevel } };
 }
 
 /** Records a map opened in the world: from a parent (with what it handed down) or as the world's top. */
 export function visit(world: WorldDoc, key: string, entry: { level: MapLevel; parent: string | null; step: WorldStep | null; title: string; base: Record<string, unknown> | null; params: Record<string, unknown>; language?: Language | null }, now = Date.now()): WorldDoc {
   const old = world.maps[key];
-  // A map met again keeps its place in the tree unless it is reached from a new parent.
-  const parent = entry.parent ?? (entry.level === world.top ? null : old?.parent ?? null);
+  // A map met again keeps its place in the tree unless it is reached from a new parent; a new map of the top's level
+  // reached from nowhere is a new top (a dungeon's next level is linked from the level above it, so it is not).
+  const parent = entry.parent ?? old?.parent ?? null;
   const map: WorldMap = { level: entry.level, parent, step: entry.step ?? old?.step ?? null, title: entry.title, base: entry.base ?? old?.base ?? null, params: entry.params, language: entry.language === undefined ? old?.language : entry.language, opened: now, made: old?.made ?? GENERATOR };
   let maps = { ...world.maps, [key]: map };
   // A new top map makes a new world under it: maps hanging from the old top are dropped (their notes stay, unused).
@@ -280,9 +296,46 @@ export function readWorld(data: unknown): WorldDoc {
   const world = data as Partial<WorldDoc> | null;
   if (!world || world.format !== "new-world-atlas/world") throw new Error("not a world file");
   if (world.version !== 1) throw new Error(`unknown world file version ${String(world.version)}`);
-  if (!world.id || !world.top || !TOP_LEVELS.includes(world.top)) throw new Error("the world file has no top map");
-  const patches = Object.fromEntries(Object.entries(world.patches ?? {}).map(([key, patch]) => [key, cleanPatch(patch)]));
-  return rekey({ ...emptyWorld({ id: world.id, name: world.name ?? "", top: world.top }), ...world, maps: world.maps ?? {}, patches, last: world.last ?? { key: null, byLevel: {} } } as WorldDoc);
+  if (!world.id || typeof world.id !== "string" || !world.top || !TOP_LEVELS.includes(world.top)) throw new Error("the world file has no top map");
+  const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
+  const patches = Object.fromEntries(Object.entries(object(world.patches) ? world.patches : {}).map(([key, patch]) => [key, cleanPatch(patch)]));
+  // Maps of the levels there are, with parameters to grow from; pages with what the handbook reads; a last map known.
+  const maps = Object.fromEntries(
+    Object.entries(object(world.maps) ? world.maps : {}).filter(([, map]) => object(map) && LEVELS.includes(map.level as MapLevel) && object(map.params)),
+  ) as Record<string, WorldMap>;
+  for (const map of Object.values(maps)) {
+    if (map.parent !== null && typeof map.parent !== "string") map.parent = null;
+    if (map.step !== null && !(object(map.step) && typeof map.step.entity === "string")) map.step = null;
+    if (typeof map.title !== "string") map.title = "";
+    if (typeof map.opened !== "number") map.opened = 0;
+  }
+  const pages = Object.fromEntries(
+    Object.entries(object(world.pages) ? world.pages : {})
+      .filter(([, page]) => object(page) && typeof page.map === "string" && typeof page.entity === "string")
+      .map(([key, page]) => [key, cleanPage(page as Partial<Page> & Pick<Page, "map" | "entity">)]),
+  );
+  const last = object(world.last) ? world.last : { key: null, byLevel: {} };
+  const byLevel = Object.fromEntries(Object.entries(object(last.byLevel) ? last.byLevel : {}).filter(([level, key]) => LEVELS.includes(level as MapLevel) && typeof key === "string" && maps[key]));
+  const lastKey = typeof last.key === "string" && maps[last.key] ? last.key : null;
+  return rekey({ ...emptyWorld({ id: world.id, name: world.name ?? "", top: world.top }), ...world, name: typeof world.name === "string" ? world.name : "", maps, patches, pages: object(world.pages) ? pages : undefined, last: { key: lastKey, byLevel } } as WorldDoc);
+}
+
+const LEVELS: MapLevel[] = ["universe", "galaxy", "system", "planet", "region", "underworld", "city", "building", "local"];
+
+/** A handbook page as a file gives it: text where text is read, tags a list of words, a picture only as image data. */
+function cleanPage(page: Partial<Page> & Pick<Page, "map" | "entity">): Page {
+  const text = (value: unknown, max: number) => (typeof value === "string" ? value.slice(0, max) : "");
+  return {
+    title: text(page.title, 200),
+    text: text(page.text, 100_000),
+    secret: text(page.secret, 100_000),
+    tags: Array.isArray(page.tags) ? page.tags.filter((tag): tag is string => typeof tag === "string").map((tag) => tag.slice(0, 40)).slice(0, 40) : [],
+    ...(typeof page.image === "string" && /^data:image\/(png|jpe?g|gif|webp);base64,[a-z0-9+/=]+$/iu.test(page.image) ? { image: page.image } : {}),
+    map: page.map,
+    entity: page.entity,
+    name: text(page.name, 200),
+    updated: typeof page.updated === "number" ? page.updated : 0,
+  };
 }
 
 /** A map's patch changed: a new name for the map itself also names the thing it was opened from on its parent map
@@ -312,7 +365,7 @@ export function mergeWorlds(base: WorldDoc, incoming: WorldDoc): WorldDoc {
           names: { ...old.names, ...patch.names },
           notes: { ...old.notes, ...patch.notes },
           pins: [...old.pins, ...patch.pins.filter((pin) => !old.pins.some((other) => other.id === pin.id))],
-          fog: { enabled: old.fog.enabled || patch.fog.enabled, revealed: [...old.fog.revealed, ...patch.fog.revealed] },
+          fog: { enabled: old.fog.enabled || patch.fog.enabled, revealed: [...new Map([...old.fog.revealed, ...patch.fog.revealed].map((spot) => [spot.join(","), spot])).values()] },
           ...(old.changes || patch.changes ? { changes: { ...old.changes, ...patch.changes } } : {}),
         };
   }

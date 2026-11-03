@@ -1361,3 +1361,24 @@ details.section:not([open]) > summary h2::before {
 .crumb-more > div button:hover {
   background: var(--accent-soft);
 }
+
+/* A narrow screen: a panel slid over the map closes on a tap beside it. */
+.drawer-back {
+  display: none;
+}
+@media (max-width: 900px) {
+  .drawer-back {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 14;
+    background: #00000066;
+  }
+}
+.loading.crashed {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  padding: 24px;
+  text-align: center;
+}

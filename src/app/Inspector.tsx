@@ -100,7 +100,10 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
   const match = (name: string) => !query.trim() || nm(name).toLowerCase().includes(query.trim().toLowerCase());
 
   const card = useMemo(() => {
-    if (!selection) return planet.frame ? <RegionCard planet={planet} t={t} nm={nm} /> : <WorldCard planet={planet} t={t} nm={nm} />;
+    // A selection the world no longer has (it regrew under a stroke, an edit was undone) shows the world instead.
+    const lists: Partial<Record<SelectionKind, unknown[]>> = { state: planet.states, culture: planet.cultures, religion: planet.religions, burg: planet.burgs, river: planet.rivers, marker: planet.markers, province: planet.provinces, feature: planet.features };
+    const gone = selection && (selection.kind === "cell" ? selection.id >= planet.mesh.cells : !lists[selection.kind]?.[selection.id]);
+    if (!selection || gone) return planet.frame ? <RegionCard planet={planet} t={t} nm={nm} /> : <WorldCard planet={planet} t={t} nm={nm} />;
     const { kind, id } = selection;
     if (kind === "cell") {
       const cell = id;

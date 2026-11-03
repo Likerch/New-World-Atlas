@@ -16,6 +16,9 @@ import { useLayers } from "./layers";
 import type { Level, LevelContext } from "./types";
 import { NumberInput } from "../NumberInput";
 
+/** The settings a planet has only when asked for: a restored planet must not take them from the one shown before. */
+const OPTIONAL_KNOBS: (keyof PlanetParams)[] = ["name", "world", "setting", "history", "growth", "lifeless", "recipe", "land", "reroll", "families"];
+
 const NUMBER_FIELDS: { key: keyof PlanetParams; min: number; max: number; step: number }[] = [
   { key: "latitudeNorth", min: -90, max: 90, step: 1 },
   { key: "latitudeSouth", min: -90, max: 90, step: 1 },
@@ -136,6 +139,12 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   }, [raw, terrainKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const shaped = !raw ? null : !edits?.terrain.length && !edits?.image ? raw : regrown?.raw === raw ? regrown.planet : null;
   const planet = useMemo(() => (shaped ? renamePlanet(editPlanet(shaped, edits), names) : null), [shaped, edits, names]);
+  const shown = useRef(planet);
+  useEffect(() => {
+    // A new world (regrown under a stroke, edited, another planet) may not have the thing picked on the last.
+    if (shown.current && planet && shown.current.mesh !== planet.mesh) setSelection(null);
+    shown.current = planet;
+  }, [planet]);
   const [tool, setTool] = useState<EditTool | null>(null);
   const [brush, setBrush] = useState({ radius: 60, strength: 12 });
   const [paint, setPaint] = useState<Paint>({ realm: 1, people: 1, faith: 1, province: 1, zone: "custom" });
@@ -202,14 +211,18 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     );
   };
   const set = <K extends keyof PlanetParams>(key: K, value: PlanetParams[K]) => setParams((current) => ({ ...current, [key]: value }));
+  /** Grows the planet again from the GM's knobs, asking first when that drops the maps opened from it. */
+  const regrow = (next: Partial<PlanetParams>) => {
+    if (ctx.regrow(mapKey, mapKeyOf("planet", planetParams({ ...params, ...next }) as unknown as Record<string, unknown>))) load(next);
+  };
   // The knobs were turned since the world on the map was grown.
   const changed = raw ? (Object.keys({ ...params, ...raw.params }) as (keyof PlanetParams)[]).some((key) => JSON.stringify(params[key]) !== JSON.stringify(raw.params[key])) : false;
   const highlight = selection && (selection.kind === "state" || selection.kind === "province" || selection.kind === "culture" || selection.kind === "religion") ? { kind: selection.kind, id: selection.id } : null;
   const ghost = useMemo(() => (planet && layers.underground ? underworldGhostSvg(generateUnderworld(planet)) : undefined), [planet, layers.underground]);
   const svg = useMemo(() => (!planet ? "" : globe ? renderGlobe(planet, { theme, layers, script: ctx.script, ...globe, mark: markOf(planet, selection), unknown, quick: turning }) : past !== null && planet.history ? renderPlanet(pastPlanet(planet, past), { theme, layers: { ...layers, provinces: false, routes: false, religions: false, emblems: false, military: false }, script: ctx.script, words: ctx.words }) : renderPlanet(planet, { theme, layers, script: ctx.script, highlight, words: ctx.words, ghost, ...(season !== "year" ? { season } : {}) })), [planet, theme, layers, ctx.script, highlight?.kind, highlight?.id, globe, globe && selection, unknown, turning, t, past, season, ctx.words, ghost]); // eslint-disable-line react-hooks/exhaustive-deps
   const legend = useMemo(() => (planet ? planetLegend(planet, { theme, layers }) : undefined), [planet, theme, layers]);
-  const actions = useMemo(
-    () =>
+  // Made anew each render: a double-click or the menu must open maps as the world is now, not as it was.
+  const actions =
       planet
         ? planetActions(planet, t, ctx.nm, {
             city: (burg) => openCity(planet, burg),
@@ -221,9 +234,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
             descend: descend && ((marker) => descend(planet, marker)),
             building: openBuilding && ((marker) => openBuilding(planet, marker)),
           })
-        : null,
-    [planet, t], // eslint-disable-line react-hooks/exhaustive-deps
-  );
+        : null;
   const pick = (x: number, y: number) => {
     if (!planet) return;
     const cell = planet.mesh.find(x, y);
@@ -261,7 +272,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     seed: params.seed,
     setSeed: (seed) => set("seed", seed),
     // A new seed is a new world: it takes a name from its own people, not the last world's.
-    generate: (seed) => load(seed ? { seed, name: "" } : {}),
+    generate: (seed) => (seed ? load({ seed, name: "" }) : regrow({})),
     ensure: () => {
       // Only when nothing is on its way: a world opened from a star system must not be replaced.
       if (!planet && !pending.current) load({});
@@ -271,7 +282,8 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     legend,
     worldKey: mapKey,
     params: raw ? (raw.params as unknown as Record<string, unknown>) : null,
-    restore: (saved) => load({ name: undefined, world: undefined, setting: undefined, ...(saved as Partial<PlanetParams>) }),
+    // A saved planet grows from its own settings alone: the knobs of the planet shown before do not carry over.
+    restore: (saved) => load({ ...Object.fromEntries(OPTIONAL_KNOBS.map((knob) => [knob, undefined])), ...(saved as Partial<PlanetParams>) }),
     mapKey,
     // Pins and fog are laid on the flat map; the globe shows the world without them, its names and notes still at hand.
     sheetKey: globe ? null : mapKey,
@@ -317,7 +329,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
         {raw && changed ? (
           <p className="notice">
             {t("params.changed")}{" "}
-            <button type="button" className="primary" onClick={() => load({})}>
+            <button type="button" className="primary" onClick={() => regrow({})}>
               {t("action.generate")}
             </button>
           </p>
@@ -382,7 +394,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
               <p className="muted">{t("history.now", { year: planet.history.years })}</p>
               <div className="row-buttons">
                 {[25, 100].map((more) => (
-                  <button key={more} type="button" onClick={() => load({ history: planet.history!.years + more })} title={t("history.laterHint")}>
+                  <button key={more} type="button" onClick={() => regrow({ history: planet.history!.years + more })} title={t("history.laterHint")}>
                     {t("history.later", { years: more })}
                   </button>
                 ))}
@@ -401,7 +413,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
           ) : planet && !planet.params.lifeless ? (
             <>
               <p className="muted">{t("history.none")}</p>
-              <button type="button" className="wide" onClick={() => load({ history: 300 })}>
+              <button type="button" className="wide" onClick={() => regrow({ history: 300 })}>
                 📜 {t("history.live", { years: 300 })}
               </button>
             </>
@@ -512,7 +524,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
             </h4>
             <div className="row-buttons">
               {REROLL_STAGES.map((stage) => (
-                <button key={stage} type="button" title={t(`reroll.${stage}.hint`)} onClick={() => load({ reroll: { ...params.reroll, [stage]: (params.reroll?.[stage] ?? 0) + 1 } })}>
+                <button key={stage} type="button" title={t(`reroll.${stage}.hint`)} onClick={() => regrow({ reroll: { ...params.reroll, [stage]: (params.reroll?.[stage] ?? 0) + 1 } })}>
                   {t(`reroll.${stage}`)}
                 </button>
               ))}
@@ -540,7 +552,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
             <button type="button" onClick={() => set("recipe", recipeText(params.template))}>
               {t("relief.fromTemplate")}
             </button>
-            <button type="button" className="primary" onClick={() => load({})}>
+            <button type="button" className="primary" onClick={() => regrow({})}>
               {t("relief.grow")}
             </button>
           </div>

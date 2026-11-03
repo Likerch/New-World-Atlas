@@ -42,7 +42,9 @@ export function growPlanet(params: Partial<PlanetParams>, terrain: PlanetEdits["
   return {
     promise,
     cancel: () => {
+      const own = waiting.get(id);
       waiting.delete(id);
+      own?.reject(new Error("cancelled"));
       worker?.terminate();
       worker = null;
       for (const [other, job] of waiting) {

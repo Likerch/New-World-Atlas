@@ -142,7 +142,7 @@ export function WorldForm({ t, initial, zoom, onCreate, onClose }: { t: T; initi
           <Field label={t("field.growth")} hint={hintOf(t, "growth")}>{number("growth", 0.3, 3, 0.1)}</Field>
           <Field label={t("history.depth")} hint={hintOf(t, "history")}>
             <select value={params.history ?? 0} onChange={(event) => set("history", Number(event.target.value) || undefined)}>
-              {[0, 200, 400, 700, 1000].map((years) => (
+              {[...new Set([0, 200, 300, 400, 700, 1000, params.history ?? 0])].sort((a, b) => a - b).map((years) => (
                 <option key={years} value={years}>
                   {years ? t("history.years", { years }) : t("history.noneShort")}
                 </option>
