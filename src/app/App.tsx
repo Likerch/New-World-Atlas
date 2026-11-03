@@ -597,7 +597,27 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     } else map.onPick(x, y);
   };
   let stage: ReactNode = null;
-  if (map) stage = <MapView key={map.key} svg={map.svg} overlay={overlay} width={map.width} height={map.height} focus={focus} onPick={pick} onDrag={map.onDrag} onDragEnd={map.onDragEnd} zoomRange={map.zoomRange} labels={{ zoomIn: t("map.zoomIn"), zoomOut: t("map.zoomOut"), fit: t("map.fit") }} />;
+  if (map)
+    stage = (
+      <MapView
+        key={map.key}
+        svg={map.svg}
+        overlay={overlay}
+        width={map.width}
+        height={map.height}
+        focus={focus}
+        onPick={pick}
+        onDrag={map.onDrag}
+        onDragEnd={map.onDragEnd}
+        zoomRange={map.zoomRange}
+        hover={map.hover}
+        open={mode === "inspect" ? map.open : undefined}
+        menu={map.menu}
+        measure={map.measure}
+        memory={`${level.worldKey ?? level.mapKey ?? map.key}|${map.width}x${map.height}`}
+        labels={{ zoomIn: t("map.zoomIn"), zoomOut: t("map.zoomOut"), fit: t("map.fit"), ruler: t("map.ruler"), minimap: t("map.minimap") }}
+      />
+    );
   else if (!isTop && !busy) stage = <div className="empty-hint">{t("worlds.reach", { level: t(`view.${level.id}`) })}</div>;
 
   return (

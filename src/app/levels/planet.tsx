@@ -5,6 +5,7 @@ import { Inspector, type Selection, type Tab } from "../Inspector";
 import { SettingPanel } from "../SettingPanel";
 import { WorldForm, type ZoomRange } from "../WorldForm";
 import { editAt, WorldEditor, type EditTool, type Paint } from "../WorldEditor";
+import { planetActions } from "../planetActions";
 import type { T } from "../i18n";
 import { describePlanet, searchPlanet } from "../planetText";
 import { growPlanet } from "../work";
@@ -201,6 +202,21 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   const ghost = useMemo(() => (planet && layers.underground ? underworldGhostSvg(generateUnderworld(planet)) : undefined), [planet, layers.underground]);
   const svg = useMemo(() => (!planet ? "" : globe ? renderGlobe(planet, { theme, layers, script: ctx.script, ...globe, mark: markOf(planet, selection), unknown, quick: turning }) : past !== null && planet.history ? renderPlanet(pastPlanet(planet, past), { theme, layers: { ...layers, provinces: false, routes: false, religions: false, emblems: false, military: false }, script: ctx.script, words: ctx.words }) : renderPlanet(planet, { theme, layers, script: ctx.script, highlight, words: ctx.words, ghost, ...(season !== "year" ? { season } : {}) })), [planet, theme, layers, ctx.script, highlight?.kind, highlight?.id, globe, globe && selection, unknown, turning, t, past, season, ctx.words, ghost]); // eslint-disable-line react-hooks/exhaustive-deps
   const legend = useMemo(() => (planet ? planetLegend(planet, { theme, layers }) : undefined), [planet, theme, layers]);
+  const actions = useMemo(
+    () =>
+      planet
+        ? planetActions(planet, t, ctx.nm, {
+            city: (burg) => openCity(planet, burg),
+            local: openLocal && ((marker) => openLocal(planet, marker)),
+            region: openRegion && ((province) => openRegion(planet, province)),
+            country: openCountry && ((state) => openCountry(planet, state)),
+            here: openHere && ((cell) => openHere(planet, cell)),
+            sheet: openArea && ((cell) => openArea(planet, sheetBox(planet, planet.mesh.x[cell], planet.mesh.y[cell]), t("region.sheet"))),
+            descend: descend && ((marker) => descend(planet, marker)),
+          })
+        : null,
+    [planet, t], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const pick = (x: number, y: number) => {
     if (!planet) return;
     const cell = planet.mesh.find(x, y);
@@ -266,6 +282,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     layers,
     map: planet
       ? {
+          ...(actions && !globe ? { hover: actions.hover, measure: actions.measure, ...(tool ? {} : { open: actions.open, menu: actions.menu }) } : {}),
           svg,
           width: globe ? GLOBE_SIZE : planet.params.width,
           height: globe ? GLOBE_SIZE : planet.params.height,

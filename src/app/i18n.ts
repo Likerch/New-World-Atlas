@@ -2393,6 +2393,8 @@ const TERMS: Record<string, [string, string]> = {
   "map.zoomIn": ["Zoom in", "Приблизить"],
   "map.zoomOut": ["Zoom out", "Отдалить"],
   "map.fit": ["Fit the whole map", "Показать карту целиком"],
+  "map.ruler": ["Ruler: click two points", "Линейка: две точки"],
+  "map.minimap": ["Click to look there", "Нажмите, чтобы перейти туда"],
   "galaxy.fewerStars": ["fewer stars than the {{asked}} asked: no room for more", "звёзд меньше заказанных {{asked}}: больше не поместилось"],
   "galaxy.fewerEmpires": ["fewer powers than the {{asked}} asked: no room for more", "держав меньше заказанных {{asked}}: не нашлось места"],
   "space.companion": ["Companion star", "Звезда-компаньон"],

@@ -1,4 +1,5 @@
 // What every map level (galaxy, system, planet, region, city, building, local map) gives the app shell.
+import type { MenuItem } from "../MapView";
 import type { ReactNode } from "react";
 import type { Language, LegendSection, MapPatch } from "../../core/index";
 import type { Locale, T } from "../i18n";
@@ -38,7 +39,21 @@ export interface Level {
   setSeed: (seed: string) => void;
   generate: (seed?: string) => void;
   /** The map; a globe also turns when dragged. */
-  map: { svg: string; width: number; height: number; key: string; onPick: (x: number, y: number) => void; onDrag?: (dx: number, dy: number) => void; onDragEnd?: () => void; zoomRange?: [number, number] } | null;
+  map: {
+    svg: string;
+    width: number;
+    height: number;
+    key: string;
+    onPick: (x: number, y: number) => void;
+    onDrag?: (dx: number, dy: number) => void;
+    onDragEnd?: () => void;
+    zoomRange?: [number, number];
+    /** What lies under the cursor, the map a double-click opens, the right-click menu, a distance in words. */
+    hover?: (x: number, y: number) => string | null;
+    open?: (x: number, y: number) => void;
+    menu?: (x: number, y: number) => MenuItem[];
+    measure?: (x0: number, y0: number, x1: number, y1: number) => string;
+  } | null;
   controls: ReactNode;
   inspector: ReactNode;
   /** What the map's colours, lines and marks mean. */

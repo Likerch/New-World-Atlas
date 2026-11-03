@@ -6,6 +6,7 @@ import { selectedOf } from "./planet";
 import { describePlanet, searchPlanet } from "../planetText";
 import { useLayers } from "./layers";
 import { editAt, WorldEditor, type EditTool, type Paint } from "../WorldEditor";
+import { planetActions } from "../planetActions";
 
 /** A close-up's own edits: its land's peoples and faiths, its villages, words and zones. Its relief and realms are the
  * planet's, edited there. */
@@ -82,6 +83,18 @@ export function useRegionLevel(
   const ghost = useMemo(() => (region && layers.underground ? underworldGhostSvg(generateUnderworld(region)) : undefined), [region, layers.underground]);
   const svg = useMemo(() => (region ? renderPlanet(region, { theme, layers, script: ctx.script, highlight, words: ctx.words, ghost }) : ""), [region, theme, layers, ctx.script, highlight?.kind, highlight?.id, t, ghost]); // eslint-disable-line react-hooks/exhaustive-deps
   const legend = useMemo(() => (region ? planetLegend(region, { theme, layers }) : undefined), [region, theme, layers]);
+  const actions = useMemo(
+    () =>
+      region
+        ? planetActions(region, t, ctx.nm, {
+            city: (burg) => links.openCity(region, burg),
+            local: (marker) => links.openLocal(region, marker),
+            here: (cell) => links.openHere(region, cell),
+            descend: (marker) => links.openUnderworld(region, marker),
+          })
+        : null,
+    [region, t], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   return {
     id: "region",
@@ -139,6 +152,7 @@ export function useRegionLevel(
     },
     map: region
       ? {
+          ...(actions ? { hover: actions.hover, measure: actions.measure, ...(tool ? {} : { open: actions.open, menu: actions.menu }) } : {}),
           svg,
           width: region.params.width,
           height: region.params.height,

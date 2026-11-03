@@ -1073,3 +1073,82 @@ table.figures td span:not(.bar) {
   padding-left: 18px;
   font-size: 12px;
 }
+
+/* What lies under the cursor; the right-click menu; the ruler; the minimap. */
+.map-tip {
+  position: absolute;
+  pointer-events: none;
+  max-width: 320px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-size: 12px;
+  white-space: nowrap;
+  z-index: 5;
+}
+.map-menu {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+  z-index: 6;
+}
+.map-menu button {
+  text-align: left;
+  border: 0;
+  background: none;
+  padding: 6px 10px;
+  border-radius: 6px;
+}
+.map-menu button:hover,
+.map-menu button:focus-visible {
+  background: var(--accent-soft);
+}
+.map.ruling {
+  cursor: crosshair;
+}
+.map-ruler {
+  pointer-events: none;
+  fill: #c0392b;
+  stroke: #c0392b;
+}
+.map-ruler text {
+  fill: #fff;
+  stroke: #c0392b;
+  paint-order: stroke;
+  text-anchor: middle;
+  font-weight: 600;
+}
+.minimap {
+  position: absolute;
+  left: 12px;
+  bottom: 48px;
+  width: 180px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--panel);
+  cursor: pointer;
+  z-index: 4;
+}
+.minimap img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.minimap span {
+  position: absolute;
+  border: 2px solid #c0392b;
+  pointer-events: none;
+}
+.map-tools button[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--on-accent);
+}
