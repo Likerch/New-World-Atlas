@@ -5,7 +5,7 @@
 import Delaunator from "delaunator";
 import { paletteColor } from "../color";
 import { createLanguage, name } from "../language";
-import { createRng, randomSeed } from "../random";
+import { createRng, randomSeed, type Rng } from "../random";
 import { cleanKind, type CustomKind } from "./custom";
 import type { GalaxyShape } from "./galaxy";
 
@@ -146,28 +146,28 @@ export function generateUniverse(input: Partial<UniverseParams> = {}): Universe 
   // The strange: anywhere but deep in a void, except what belongs to the voids.
   const weird = rng.fork("anomalies");
   const anomalies: Anomaly[] = [];
-  const spot = (where: "anywhere" | "core" | "rim" | "void" | "filament") => {
+  const spot = (where: "anywhere" | "core" | "rim" | "void" | "filament", from: Rng = weird) => {
     for (let attempt = 0; attempt < 200; attempt++) {
       if (where === "void" && voids.length) {
-        const v = weird.pick(voids);
-        const angle = weird.float(0, Math.PI * 2),
-          r = weird.float(0, v.r * 0.6);
+        const v = from.pick(voids);
+        const angle = from.float(0, Math.PI * 2),
+          r = from.float(0, v.r * 0.6);
         return [v.x + Math.cos(angle) * r, v.y + Math.sin(angle) * r] as const;
       }
       if (where === "filament" && filaments.length) {
-        const [a, b] = weird.pick(filaments);
-        const t = weird.next();
+        const [a, b] = from.pick(filaments);
+        const t = from.next();
         return [galaxies[a].x + (galaxies[b].x - galaxies[a].x) * t, galaxies[a].y + (galaxies[b].y - galaxies[a].y) * t] as const;
       }
-      const x = weird.float(40, W - 40),
-        y = weird.float(40, H - 40);
+      const x = from.float(40, W - 40),
+        y = from.float(40, H - 40);
       const d = Math.hypot(x - W / 2, y - H / 2) / (Math.min(W, H) / 2);
       if (where === "core" && d > 0.45) continue;
       if (where === "rim" && d < 0.75) continue;
       if (where === "anywhere" && inside(x, y)) continue;
       return [x, y] as const;
     }
-    return [weird.float(40, W - 40), weird.float(40, H - 40)] as const;
+    return [from.float(40, W - 40), from.float(40, H - 40)] as const;
   };
   const WHERE: Record<AnomalyKind, "anywhere" | "void" | "filament"> = { "great-attractor": "anywhere", "cosmic-string": "anywhere", lens: "filament", "white-hole": "void", "dark-flow": "anywhere", relic: "filament", supermassive: "filament", "bubble-wall": "anywhere" };
   for (let k = Math.round(weird.int(5, 9) * strange); k > 0; k--) {
@@ -180,7 +180,8 @@ export function generateUniverse(input: Partial<UniverseParams> = {}): Universe 
     const own = rng.fork(`custom-${kind.id}`);
     const where = kind.where === "claimed" || kind.where === "unclaimed" || kind.where === "nebula" ? "anywhere" : kind.where;
     for (let k = 0; k < kind.count; k++) {
-      const [x, y] = spot(where);
+      // Each kind draws its places from its own stream, so one kind never moves another.
+      const [x, y] = spot(where, own);
       anomalies.push({ id: anomalies.length, kind: "custom", custom: kind.id, x, y, angle: own.float(0, Math.PI * 2), size: kind.area ? own.float(40, 90) : own.float(8, 14), name: kind.name || name(tongue, own, "plain") });
     }
   });

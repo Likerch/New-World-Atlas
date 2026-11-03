@@ -39,7 +39,7 @@ body,
 .app {
   display: grid;
   grid-template-columns: 230px 1fr 320px;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto auto 1fr;
   height: 100vh;
 }
 
@@ -408,16 +408,15 @@ button.back {
   top: 0;
   pointer-events: none;
 }
+/* The players' view: the map alone, filling the window. */
 .app.players {
-  grid-template-columns: 0 1fr 0;
+  grid-template: 1fr / 1fr;
 }
 .app.players .controls,
 .app.players .inspector,
-.app.players .topbar {
+.app.players .topbar,
+.app.players .crumbs {
   display: none;
-}
-.app.players {
-  grid-template-rows: 0 1fr;
 }
 .gm {
   position: absolute;
@@ -685,4 +684,84 @@ button.back {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 12px;
+}
+
+/* Worlds: the open world in the top bar, the path to the map shown, the library. */
+.world-button {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.crumbs {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  padding: 3px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+}
+.crumbs button {
+  padding: 2px 6px;
+  border-color: transparent;
+}
+.crumbs button[aria-current="page"] {
+  font-weight: 700;
+  border-color: var(--border);
+}
+.crumb-sep {
+  color: var(--muted);
+  margin: 0 2px;
+}
+.empty-hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  text-align: center;
+  color: #c9c2b6;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.busy.error {
+  background: #8b2b2b;
+  pointer-events: auto;
+}
+.warning {
+  color: #d9822b;
+  font-weight: 600;
+}
+.error {
+  color: #d64545;
+}
+.top-picker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.top-picker button {
+  text-align: left;
+  padding: 6px 8px;
+}
+.top-picker button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.row-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.world-list li {
+  align-items: flex-start;
+}
+.world-list .grow {
+  cursor: pointer;
 }

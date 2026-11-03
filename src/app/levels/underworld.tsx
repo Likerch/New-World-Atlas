@@ -28,6 +28,7 @@ export function useUnderworldLevel(ctx: LevelContext, openCave: (world: Underwor
       ctx.show("underworld");
     },
     mapKey: world ? `underworld:${world.seed}` : null,
+    params: world ? {} : null,
     selected: !world ? null : cavern ? { key: `cavern:${cavern.id}`, label: cavern.name } : { key: "world", label: world.name },
     map: world
       ? {

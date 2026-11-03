@@ -1,6 +1,6 @@
 // What every map level (galaxy, system, planet, region, city, building, local map) gives the app shell.
 import type { ReactNode } from "react";
-import type { LegendSection, MapPatch } from "../../core/index";
+import type { Language, LegendSection, MapPatch } from "../../core/index";
 import type { Locale, T } from "../i18n";
 
 export type LevelId = "universe" | "galaxy" | "system" | "planet" | "region" | "underworld" | "city" | "building" | "local";
@@ -39,6 +39,13 @@ export interface Level {
   inspector: ReactNode;
   /** What the map's colours, lines and marks mean. */
   legend?: LegendSection[];
+  /** For the world: the map's place in it (when it differs from mapKey: a globe, a quarter close-up), the parameters
+   * it was made from and the language its names came from. */
+  worldKey?: string | null;
+  params?: Record<string, unknown> | null;
+  language?: Language | null;
+  /** Opens a map of this level from saved parameters (the world's top map, or one met again). */
+  restore?: (params: Record<string, unknown>, language?: Language | null) => void;
   status: string;
   /** Data for the JSON export. */
   data: () => unknown;

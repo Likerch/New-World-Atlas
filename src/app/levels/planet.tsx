@@ -178,6 +178,9 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     planet,
     load,
     legend,
+    worldKey: mapKey,
+    params: raw ? (raw.params as unknown as Record<string, unknown>) : null,
+    restore: (saved) => load({ name: undefined, world: undefined, setting: undefined, ...(saved as Partial<PlanetParams>) }),
     // Pins and fog are laid on the flat map; the globe shows the world without them.
     mapKey: globe ? null : mapKey,
     selected: selectedOf(planet, selection),
@@ -204,7 +207,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
           </button>
         ) : null}
         <button type="button" className="primary wide" onClick={() => setForm(true)}>
-          🌍 {t("world.open")}
+          🌍 {t("world.planetForm")}
         </button>
         {form ? (
           <WorldForm

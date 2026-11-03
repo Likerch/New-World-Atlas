@@ -49,6 +49,8 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): 
     icon: "🏠",
     title: plan ? names.world || plan.params.name || typeName(plan.params.type) : null,
     mapKey,
+    params: plan ? (plan.params as unknown as Record<string, unknown>) : null,
+    restore: (saved) => build(saved as unknown as BuildingParams),
     selected: !plan || !current ? null : room !== null ? { key: `room:${current.level}:${room}`, label: roomName(current.rooms.find((r) => r.id === room)?.kind) } : { key: "world", label: plan.params.name || typeName(plan.params.type) },
     seed: input.seed,
     setSeed: (seed) => set("seed", seed),

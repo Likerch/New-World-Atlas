@@ -91,6 +91,8 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
       ctx.show("galaxy");
     },
     mapKey,
+    params: raw ? (raw.params as unknown as Record<string, unknown>) : null,
+    restore: (saved) => build(galaxyParams(saved as Partial<GalaxyParams>)),
     selected: !galaxy ? null : star !== null ? { key: `star:${star}`, label: galaxy.stars[star].name } : zone !== null ? { key: `zone:${zone}`, label: galaxy.zones[zone].name } : empire !== null ? { key: `empire:${empire}`, label: galaxy.empires[empire].name } : { key: "world", label: galaxy.name },
     map: galaxy
       ? {
@@ -255,7 +257,7 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
   };
 }
 
-export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<PlanetParams>) => void, back: (() => void) | null): Level & { open: (galaxy: Galaxy, star: number) => void } {
+export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<PlanetParams>, body: number) => void, back: (() => void) | null): Level & { open: (galaxy: Galaxy, star: number) => void } {
   const { t, nm } = ctx;
   const [rawSystem, setSystem] = useState<StarSystem | null>(null);
   const mapKey = rawSystem ? `system:${rawSystem.seed}` : null;
@@ -300,6 +302,12 @@ export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<P
     },
     open,
     mapKey,
+    // A system cut from a galaxy is remembered by its galaxy and star; a lone one by its own parameters.
+    params: rawSystem ? (source ? { galaxy: source.galaxy.params as unknown as Record<string, unknown>, star: source.star } : (input as unknown as Record<string, unknown>)) : null,
+    restore: (saved) => {
+      if (saved.galaxy) open(generateGalaxy(saved.galaxy as Partial<GalaxyParams>), saved.star as number);
+      else lone(saved as unknown as SystemParams);
+    },
     selected: !system ? null : body !== null ? { key: `body:${body}`, label: system.bodies[body].name } : { key: "world", label: system.name },
     map: system
       ? {
@@ -367,7 +375,7 @@ export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<P
             ) : null}
             {selected.population ? <Row label={t("stat.population")} value={`${selected.population.toLocaleString()} ${t("unit.million")}`} /> : null}
             {!["gas-giant", "ice-giant", "belt"].includes(selected.kind) ? (
-              <button type="button" className="primary wide" onClick={() => openPlanet(planetFromBody(system, selected.id))}>
+              <button type="button" className="primary wide" onClick={() => openPlanet(planetFromBody(system, selected.id), selected.id)}>
                 🌍 {t("action.openPlanet")}
               </button>
             ) : null}
@@ -398,7 +406,7 @@ export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<P
   };
 }
 
-export function useUniverseLevel(ctx: LevelContext, openGalaxy: (params: Partial<GalaxyParams>) => void): Level {
+export function useUniverseLevel(ctx: LevelContext, openGalaxy: (params: Partial<GalaxyParams>, id: number) => void): Level {
   const { t, nm } = ctx;
   const [input, setInput] = useState<UniverseParams>(() => universeParams({ custom: loadKinds("atlas.kinds.universe") }));
   const [universe, setUniverse] = useState<Universe | null>(null);
@@ -420,7 +428,7 @@ export function useUniverseLevel(ctx: LevelContext, openGalaxy: (params: Partial
   const legend = useMemo(() => (universe ? universeLegend(universe) : undefined), [universe]);
   const ukinds = new Map((universe?.params.custom ?? []).map((kind): [string, CustomKind] => [kind.id, kind]));
   const anomalyName = (kind: string, custom?: string) => (kind === "custom" ? ukinds.get(custom ?? "")?.name || t("custom.unnamed") : t(`anomaly.${kind}`));
-  const open = (id: number) => universe && openGalaxy({ seed: `${universe.params.seed}/galaxy-${id}`, shape: shapeOf(universe.galaxies[id].kind), stars: universe.galaxies[id].stars });
+  const open = (id: number) => universe && openGalaxy({ seed: `${universe.params.seed}/galaxy-${id}`, shape: shapeOf(universe.galaxies[id].kind), stars: universe.galaxies[id].stars }, id);
   return {
     id: "universe",
     legend,
@@ -433,6 +441,8 @@ export function useUniverseLevel(ctx: LevelContext, openGalaxy: (params: Partial
       if (!universe) build(input);
     },
     mapKey: universe ? `universe:${universe.params.seed}` : null,
+    params: universe ? (universe.params as unknown as Record<string, unknown>) : null,
+    restore: (saved) => build(universeParams(saved as Partial<UniverseParams>)),
     selected: !universe ? null : selected ? { key: `galaxy:${selected.id}`, label: selected.name } : { key: "world", label: universe.name },
     map: universe
       ? {

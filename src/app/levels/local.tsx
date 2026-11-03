@@ -53,6 +53,12 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null): Lev
       if (!map && !pending.current) build(input, language);
     },
     mapKey,
+    params: raw ? (raw.params as unknown as Record<string, unknown>) : null,
+    language,
+    restore: (saved, tongue) => {
+      setLanguage(tongue ?? null);
+      build(localParams(saved as Partial<LocalParams>), tongue ?? null);
+    },
     selected: !map ? null : keyed !== null ? { key: `keyed:${keyed}`, label: `${keyed}. ${t(`purpose.${map.keyed.find((k) => k.id === keyed)?.purpose}`)}` } : { key: "world", label: map.name },
     open: (params, tongue) => {
       setLanguage(tongue);

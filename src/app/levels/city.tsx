@@ -55,6 +55,15 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
     },
     city,
     mapKey,
+    worldKey: parents.length ? `city:${parents[0].params.seed}` : mapKey,
+    params: (parents[0] ?? raw)?.params ? ((parents[0] ?? raw)!.params as unknown as Record<string, unknown>) : null,
+    language,
+    restore: (saved, tongue) => {
+      const params = saved as unknown as CityParams;
+      setLanguage(tongue ?? null);
+      setTheme(defaultCityTheme(params.era));
+      build(params, tongue ?? null);
+    },
     selected: !city
       ? null
       : selection?.kind === "ward"

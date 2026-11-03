@@ -8,6 +8,7 @@ import type { Level, LevelContext } from "./types";
 export function useRegionLevel(ctx: LevelContext, links: { openCity: (region: Planet, burg: number) => void; openLocal: (region: Planet, marker: number) => void; back: (() => void) | null }): Level & { open: (planet: Planet, province: number) => void; openCountry: (planet: Planet, state: number) => void } {
   const { t } = ctx;
   const [raw, setRegion] = useState<Planet | null>(null);
+  const [of, setOf] = useState<{ of: "province" | "state"; id: number } | null>(null);
   const mapKey = raw ? `region:${raw.params.seed}` : null;
   const names = ctx.names(mapKey);
   const region = useMemo(() => (raw ? renamePlanet(raw, names) : null), [raw, names]);
@@ -30,11 +31,13 @@ export function useRegionLevel(ctx: LevelContext, links: { openCity: (region: Pl
     generate: () => undefined,
     ensure: () => undefined,
     mapKey,
+    params: of,
     selected: selectedOf(region, selection),
     openCountry: (planet, state) => {
       ctx.run(() => {
         const started = performance.now();
         setRegion(generateCountry(planet, state));
+        setOf({ of: "state", id: state });
         setTime(Math.round(performance.now() - started));
         setSelection(null);
       });
@@ -44,6 +47,7 @@ export function useRegionLevel(ctx: LevelContext, links: { openCity: (region: Pl
       ctx.run(() => {
         const started = performance.now();
         setRegion(generateRegion(planet, province));
+        setOf({ of: "province", id: province });
         setTime(Math.round(performance.now() - started));
         setSelection(null);
       });
