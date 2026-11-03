@@ -1,7 +1,7 @@
 // The GM panel over the map: what a click does (inspect, drop a pin, reveal through the fog), the fog itself, the
 // selected thing's new name and notes, the pins, the players' view, and the campaign file.
 import { useRef, useState } from "react";
-import type { Campaign, MapPatch, Pin } from "../core/index";
+import { readCampaign, type MapPatch, type Pin } from "../core/index";
 import type { CampaignStore } from "./campaign";
 import type { T } from "./i18n";
 
@@ -151,10 +151,9 @@ export function GmPanel({ t, store, mapKey, sheetKey, selected, mode, setMode, b
             const chosen = event.target.files?.[0];
             if (!chosen) return;
             try {
-              const campaign = JSON.parse(await chosen.text()) as Campaign;
-              if (campaign.format === "new-world-atlas/campaign") store.replace(campaign);
+              store.replace(readCampaign(JSON.parse(await chosen.text())));
             } catch {
-              // Not a campaign file: ignore it.
+              alert(t("gm.badFile"));
             }
             event.target.value = "";
           }}

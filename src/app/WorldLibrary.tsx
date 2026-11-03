@@ -5,6 +5,7 @@ import { ERA_IDS, randomSeed, settingOf, TOP_LEVELS, type Setting, type TopLevel
 import type { T } from "./i18n";
 import { SettingPanel } from "./SettingPanel";
 import type { NewWorld, Worlds } from "./worlds";
+import { useEscape } from "./keys";
 
 export const LEVEL_ICON: Record<string, string> = { universe: "🌠", galaxy: "🌌", system: "☀️", planet: "🌍", region: "🗺", underworld: "🕳", city: "🏰", building: "🏠", local: "🗺️" };
 
@@ -20,15 +21,17 @@ function download(name: string, data: unknown) {
 const fileName = (world: WorldDoc) => `${world.name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-") || "world"}.atlas.json`;
 
 export function WorldLibrary({ t, worlds, onClose, onWorldSetting }: { t: T; worlds: Worlds; onClose: () => void; onWorldSetting: (setting: Setting) => void }) {
+  // Esc closes the library; a click beside it does not, so a name being typed is not lost.
+  useEscape(onClose);
   const { world } = worlds;
   const [draft, setDraft] = useState<NewWorld>(() => ({ name: "", top: "planet", setting: {}, script: "latin", start: { seed: randomSeed() } }));
   const [error, setError] = useState("");
   const picker = useRef<HTMLInputElement>(null);
-  const when = (time: number) => new Date(time).toLocaleString();
+  const when = (time: number) => new Date(time).toLocaleString(t.locale);
   const era = (setting: Partial<Setting>) => t(`era.${settingOf(setting).era}`);
 
   return (
-    <div className="modal-back" onClick={onClose}>
+    <div className="modal-back">
       <div className="modal" role="dialog" aria-modal="true" aria-label={t("worlds.title")} onClick={(event) => event.stopPropagation()}>
         <div className="modal-head">
           <h2>{t("worlds.title")}</h2>

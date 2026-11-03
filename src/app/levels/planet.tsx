@@ -8,6 +8,7 @@ import { WorldEditor, type EditTool } from "../WorldEditor";
 import type { T } from "../i18n";
 import { useLayers } from "./layers";
 import type { Level, LevelContext } from "./types";
+import { NumberInput } from "../NumberInput";
 
 const NUMBER_FIELDS: { key: keyof PlanetParams; min: number; max: number; step: number }[] = [
   { key: "latitudeNorth", min: -90, max: 90, step: 1 },
@@ -363,7 +364,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
           <select value={params.cells} onChange={(event) => set("cells", Number(event.target.value))}>
             {[3000, 5000, 10000, 20000, 30000, 50000].map((count) => (
               <option key={count} value={count}>
-                {count.toLocaleString()}
+                {count.toLocaleString(t.locale)}
               </option>
             ))}
           </select>
@@ -371,7 +372,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
         {NUMBER_FIELDS.map(({ key, min, max, step }) => (
           <label key={key}>
             {t(`field.${key}`)}
-            <input type="number" min={min} max={max} step={step} value={params[key] as number} onChange={(event) => set(key, Number(event.target.value) as never)} />
+            <NumberInput min={min} max={max} step={step} value={params[key] as number} onChange={(value) => set(key, value as never)} />
           </label>
         ))}
         <h2>{t("panel.layers")}</h2>

@@ -2,6 +2,7 @@
 import { useMemo, useRef, useState } from "react";
 import { BUILDING_THEMES, BUILDING_TYPES, MAX_FLOORS, ERA_BUILDINGS, buildingFromCity, buildingParams, ERAS, generateBuilding, generateRoom, PX, renderBuilding, renderRoom, ROOM_PX, type BuildingParams, type BuildingPlan, type BuildingThemeId, type City, buildingLegend } from "../../core/index";
 import type { Level, LevelContext } from "./types";
+import { NumberInput } from "../NumberInput";
 
 export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): Level & { openFromCity: (city: City, index: number) => void } {
   const { t } = ctx;
@@ -144,7 +145,7 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): 
         {(["width", "depth", "floors"] as const).map((key) => (
           <label key={key}>
             {t(`field.${key}`)}
-            <input type="number" min={key === "floors" ? 1 : 4} max={key === "floors" ? MAX_FLOORS : 60} value={input[key]} onChange={(event) => set(key, Number(event.target.value))} />
+            <NumberInput min={key === "floors" ? 1 : 4} max={key === "floors" ? MAX_FLOORS : 60} value={input[key]} onChange={(value) => set(key, value)} />
           </label>
         ))}
         {(["cellar", "yard"] as const).map((key) => (

@@ -1,6 +1,7 @@
 // GM-layer regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { emptyPatch, generateCity, generatePlanet, overlaySvg, renameCity, renamePlanet, renderPlanet, withOverlay } from "../src/core/index";
+import { translator } from "../src/app/i18n";
+import { readCampaign, readWorld, planetParams, emptyPatch, generateCity, generatePlanet, overlaySvg, renameCity, renamePlanet, renderPlanet, withOverlay } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -37,6 +38,27 @@ test("players do not see hidden pins, and their fog is opaque", () => {
   assert.match(gm, /opacity="0.55" mask/u);
   const exported = withOverlay("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 100 100\"></svg>", players, 100, 100);
   assert.match(exported, /^<svg[^>]*><svg x="0" y="0"/u);
+});
+
+test("a file that is not a campaign is refused; a patch without fog is made whole; a pin cannot smuggle markup", () => {
+  assert.throws(() => readCampaign({ format: "something-else" }));
+  const read = readCampaign({ format: "new-world-atlas/campaign", version: 1, maps: { "planet:x": { names: { world: "X" } } } });
+  assert.deepEqual(read.maps["planet:x"].fog, { enabled: false, revealed: [] });
+  assert.deepEqual(read.maps["planet:x"].pins, []);
+  const svg = overlaySvg({ ...emptyPatch(), pins: [{ id: "p", x: 10, y: 10, label: "<b>", note: "", color: '"/><script>alert(1)</script>', hidden: false }] }, 100, 100, false);
+  assert.doesNotMatch(svg, /<script|<b>/u);
+  const world = readWorld({ format: "new-world-atlas/world", version: 1, id: "w", name: "W", top: "planet", patches: { "city:c": { names: {} } } });
+  assert.equal(world.patches["city:c"].fog.enabled, false);
+  const north = planetParams({ seed: "turned", latitudeNorth: -20, latitudeSouth: 40 });
+  assert.ok(north.latitudeNorth > north.latitudeSouth, "north stays north of south");
+});
+
+test("words agree with their numbers, and numbers are written the reader's way", () => {
+  const ru = translator("ru");
+  assert.match(ru("stats.summary", { states: 262, burgs: 4, rivers: 1 }), /262 государства · 4 города · 1 река/u);
+  assert.match(ru("building.summary", { rooms: 5, floors: 4, w: 10, d: 8 }), /5 комнат · 4 этажа/u);
+  assert.match(ru("world.size", { w: 3100, h: 12 }), /3\s100/u);
+  assert.match(translator("en")("galaxy.summary", { stars: 1, empires: 2, lanes: 3 }), /1 star · 2 powers · 3 hyperlanes/u);
 });
 
 console.log(`campaign: ${passed} regressions passed`);

@@ -6,6 +6,8 @@
   --muted: #7a6f60;
   --accent: #8a4b2a;
   --accent-soft: #f1e2d3;
+  /* Text on the accent: white on the light theme's brown, near-black on the dark theme's amber. */
+  --on-accent: #ffffff;
   --map-bg: #1f2a36;
   font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
   font-size: 13px;
@@ -22,6 +24,7 @@
     --muted: #a19a8f;
     --accent: #e09a62;
     --accent-soft: #3a2c22;
+    --on-accent: #1b120c;
     --map-bg: #0d1117;
   }
 }
@@ -102,7 +105,16 @@ summary:hover {
 button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
+}
+/* What the keyboard is on can always be seen. */
+button:focus-visible,
+summary:focus-visible,
+select:focus-visible,
+input:focus-visible,
+.list li:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
 button.ghost {
   background: transparent;
@@ -764,4 +776,15 @@ button.back {
 }
 .world-list .grow {
   cursor: pointer;
+}
+
+/* On a narrow screen the legend takes less of the map. */
+@media (max-width: 900px) {
+  .legend {
+    width: 190px;
+    max-height: 42%;
+  }
+  .legend-section li {
+    font-size: 11px;
+  }
 }

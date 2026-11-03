@@ -14,7 +14,7 @@ export interface Focus {
   nonce: number;
 }
 
-export function MapView({ svg, overlay, width, height, focus, onPick, onDrag, onDragEnd, zoomRange = [0.8, 40] }: { svg: string; overlay: string; width: number; height: number; focus: Focus | null; onPick: (x: number, y: number) => void; onDrag?: (dx: number, dy: number) => void; onDragEnd?: () => void; zoomRange?: [number, number] }) {
+export function MapView({ svg, overlay, width, height, focus, onPick, onDrag, onDragEnd, zoomRange = [0.8, 40], labels = { zoomIn: "+", zoomOut: "−", fit: "fit" } }: { svg: string; overlay: string; width: number; height: number; focus: Focus | null; onPick: (x: number, y: number) => void; onDrag?: (dx: number, dy: number) => void; onDragEnd?: () => void; zoomRange?: [number, number]; labels?: { zoomIn: string; zoomOut: string; fit: string } }) {
   const box = useRef<HTMLDivElement>(null);
   const [view, setView] = useState<View>({ x: 0, y: 0, k: 1 });
   const [fit, setFit] = useState(1);
@@ -103,7 +103,7 @@ export function MapView({ svg, overlay, width, height, focus, onPick, onDrag, on
               const cx = box.current!.clientWidth / 2,
                 cy = box.current!.clientHeight / 2;
               return { k, x: cx - ((cx - v.x) / v.k) * k, y: cy - ((cy - v.y) / v.k) * k };
-            })} aria-label="+">
+            })} aria-label={labels.zoomIn} title={labels.zoomIn}>
           +
         </button>
         <button type="button" onClick={() => setView((v) => {
@@ -111,10 +111,10 @@ export function MapView({ svg, overlay, width, height, focus, onPick, onDrag, on
               const cx = box.current!.clientWidth / 2,
                 cy = box.current!.clientHeight / 2;
               return { k, x: cx - ((cx - v.x) / v.k) * k, y: cy - ((cy - v.y) / v.k) * k };
-            })} aria-label="−">
+            })} aria-label={labels.zoomOut} title={labels.zoomOut}>
           −
         </button>
-        <button type="button" onClick={fitView} aria-label="fit">
+        <button type="button" onClick={fitView} aria-label={labels.fit} title={labels.fit}>
           ⤢
         </button>
       </div>

@@ -10,7 +10,7 @@
 // - the game master may override any of them on a map, and the override reaches that map's descendants (a city
 //   shown in another age opens its houses in that age).
 // When a parent changes, its children are derived afresh on the next visit and their overrides laid back on top.
-import type { MapPatch } from "./campaign";
+import { cleanPatch, type MapPatch } from "./campaign";
 import type { Language } from "./language";
 import { localParams } from "./local/local";
 import { planetParams } from "./planet/generate";
@@ -235,7 +235,8 @@ export function readWorld(data: unknown): WorldDoc {
   if (!world || world.format !== "new-world-atlas/world") throw new Error("not a world file");
   if (world.version !== 1) throw new Error(`unknown world file version ${String(world.version)}`);
   if (!world.id || !world.top || !TOP_LEVELS.includes(world.top)) throw new Error("the world file has no top map");
-  return rekey({ ...emptyWorld({ id: world.id, name: world.name ?? "", top: world.top }), ...world, maps: world.maps ?? {}, patches: world.patches ?? {}, last: world.last ?? { key: null, byLevel: {} } } as WorldDoc);
+  const patches = Object.fromEntries(Object.entries(world.patches ?? {}).map(([key, patch]) => [key, cleanPatch(patch)]));
+  return rekey({ ...emptyWorld({ id: world.id, name: world.name ?? "", top: world.top }), ...world, maps: world.maps ?? {}, patches, last: world.last ?? { key: null, byLevel: {} } } as WorldDoc);
 }
 
 /** A map's patch changed: a new name for the map itself also names the thing it was opened from on its parent map

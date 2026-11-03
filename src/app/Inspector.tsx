@@ -147,11 +147,11 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
           {regiments.length ? (
             <>
               <h4>{t("army.title")}</h4>
-              <Row label={t("army.total")} value={regiments.reduce((sum, regiment) => sum + regiment.total, 0).toLocaleString()} />
+              <Row label={t("army.total")} value={regiments.reduce((sum, regiment) => sum + regiment.total, 0).toLocaleString(t.locale)} />
               <ul className="plain">
                 {regiments.map((regiment) => (
-                  <li key={regiment.id} title={(["infantry", "archers", "cavalry", "artillery", "fleet"] as const).filter((unit) => regiment.units[unit]).map((unit) => `${at(`army.unit.${unit}`)} ${regiment.units[unit].toLocaleString()}`).join(", ")}>
-                    {t(`army.stance.${regiment.stance}`)} {regiment.number} — <Link label={nm(planet.burgs[regiment.burg].name)} onClick={() => pick("burg", regiment.burg, [regiment.x, regiment.y])} />, {regiment.total.toLocaleString()}
+                  <li key={regiment.id} title={(["infantry", "archers", "cavalry", "artillery", "fleet"] as const).filter((unit) => regiment.units[unit]).map((unit) => `${at(`army.unit.${unit}`)} ${regiment.units[unit].toLocaleString(t.locale)}`).join(", ")}>
+                    {t(`army.stance.${regiment.stance}`)} {regiment.number} — <Link label={nm(planet.burgs[regiment.burg].name)} onClick={() => pick("burg", regiment.burg, [regiment.x, regiment.y])} />, {regiment.total.toLocaleString(t.locale)}
                     {regiment.ships ? ` · ${at("army.ships", { count: regiment.ships })}` : ""}
                     {regiment.facing ? ` · ${t("army.facing", { name: nm(planet.states[regiment.facing].name) })}` : ""}
                   </li>
@@ -302,7 +302,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
         <div className="card">
           <h3>{nm(river.name)}</h3>
           <Row label={t("stat.length")} value={km(river.length, t)} />
-          <Row label={t("stat.discharge")} value={`${Math.round(river.discharge).toLocaleString()} ${t("unit.m3s")}`} />
+          <Row label={t("stat.discharge")} value={`${Math.round(river.discharge).toLocaleString(t.locale)} ${t("unit.m3s")}`} />
           <Row label={t("stat.flowsInto")} value={river.parent ? <Link label={nm(planet.rivers[river.parent].name)} onClick={() => pick("river", river.parent)} /> : t("stat.sea")} />
         </div>
       );

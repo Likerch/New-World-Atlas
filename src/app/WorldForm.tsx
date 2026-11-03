@@ -5,6 +5,8 @@ import { useState } from "react";
 import { randomSeed, TEMPLATES, type PlanetParams } from "../core/index";
 import type { T } from "./i18n";
 import { SettingPanel } from "./SettingPanel";
+import { NumberInput } from "./NumberInput";
+import { useEscape } from "./keys";
 
 export type Coverage = "planet" | "hemisphere" | "continent" | "region" | "custom";
 const COVERAGES: Coverage[] = ["planet", "hemisphere", "continent", "region", "custom"];
@@ -30,12 +32,14 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export function WorldForm({ t, initial, zoom, onCreate, onClose }: { t: T; initial: PlanetParams; zoom: ZoomRange; onCreate: (params: PlanetParams, zoom: ZoomRange) => void; onClose: () => void }) {
   const [params, setParams] = useState<PlanetParams>(initial);
+  // Esc closes the form; a click beside it does not, so nothing typed is lost by a slip.
+  useEscape(onClose);
   const [range, setRange] = useState<ZoomRange>(zoom);
   const [coverage, setCoverage] = useState<Coverage>(() => coverageOf(initial));
   const [centre, setCentre] = useState(() => Math.round((initial.latitudeNorth + initial.latitudeSouth) / 2));
   const set = <K extends keyof PlanetParams>(key: K, value: PlanetParams[K]) => setParams((current) => ({ ...current, [key]: value }));
   const number = (key: keyof PlanetParams, min: number, max: number, step = 1) => (
-    <input type="number" min={min} max={max} step={step} value={params[key] as number} onChange={(event) => set(key, Math.max(min, Math.min(max, Number(event.target.value))) as never)} />
+    <NumberInput min={min} max={max} step={step} value={params[key] as number} onChange={(value) => set(key, value as never)} />
   );
   // The whole planet is drawn twice as wide as tall, so its longitudes wrap the globe; the rest keep the usual frame.
   const cover = (next: Coverage, middle = centre) => {
@@ -50,7 +54,7 @@ export function WorldForm({ t, initial, zoom, onCreate, onClose }: { t: T; initi
   const wide = Math.round((tall * params.width) / params.height);
 
   return (
-    <div className="modal-back" onClick={onClose}>
+    <div className="modal-back">
       <div className="modal" role="dialog" aria-modal="true" aria-label={t("world.title")} onClick={(event) => event.stopPropagation()}>
         <div className="modal-head">
           <h2>{t("world.title")}</h2>
@@ -105,7 +109,7 @@ export function WorldForm({ t, initial, zoom, onCreate, onClose }: { t: T; initi
                 <Field label={t("field.latitudeSouth")}>{number("latitudeSouth", -90, 90)}</Field>
               </>
             ) : null}
-            <p className="muted">{t("world.size", { w: wide.toLocaleString(), h: tall.toLocaleString() })}</p>
+            <p className="muted">{t("world.size", { w: wide, h: tall })}</p>
             <Field label={t("field.template")}>
               <select value={params.template} onChange={(event) => set("template", event.target.value as PlanetParams["template"])}>
                 {TEMPLATES.map((id) => (
@@ -119,7 +123,7 @@ export function WorldForm({ t, initial, zoom, onCreate, onClose }: { t: T; initi
               <select value={params.cells} onChange={(event) => set("cells", Number(event.target.value))}>
                 {[3000, 5000, 10000, 20000, 30000, 50000].map((count) => (
                   <option key={count} value={count}>
-                    {count.toLocaleString()}
+                    {count.toLocaleString(t.locale)}
                   </option>
                 ))}
               </select>
@@ -143,7 +147,7 @@ export function WorldForm({ t, initial, zoom, onCreate, onClose }: { t: T; initi
             <Field label={`${t("world.zoomIn")}: ×${range[1]}`}>
               <input type="range" min={4} max={200} step={1} value={range[1]} onChange={(event) => setRange([range[0], Number(event.target.value)])} />
             </Field>
-            <p className="muted">{t("world.scaleHint", { far: Math.round(wide / range[0]).toLocaleString(), near: Math.max(1, Math.round(wide / range[1])).toLocaleString() })}</p>
+            <p className="muted">{t("world.scaleHint", { far: Math.round(wide / range[0]), near: Math.max(1, Math.round(wide / range[1])) })}</p>
           </section>
         </div>
         <div className="modal-actions">

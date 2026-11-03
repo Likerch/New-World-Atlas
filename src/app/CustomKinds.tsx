@@ -2,6 +2,7 @@
 // turns up and whether it is a region. They are kept in this browser, so the next map starts with them.
 import type { CustomKind, Placement } from "../core/index";
 import type { T } from "./i18n";
+import { NumberInput } from "./NumberInput";
 
 export function loadKinds(key: string): CustomKind[] {
   try {
@@ -39,7 +40,7 @@ export function CustomKinds({ t, value, places, onChange }: { t: T; value: Custo
             </button>
           </div>
           <div className="custom-row">
-            <input type="number" min={0} max={60} value={kind.count} aria-label={t("custom.count")} title={t("custom.count")} onChange={(event) => update(index, { count: Number(event.target.value) })} />
+            <NumberInput min={0} max={60} value={kind.count} aria-label={t("custom.count")} title={t("custom.count")} onChange={(value) => update(index, { count: value })} />
             <select className="grow" value={kind.where} aria-label={t("custom.where")} onChange={(event) => update(index, { where: event.target.value as Placement })}>
               {places.map((place) => (
                 <option key={place} value={place}>

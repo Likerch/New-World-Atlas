@@ -13,7 +13,7 @@ const en: Dict = {
   "action.export": "Export",
   "action.exportSvg": "SVG image",
   "action.exportPng": "PNG image",
-  "action.exportJson": "World data (JSON)",
+  "action.exportJson": "Map data (JSON)",
   "action.fit": "Fit map",
   "field.seed": "Seed",
   "field.template": "Landmass",
@@ -82,7 +82,7 @@ const en: Dict = {
   "burg.shanty": "shanty town",
   "search": "Search…",
   "generating": "Shaping the world…",
-  "stats.summary": "{{states}} states · {{burgs}} towns · {{rivers}} rivers · {{time}} ms",
+  "stats.summary": "{{states#state|states}} · {{burgs#town|towns}} · {{rivers#river|rivers}}",
   "seed.copy": "Same seed and settings give the same world.",
 };
 
@@ -94,7 +94,7 @@ const ru: Dict = {
   "action.export": "Выгрузить",
   "action.exportSvg": "Картинка SVG",
   "action.exportPng": "Картинка PNG",
-  "action.exportJson": "Данные мира (JSON)",
+  "action.exportJson": "Данные карты (JSON)",
   "action.fit": "Вся карта",
   "field.seed": "Сид",
   "field.template": "Суша",
@@ -163,7 +163,7 @@ const ru: Dict = {
   "burg.shanty": "трущобы",
   "search": "Поиск…",
   "generating": "Мир складывается…",
-  "stats.summary": "{{states}} государств · {{burgs}} городов · {{rivers}} рек · {{time}} мс",
+  "stats.summary": "{{states#государство|государства|государств}} · {{burgs#город|города|городов}} · {{rivers#река|реки|рек}}",
   "seed.copy": "Тот же сид и настройки дают тот же мир.",
 };
 
@@ -300,21 +300,21 @@ const TERMS: Record<string, [string, string]> = {
   "marker.watchtower": ["Watchtower", "Сторожевая башня"],
   "marker.giant-tree": ["Giant tree", "Древо-исполин"],
   "marker.portal": ["Portal", "Портал"],
-  "legend.volcano": ["A {{status}} volcano. Last eruption {{lastEruption}} years ago.", "Вулкан, {{status}}. Последнее извержение — {{lastEruption}} лет назад."],
+  "legend.volcano": ["A {{status}} volcano. Last eruption {{lastEruption#year|years}} ago.", "Вулкан, {{status}}. Последнее извержение — {{lastEruption#год|года|лет}} назад."],
   "legend.hot-spring": ["Hot water at {{temperature}} °C; locals say it heals.", "Вода {{temperature}} °C; местные верят, что она лечит."],
   "legend.mine": ["A {{resource}} mine held by {{owner}}.", "Рудник ({{resource}}), принадлежит: {{owner}}."],
   "legend.bridge": ["A bridge over the {{river}}.", "Мост через реку {{river}}."],
   "legend.lighthouse": ["Guides ships into {{port}}.", "Ведёт корабли в {{port}}."],
-  "legend.ruins": ["Ruins {{age}} years old, built by {{builders}}.", "Руины возрастом {{age}} лет; строители — {{builders}}."],
+  "legend.ruins": ["Ruins {{age#year|years}} old, built by {{builders}}.", "Руины возрастом {{age#год|года|лет}}; строители — {{builders}}."],
   "legend.battlefield": ["In year {{year}} {{sideA}} and {{sideB}} fought here; {{fallen}} fell.", "В {{year}} году здесь бились {{sideA}} и {{sideB}}; пали {{fallen}}."],
   "legend.monastery": ["Founded in year {{founded}} by the {{people}}; {{monks}} monks live here.", "Основан в {{founded}} году народом {{people}}; монахов: {{monks}}."],
-  "legend.cave": ["{{depth}} levels deep. Something lives below: {{dweller}}.", "Глубиной {{depth}} уровней. Внизу обитает: {{dweller}}."],
+  "legend.cave": ["{{depth#level|levels}} deep. Something lives below: {{dweller}}.", "Глубиной {{depth#уровень|уровня|уровней}}. Внизу обитает: {{dweller}}."],
   "legend.sacred-grove": ["A grove sacred to the spirit of the {{spirit}}.", "Роща, посвящённая духу: {{spirit}}."],
   "legend.shipwreck": ["Sank in year {{year}} carrying {{cargo}}.", "Затонул в {{year}} году с грузом: {{cargo}}."],
-  "legend.brigands": ["A band of about {{band}} robbers watches the road.", "Шайка примерно из {{band}} разбойников стережёт дорогу."],
+  "legend.brigands": ["A band of about {{band}} robbers watches the road.", "Шайка примерно из {{band#разбойника|разбойников|разбойников}} стережёт дорогу."],
   "legend.inn": ["Kept by {{host}}.", "Хозяин — {{host}}."],
   "legend.watchtower": ["Watches the border road.", "Следит за пограничной дорогой."],
-  "legend.giant-tree": ["About {{age}} years old.", "Возраст около {{age}} лет."],
+  "legend.giant-tree": ["About {{age#year|years}} old.", "Возраст около {{age#года|лет|лет}}."],
   "legend.portal": ["Leads to {{leadsTo}}.", "Ведёт в: {{leadsTo}}."],
   "fact.active": ["active", "действующий"],
   "fact.dormant": ["dormant", "дремлющий"],
@@ -386,7 +386,7 @@ const TERMS: Record<string, [string, string]> = {
   "field.shanty": ["Shanty town", "Трущобы"],
   "field.name": ["Name", "Название"],
   "city.hint": ["Click a quarter or a landmark.", "Нажми на квартал или на место."],
-  "city.summary": ["{{wards}} quarters · {{buildings}} buildings · {{landmarks}} places · {{time}} ms", "{{wards}} кварталов · {{buildings}} зданий · {{landmarks}} мест · {{time}} мс"],
+  "city.summary": ["{{wards#quarter|quarters}} · {{buildings#building|buildings}} · {{landmarks#place|places}}", "{{wards#квартал|квартала|кварталов}} · {{buildings#здание|здания|зданий}} · {{landmarks#место|места|мест}}"],
   "stat.wealth": ["Wealth", "Достаток"],
   "stat.buildings": ["Buildings", "Зданий"],
   "stat.hectares": ["Area", "Площадь"],
@@ -626,7 +626,7 @@ const TERMS: Record<string, [string, string]> = {
   "floor.ground": ["Ground floor", "1 этаж"],
   "floor.upper": ["Floor {{n}}", "{{n}} этаж"],
   "building.hint": ["Click a room.", "Нажми на комнату."],
-  "building.summary": ["{{rooms}} rooms · {{floors}} floors · {{w}}×{{d}} m", "{{rooms}} комнат · {{floors}} этажей · {{w}}×{{d}} м"],
+  "building.summary": ["{{rooms#room|rooms}} · {{floors#floor|floors}} · {{w}}×{{d}} m", "{{rooms#комната|комнаты|комнат}} · {{floors#этаж|этажа|этажей}} · {{w}}×{{d}} м"],
   "stat.furniture": ["Furnishings", "Обстановка"],
   "stat.size": ["Size", "Размер"],
   "stat.floors": ["Floors", "Этажей"],
@@ -746,8 +746,8 @@ const TERMS: Record<string, [string, string]> = {
   "system.fromGalaxy": ["Opened from a galaxy star. Change the seed or the star to make a system of your own.", "Открыта со звезды галактики. Смени сид или звезду, чтобы создать свою систему."],
   "system.anyStar": ["Any star", "Любая звезда"],
   "system.byChance": ["By chance", "Как выпадет"],
-  "galaxy.summary": ["{{stars}} stars · {{empires}} powers · {{lanes}} hyperlanes", "{{stars}} звёзд · {{empires}} держав · {{lanes}} гиперпутей"],
-  "system.summary": ["{{bodies}} bodies · {{habitable}} habitable", "{{bodies}} тел · {{habitable}} обитаемых"],
+  "galaxy.summary": ["{{stars#star|stars}} · {{empires#power|powers}} · {{lanes#hyperlane|hyperlanes}}", "{{stars#звезда|звезды|звёзд}} · {{empires#держава|державы|держав}} · {{lanes#гиперпуть|гиперпути|гиперпутей}}"],
+  "system.summary": ["{{bodies#body|bodies}} · {{habitable}} habitable", "{{bodies#тело|тела|тел}} · обитаемых: {{habitable}}"],
   "shape.spiral": ["Spiral", "Спиральная"],
   "shape.barred": ["Barred spiral", "Спиральная с перемычкой"],
   "shape.elliptical": ["Elliptical", "Эллиптическая"],
@@ -844,7 +844,7 @@ const TERMS: Record<string, [string, string]> = {
   "local.treasure": ["Treasure", "Добыча"],
   "local.trap": ["Trap", "Ловушка"],
   "local.secret": ["Secret door", "Потайная дверь"],
-  "local.summary": ["{{keyed}} keyed places · {{w}}×{{h}} m", "{{keyed}} отмеченных мест · {{w}}×{{h}} м"],
+  "local.summary": ["{{keyed#keyed place|keyed places}} · {{w}}×{{h}} m", "{{keyed#отмеченное место|отмеченных места|отмеченных мест}} · {{w}}×{{h}} м"],
   "lkind.dungeon": ["Dungeon", "Подземелье"],
   "lkind.cave": ["Cave", "Пещера"],
   "lkind.wilderness": ["Wilderness", "Дикая местность"],
@@ -950,7 +950,7 @@ const TERMS: Record<string, [string, string]> = {
   "monster.werewolf": ["a werewolf", "оборотень"],
   "view.region": ["Region", "Регион"],
   "region.hint": ["Open a region from the planet: click a place on land and choose \"Open the region map\".", "Регион открывается с планеты: нажми на сушу и выбери «Открыть карту региона»."],
-  "region.summary": ["{{burgs}} settlements · {{rivers}} rivers · {{markers}} places · {{time}} ms", "{{burgs}} поселений · {{rivers}} рек · {{markers}} мест · {{time}} мс"],
+  "region.summary": ["{{burgs#settlement|settlements}} · {{rivers#river|rivers}} · {{markers#place|places}}", "{{burgs#поселение|поселения|поселений}} · {{rivers#река|реки|рек}} · {{markers#место|места|мест}}"],
   "gm.title": ["Game master", "Мастер"],
   "gm.hide": ["Hide", "Свернуть"],
   "gm.mode.inspect": ["Inspect", "Смотреть"],
@@ -1025,6 +1025,11 @@ const TERMS: Record<string, [string, string]> = {
   "action.backToUniverse": ["Back to the universe", "Назад ко вселенной"],
   "universe.hint": ["Click a galaxy. Green dots mark galaxies with civilisations.", "Нажми на галактику. Зелёные точки — галактики с цивилизациями."],
   "universe.cluster": ["Supercluster", "Сверхскопление"],
+  "export.pngFailed": ["The PNG could not be made: the map is too big for this browser. Try the SVG.", "PNG не получился: карта слишком велика для этого браузера. Выгрузите SVG."],
+  "gm.badFile": ["This is not a campaign file.", "Это не файл кампании."],
+  "map.zoomIn": ["Zoom in", "Приблизить"],
+  "map.zoomOut": ["Zoom out", "Отдалить"],
+  "map.fit": ["Fit the whole map", "Показать карту целиком"],
   "galaxy.fewerStars": ["fewer stars than the {{asked}} asked: no room for more", "звёзд меньше заказанных {{asked}}: больше не поместилось"],
   "galaxy.fewerEmpires": ["fewer powers than the {{asked}} asked: no room for more", "держав меньше заказанных {{asked}}: не нашлось места"],
   "space.companion": ["Companion star", "Звезда-компаньон"],
@@ -1033,7 +1038,7 @@ const TERMS: Record<string, [string, string]> = {
   "universe.void": ["Void", "Пустота"],
   "universe.galaxies": ["Galaxies", "Галактик"],
   "universe.civilisations": ["Civilisations", "Цивилизаций"],
-  "universe.summary": ["{{galaxies}} galaxies · {{clusters}} superclusters · {{voids}} voids", "{{galaxies}} галактик · {{clusters}} сверхскоплений · {{voids}} войдов"],
+  "universe.summary": ["{{galaxies#galaxy|galaxies}} · {{clusters#supercluster|superclusters}} · {{voids#void|voids}}", "{{galaxies#галактика|галактики|галактик}} · {{clusters#сверхскопление|сверхскопления|сверхскоплений}} · {{voids#войд|войда|войдов}}"],
   "gkind.spiral": ["Spiral galaxy", "Спиральная галактика"],
   "gkind.barred": ["Barred spiral", "Спиральная с перемычкой"],
   "gkind.elliptical": ["Elliptical galaxy", "Эллиптическая галактика"],
@@ -1081,7 +1086,7 @@ const TERMS: Record<string, [string, string]> = {
   "zone.inside": ["Inside", "Внутри"],
   "zone.stars": ["Stars inside", "Звёзд внутри"],
   "space.zones": ["Regions", "Области"],
-  "galaxy.zones": ["{{zones}} regions", "{{zones}} областей"],
+  "galaxy.zones": ["{{zones#region|regions}}", "{{zones#область|области|областей}}"],
   "field.anomalies": ["Strangeness", "Странности"],
   "strange.0": ["None", "Нет"],
   "strange.0.5": ["Few", "Мало"],
@@ -1119,7 +1124,7 @@ const TERMS: Record<string, [string, string]> = {
   "underworld.pick": ["Click a cavern.", "Нажми на пещеру."],
   "underworld.peoples": ["Peoples of the deep", "Подземные народы"],
   "underworld.ways": ["Tunnels", "Ходов"],
-  "underworld.summary": ["{{caverns}} caverns · {{tunnels}} tunnels · {{entrances}} ways down", "{{caverns}} пещер · {{tunnels}} ходов · {{entrances}} спусков"],
+  "underworld.summary": ["{{caverns#cavern|caverns}} · {{tunnels#tunnel|tunnels}} · {{entrances#way down|ways down}}", "{{caverns#пещера|пещеры|пещер}} · {{tunnels#ход|хода|ходов}} · {{entrances#спуск|спуска|спусков}}"],
   "cavern.cavern": ["Cavern", "Пещера"],
   "cavern.fungal": ["Fungal forest", "Грибной лес"],
   "cavern.sea": ["Underground sea", "Подземное море"],
@@ -1444,9 +1449,9 @@ const TERMS: Record<string, [string, string]> = {
   "marker.watchtower@far-future": ["Sensor tower", "Сенсорная башня"],
   "marker.watchtower@post-apocalypse": ["Lookout", "Дозорная вышка"],
   "marker.ruins@post-apocalypse": ["Dead town", "Мёртвый город"],
-  "legend.megalith": ["A ring of {{stones}} standing stones, raised for {{purpose}}.", "Круг из {{stones}} камней, поставленный ради: {{purpose}}."],
+  "legend.megalith": ["A ring of {{stones}} standing stones, raised for {{purpose}}.", "Круг из {{stones#камня|камней|камней}}, поставленный ради: {{purpose}}."],
   "legend.hunting-ground": ["The bands hunt {{game}} here every season.", "Здесь каждый сезон охотятся на добычу: {{game}}."],
-  "legend.tomb": ["The tomb of {{ruler}}, {{age}} years old; its treasures may still be inside.", "Гробница правителя {{ruler}}, ей {{age}} лет; сокровища, возможно, ещё внутри."],
+  "legend.tomb": ["The tomb of {{ruler}}, {{age#year|years}} old; its treasures may still be inside.", "Гробница правителя {{ruler}}, ей {{age#год|года|лет}}; сокровища, возможно, ещё внутри."],
   "legend.oracle": ["An oracle of {{god}}; pilgrims come to ask about the future.", "Оракул бога {{god}}; паломники приходят спросить о будущем."],
   "legend.factory": ["Makes {{makes}} for {{town}}.", "Производит: {{makes}}; работает на {{town}}."],
   "legend.dam": ["A dam holds back the {{river}}.", "Плотина перегораживает реку {{river}}."],
@@ -1459,21 +1464,21 @@ const TERMS: Record<string, [string, string]> = {
   "legend.arcology": ["A city in one building for {{people}} thousand people, owned by {{corp}}.", "Город в одном здании на {{people}} тыс. жителей; владелец — {{corp}}."],
   "legend.data-haven": ["Servers beyond any law, run by {{owner}}.", "Серверы вне любых законов; держит их {{owner}}."],
   "legend.toxic-zone": ["Poisoned by {{cause}}.", "Отравлено: {{cause}}."],
-  "legend.spaceport": ["{{flights}} launches a year; serves {{town}}.", "{{flights}} запусков в год; обслуживает {{town}}."],
+  "legend.spaceport": ["{{flights#launch|launches}} a year; serves {{town}}.", "{{flights#запуск|запуска|запусков}} в год; обслуживает {{town}}."],
   "legend.space-elevator": ["A tether up to orbit, {{height}} km tall.", "Трос до орбиты высотой {{height}} км."],
   "legend.terraformer": ["A great engine {{work}}.", "Огромная машина: {{work}}."],
   "legend.biodome": ["Under the dome: {{biome}}.", "Под куполом: {{biome}}."],
-  "legend.crater": ["A crater {{size}} km wide, left {{year}} years ago.", "Кратер шириной {{size}} км, оставлен {{year}} лет назад."],
+  "legend.crater": ["A crater {{size}} km wide, left {{year#year|years}} ago.", "Кратер шириной {{size}} км, оставлен {{year#год|года|лет}} назад."],
   "legend.radiation": ["Radiation: {{level}}.", "Радиация: {{level}}."],
   "legend.crash-site": ["The wreck of a {{craft}}.", "Обломки: {{craft}}."],
-  "legend.bunker": ["Vault {{number}}: {{dwellers}} people live sealed below.", "Убежище {{number}}: внизу, за герметичной дверью, живут {{dwellers}} человек."],
+  "legend.bunker": ["Vault {{number}}: {{dwellers#person lives|people live}} sealed below.", "Убежище {{number}}: внизу, за герметичной дверью, живут {{dwellers#человек|человека|человек}}."],
   "legend.wizard-tower": ["The tower of {{mage}}, a master of {{school}}.", "Башня мага {{mage}}, мастера школы: {{school}}."],
-  "legend.ley-nexus": ["{{lines}} ley lines cross here.", "Здесь пересекаются {{lines}} лей-линий."],
-  "legend.ruins@post-apocalypse": ["Ruins left by {{builders}} {{age}} years ago.", "Руины, оставленные {{age}} лет назад; когда-то здесь был {{builders}}."],
-  "legend.brigands@modern": ["About {{band}} smugglers use this road.", "Около {{band}} контрабандистов ходят этой дорогой."],
+  "legend.ley-nexus": ["{{lines#ley line crosses|ley lines cross}} here.", "Здесь пересекаются {{lines#лей-линия|лей-линии|лей-линий}}."],
+  "legend.ruins@post-apocalypse": ["Ruins left by {{builders}} {{age#year|years}} ago.", "Руины, оставленные {{age#год|года|лет}} назад; когда-то здесь был {{builders}}."],
+  "legend.brigands@modern": ["About {{band}} smugglers use this road.", "Около {{band#контрабандиста|контрабандистов|контрабандистов}} ходят этой дорогой."],
   "legend.brigands@cyberpunk": ["A gang of about {{band}} controls the road.", "Банда примерно из {{band}} человек держит дорогу."],
-  "legend.brigands@far-future": ["About {{band}} pirates raid the convoys.", "Около {{band}} пиратов грабят конвои."],
-  "legend.brigands@post-apocalypse": ["About {{band}} raiders prey on the road.", "Около {{band}} рейдеров охотятся на дороге."],
+  "legend.brigands@far-future": ["About {{band}} pirates raid the convoys.", "Около {{band#пирата|пиратов|пиратов}} грабят конвои."],
+  "legend.brigands@post-apocalypse": ["About {{band}} raiders prey on the road.", "Около {{band#рейдера|рейдеров|рейдеров}} охотятся на дороге."],
   "legend.watchtower@modern": ["Checks the border road.", "Проверяет пограничную дорогу."],
   "legend.watchtower@cyberpunk": ["Checks the border road.", "Проверяет пограничную дорогу."],
   "legend.mine@post-apocalypse": ["Scavengers dig {{resource}} here; held by {{owner}}.", "Мусорщики добывают здесь: {{resource}}; держит: {{owner}}."],
@@ -1822,14 +1827,32 @@ const TERMS: Record<string, [string, string]> = {
   "route.sea": ["sea lane", "морской путь"],
 };
 
+/** Which form of a word goes with a number: Russian has three (1 город, 2 города, 5 городов), English two. */
+function formOf(locale: Locale, count: number): number {
+  const n = Math.abs(Math.round(count));
+  if (locale === "en") return n === 1 ? 0 : 1;
+  if (n % 10 === 1 && n % 100 !== 11) return 0;
+  if (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) return 1;
+  return 2;
+}
+
 export function translator(locale: Locale) {
   const dict = locale === "ru" ? ru : en;
-  return (key: string, vars: Record<string, string | number> = {}) => {
+  const numbers = new Intl.NumberFormat(locale === "ru" ? "ru-RU" : "en-GB", { maximumFractionDigits: 2 });
+  const show = (value: string | number | undefined) => (typeof value === "number" ? numbers.format(value) : String(value ?? ""));
+  const t = (key: string, vars: Record<string, string | number> = {}) => {
     const find = (id: string) => dict[id] ?? TERMS[id]?.[locale === "ru" ? 1 : 0];
     // "key@age" asks for an age's own word and falls back to the plain key.
     const template = find(key) ?? (key.includes("@") ? find(key.slice(0, key.indexOf("@"))) : undefined) ?? key;
-    return template.replace(/\{\{(\w+)\}\}/gu, (_match, name: string) => String(vars[name] ?? ""));
+    // {{name}} is a value (numbers in the reader's way of writing them); {{name#one|few|many}} is the number with the
+    // word in the form it takes (two forms in English).
+    return template.replace(/\{\{(\w+)(?:#([^}]+))?\}\}/gu, (_match, name: string, forms?: string) => {
+      if (!forms) return show(vars[name]);
+      const words = forms.split("|");
+      return `${show(vars[name])} ${words[Math.min(words.length - 1, formOf(locale, Number(vars[name]) || 0))]}`;
+    });
   };
+  return Object.assign(t, { locale });
 }
 
 export type T = ReturnType<typeof translator>;

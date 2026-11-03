@@ -5,6 +5,7 @@ import { useMemo, useRef, useState } from "react";
 import { CustomKinds, loadKinds, saveKinds } from "../CustomKinds";
 import { FEATURE_GLYPH, anomalyDistance, anomalyPoint, bodyPoint, mapKeyOf, renameUniverse, galaxyLegend, systemLegend, universeLegend, GALAXY_PLACEMENTS, UNIVERSE_PLACEMENTS, type CustomKind, type Zone, generateUniverse, renderUniverse, shapeOf, universeParams, type Universe, type UniverseParams, GALAXY_SHAPES, localFromStar, galaxyParams, generateGalaxy, generateLoneSystem, generateSystem, planetFromBody, randomSeed, type SpectralClass, type SystemParams, renameGalaxy, renameSystem, renderGalaxy, renderSystem, SPECTRA, type Galaxy, type GalaxyParams, type PlanetParams, type StarSystem } from "../../core/index";
 import type { Level, LevelContext } from "./types";
+import { NumberInput } from "../NumberInput";
 
 const STRANGENESS = [0, 0.5, 1, 2, 3];
 
@@ -156,7 +157,7 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
         {(["stars", "arms", "empires"] as const).filter((key) => key !== "arms" || input.shape === "spiral" || input.shape === "barred").map((key) => (
           <label key={key}>
             {t(`field.g${key}`)}
-            <input type="number" min={key === "stars" ? 100 : 1} max={key === "stars" ? 2000 : 20} value={input[key]} onChange={(event) => set(key, Number(event.target.value))} />
+            <NumberInput min={key === "stars" ? 100 : key === "empires" ? 0 : 1} max={key === "stars" ? 2000 : 20} value={input[key]} onChange={(value) => set(key, value)} />
           </label>
         ))}
         <Strangeness t={t} value={input.anomalies} onChange={(value) => set("anomalies", value)} />
@@ -549,7 +550,7 @@ export function useUniverseLevel(ctx: LevelContext, openGalaxy: (params: Partial
         <h2>{t("view.universe")}</h2>
         <label>
           {t("field.ugalaxies")}
-          <input type="number" min={50} max={800} value={input.galaxies} onChange={(event) => setInput((current) => ({ ...current, galaxies: Number(event.target.value) }))} />
+          <NumberInput min={50} max={800} value={input.galaxies} onChange={(value) => setInput((current) => ({ ...current, galaxies: value }))} />
         </label>
         <Strangeness t={t} value={input.anomalies} onChange={(value) => setInput((current) => ({ ...current, anomalies: value }))} />
         <CustomKinds

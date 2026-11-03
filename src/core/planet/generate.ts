@@ -25,7 +25,7 @@ export function planetParams(input: Partial<PlanetParams> = {}): PlanetParams {
   const rng = createRng(seed).fork("params");
   const north = rng.int(15, 80);
   const span = rng.int(50, 110);
-  return {
+  const params: PlanetParams = {
     seed,
     width: 1600,
     height: 1000,
@@ -43,6 +43,13 @@ export function planetParams(input: Partial<PlanetParams> = {}): PlanetParams {
     provinceShare: 0.35,
     ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined && value !== "")),
   };
+  // North stays north of south: a pair typed the wrong way round is turned, and a band is at least a degree wide.
+  if (params.latitudeNorth < params.latitudeSouth) [params.latitudeNorth, params.latitudeSouth] = [params.latitudeSouth, params.latitudeNorth];
+  if (params.latitudeNorth - params.latitudeSouth < 1) {
+    params.latitudeNorth = Math.min(90, params.latitudeSouth + 1);
+    params.latitudeSouth = params.latitudeNorth - 1;
+  }
+  return params;
 }
 
 /** A world from its settings; `terrain` replays the GM's relief brush before anything grows on it. */

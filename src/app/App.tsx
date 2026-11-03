@@ -57,6 +57,7 @@ import type { Level, LevelContext, LevelId } from "./levels/types";
 import { MapView, type Focus } from "./MapView";
 import { LEVEL_ICON, WorldLibrary } from "./WorldLibrary";
 import { useWorlds, type Worlds } from "./worlds";
+import { useListKeys } from "./keys";
 
 function download(name: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
@@ -108,7 +109,28 @@ function startOf(world: WorldDoc): Record<string, unknown> {
 }
 
 export function App() {
-  const [locale, setLocale] = useState<Locale>("ru");
+  // The reader's language is remembered, and the page says which it is.
+  const [locale, setLocaleState] = useState<Locale>(() => {
+    try {
+      const saved = localStorage.getItem("atlas.locale");
+      if (saved === "ru" || saved === "en") return saved;
+    } catch {
+      // Storage may be off.
+    }
+    return navigator.language?.startsWith("ru") ? "ru" : navigator.language ? "en" : "ru";
+  });
+  const setLocale = (next: Locale) => {
+    setLocaleState(next);
+    try {
+      localStorage.setItem("atlas.locale", next);
+    } catch {
+      // Storage may be off; the choice holds for this visit.
+    }
+  };
+  useEffect(() => {
+    document.documentElement.lang = locale;
+  }, [locale]);
+  useListKeys();
   const t = useMemo(() => translator(locale), [locale]);
   const worlds = useWorlds(t("worlds.firstName"));
   // A world opened anew starts with fresh levels.
@@ -132,13 +154,20 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   const [brush, setBrush] = useState(60);
   const [players, setPlayers] = useState(false);
   // The legend stays open or folded as the viewer left it.
+  // On a narrow screen the legend starts folded, so it does not hide a third of the map.
   const [legendOpen, setLegendOpenState] = useState(() => {
     try {
-      return localStorage.getItem("atlas.legend") !== "closed";
+      const saved = localStorage.getItem("atlas.legend");
+      if (saved) return saved !== "closed";
     } catch {
-      return true;
+      // Storage may be off.
     }
+    return window.innerWidth > 900;
   });
+  // A pin or fog brush in hand is put down when the GM goes to another kind of map.
+  useEffect(() => setMode("inspect"), [view]);
+  const exportMenu = useRef<HTMLDetailsElement>(null);
+  const closeExport = () => exportMenu.current?.removeAttribute("open");
   const setLegendOpen = (open: boolean) => {
     setLegendOpenState(open);
     try {
@@ -430,7 +459,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     } else map.onPick(x, y);
   };
   let stage: ReactNode = null;
-  if (map) stage = <MapView key={map.key} svg={map.svg} overlay={overlay} width={map.width} height={map.height} focus={focus} onPick={pick} onDrag={map.onDrag} onDragEnd={map.onDragEnd} zoomRange={map.zoomRange} />;
+  if (map) stage = <MapView key={map.key} svg={map.svg} overlay={overlay} width={map.width} height={map.height} focus={focus} onPick={pick} onDrag={map.onDrag} onDragEnd={map.onDragEnd} zoomRange={map.zoomRange} labels={{ zoomIn: t("map.zoomIn"), zoomOut: t("map.zoomOut"), fit: t("map.fit") }} />;
   else if (!isTop && !busy) stage = <div className="empty-hint">{t("worlds.reach", { level: t(`view.${level.id}`) })}</div>;
 
   return (
@@ -474,19 +503,40 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
           <option value="latin">{t("script.latin")}</option>
           <option value="cyrillic">{t("script.cyrillic")}</option>
         </select>
-        <details className="menu">
+        <details className="menu" ref={exportMenu}>
           <summary>{t("action.export")}</summary>
           <div>
-            <button type="button" disabled={!map} onClick={() => map && download(`${fileName}.svg`, new Blob([exported], { type: "image/svg+xml" }))}>
+            <button
+              type="button"
+              disabled={!map}
+              onClick={() => {
+                closeExport();
+                if (map) download(`${fileName}.svg`, new Blob([exported], { type: "image/svg+xml" }));
+              }}
+            >
               {t("action.exportSvg")}
             </button>
-            <button type="button" disabled={!map} onClick={async () => map && download(`${fileName}.png`, await svgToPng(exported, map.width, map.height))}>
+            <button
+              type="button"
+              disabled={!map}
+              onClick={async () => {
+                closeExport();
+                if (!map) return;
+                try {
+                  download(`${fileName}.png`, await svgToPng(exported, map.width, map.height));
+                } catch (problem) {
+                  console.error(problem);
+                  alert(t("export.pngFailed"));
+                }
+              }}
+            >
               {t("action.exportPng")}
             </button>
             <button
               type="button"
               disabled={!map}
               onClick={() => {
+                closeExport();
                 const data = level.data();
                 if (data) download(`${fileName}.json`, new Blob([JSON.stringify(data)], { type: "application/json" }));
               }}

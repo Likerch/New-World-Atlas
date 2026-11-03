@@ -1,7 +1,7 @@
 // The game master's worlds: projects kept in this browser (a list, and each world under its own key) and saved to or
 // read from files. One world is open at a time; it saves itself a moment after every change.
 import { useEffect, useRef, useState } from "react";
-import { emptyWorld, readWorld, rekey, summarize, type Campaign, type Setting, type TopLevel, type WorldDoc, type WorldSummary } from "../core/index";
+import { emptyWorld, readWorld, summarize, type Campaign, type Setting, type TopLevel, type WorldDoc, type WorldSummary } from "../core/index";
 
 const LIST = "atlas.worlds";
 const CURRENT = "atlas.world.current";
@@ -27,7 +27,11 @@ const write = (key: string, value: unknown) => {
 };
 const readDoc = (id: string): WorldDoc | null => {
   const doc = read<WorldDoc>(docKey(id));
-  return doc ? rekey(doc) : null;
+  try {
+    return doc ? readWorld(doc) : null;
+  } catch {
+    return null;
+  }
 };
 const forget = (key: string) => {
   try {

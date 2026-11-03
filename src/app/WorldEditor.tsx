@@ -27,7 +27,7 @@ interface Props {
 export function WorldEditor({ t, nm, planet, edits, tool, setTool, brush, setBrush, realm, setRealm, moving, canUndo, onUndo, onReset }: Props) {
   const towns = edits ? Object.keys(edits.moved).length + edits.added.length + edits.removed.length : 0;
   return (
-    <details className="editor">
+    <details className="editor" onToggle={(event) => !(event.currentTarget as HTMLDetailsElement).open && setTool(null)}>
       <summary>✏️ {t("editor.title")}</summary>
       <div className="floor-tabs">
         {TOOLS.map((id) => (

@@ -41,20 +41,45 @@ export function emptyPatch(): MapPatch {
   return { names: {}, notes: {}, pins: [], fog: { enabled: false, revealed: [] } };
 }
 
+/** A patch as read from a file or an older world: whatever is missing is there, empty. */
+export function cleanPatch(raw: Partial<MapPatch> | null | undefined): MapPatch {
+  const fog = raw?.fog;
+  return {
+    ...raw,
+    names: raw?.names && typeof raw.names === "object" ? raw.names : {},
+    notes: raw?.notes && typeof raw.notes === "object" ? raw.notes : {},
+    pins: Array.isArray(raw?.pins) ? raw.pins : [],
+    fog: { enabled: !!fog?.enabled, revealed: Array.isArray(fog?.revealed) ? fog.revealed : [] },
+  };
+}
+
+/** A campaign file, checked: anything else is refused (the app says so) rather than quietly ignored. */
+export function readCampaign(data: unknown): Campaign {
+  const file = data as Partial<Campaign> | null;
+  if (!file || file.format !== "new-world-atlas/campaign" || !file.maps || typeof file.maps !== "object") throw new Error("not a campaign file");
+  return { format: "new-world-atlas/campaign", version: 1, maps: Object.fromEntries(Object.entries(file.maps).map(([key, patch]) => [key, cleanPatch(patch)])) };
+}
+
+/** A pin's colour as written in a file is used only if it is a colour. */
+const colourOf = (value: unknown) => (typeof value === "string" && /^#[0-9a-f]{3,8}$/iu.test(value) ? value : "#d64545");
+
 const esc = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
 
 /** Pins and fog as an SVG fragment over a map of the given size; the players' view hides GM-only pins and makes fog opaque. */
 export function overlaySvg(patch: MapPatch, width: number, height: number, players: boolean, scale = 1): string {
   const out: string[] = [];
   if (patch.fog.enabled) {
-    out.push(`<defs><mask id="fog-mask"><rect width="${width}" height="${height}" fill="white"/>${patch.fog.revealed.map(([x, y, r]) => `<circle cx="${x}" cy="${y}" r="${r}" fill="black"/>`).join("")}</mask></defs>`);
+    out.push(`<defs><mask id="fog-mask"><rect width="${width}" height="${height}" fill="white"/>${patch.fog.revealed.map(([x, y, r]) => `<circle cx="${Number(x) || 0}" cy="${Number(y) || 0}" r="${Number(r) || 0}" fill="black"/>`).join("")}</mask></defs>`);
     out.push(`<rect width="${width}" height="${height}" fill="#0c0d12" opacity="${players ? 1 : 0.55}" mask="url(#fog-mask)"/>`);
   }
   for (const pin of patch.pins) {
     if (players && pin.hidden) continue;
     const r = 7 * scale;
-    out.push(`<g><path d="M${pin.x},${pin.y}l${-r * 0.8},${-r * 1.6}a${r},${r} 0 1 1 ${r * 1.6},0z" fill="${pin.color}" stroke="#ffffff" stroke-width="${1.5 * scale}" opacity="${pin.hidden ? 0.6 : 1}"/><circle cx="${pin.x}" cy="${pin.y - r * 2.1}" r="${r * 0.35}" fill="#ffffff"/>`);
-    if (pin.label) out.push(`<text x="${pin.x}" y="${pin.y - r * 3.2}" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="${12 * scale}" font-weight="600" fill="#1d1d1d" stroke="#ffffff" stroke-width="${3 * scale}" paint-order="stroke">${esc(pin.label)}</text>`);
+    // Whatever a file says, only numbers and a colour reach the drawing.
+    const x = Number(pin.x) || 0;
+    const y = Number(pin.y) || 0;
+    out.push(`<g><path d="M${x},${y}l${-r * 0.8},${-r * 1.6}a${r},${r} 0 1 1 ${r * 1.6},0z" fill="${colourOf(pin.color)}" stroke="#ffffff" stroke-width="${1.5 * scale}" opacity="${pin.hidden ? 0.6 : 1}"/><circle cx="${x}" cy="${y - r * 2.1}" r="${r * 0.35}" fill="#ffffff"/>`);
+    if (pin.label) out.push(`<text x="${x}" y="${y - r * 3.2}" text-anchor="middle" font-family="'Segoe UI', Arial, sans-serif" font-size="${12 * scale}" font-weight="600" fill="#1d1d1d" stroke="#ffffff" stroke-width="${3 * scale}" paint-order="stroke">${esc(String(pin.label))}</text>`);
     out.push(`</g>`);
   }
   return out.join("");

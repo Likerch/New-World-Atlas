@@ -2,6 +2,7 @@
 import { useMemo, useRef, useState } from "react";
 import { generateLocal, mapKeyOf, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localParams, localPixels, renameLocal, renderLocal, type Language, type LocalMap, type LocalParams, type LocalThemeId, localLegend } from "../../core/index";
 import type { Level, LevelContext } from "./types";
+import { NumberInput } from "../NumberInput";
 
 export function useLocalLevel(ctx: LevelContext, back: (() => void) | null): Level & { open: (params: Partial<LocalParams>, language: Language | null) => void } {
   const { t, nm } = ctx;
@@ -154,7 +155,7 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null): Lev
         {(["width", "height", "rooms", "danger"] as const).map((key) => (
           <label key={key}>
             {t(`field.l${key}`)}
-            <input type="number" min={key === "danger" ? 1 : key === "rooms" ? 1 : 24} max={key === "danger" ? 3 : key === "rooms" ? 30 : 160} value={input[key]} onChange={(event) => set(key, Number(event.target.value))} />
+            <NumberInput min={key === "danger" ? 1 : key === "rooms" ? 1 : 24} max={key === "danger" ? 3 : key === "rooms" ? 30 : 160} value={input[key]} onChange={(value) => set(key, value)} />
           </label>
         ))}
         <label>

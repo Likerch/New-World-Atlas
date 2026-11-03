@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { area, pointInPolygon, PROPS, CITY_LAYERS, CITY_THEMES, ERAS, type City, type CityLayerId, type CityParams, type CityThemeId } from "../core/index";
 import type { T } from "./i18n";
+import { NumberInput } from "./NumberInput";
 
 const DIRECTIONS: [string, number][] = [
   ["E", 0],
@@ -62,7 +63,7 @@ export function CityControls({ params, set, theme, setTheme, layers, setLayers, 
       </label>
       <label>
         {t("field.population")}
-        <input type="number" min={0.01} max={20000} step="any" value={params.population} onChange={(event) => set("population", Math.max(0.01, Number(event.target.value) || 0.01))} />
+        <NumberInput min={0.01} max={20000} step="any" value={params.population} onChange={(value) => set("population", value)} />
       </label>
       {direction("coast")}
       {direction("river")}
@@ -219,7 +220,7 @@ export function CityInspector({ city, t, nm, selection, onSelect, onOpenBuilding
       </nav>
       {card}
       <div className="muted" style={{ marginBottom: 6 }}>
-        {t("stat.scale")}: 1 : {Math.round(city.scale * 1000).toLocaleString()} ({city.scale.toFixed(2)} {t("unit.m")})
+        {t("stat.scale")}: 1 : {Math.round(city.scale * 1000).toLocaleString(t.locale)} ({city.scale.toFixed(2)} {t("unit.m")})
       </div>
       <ul className="list">
         {tab === "wards"
