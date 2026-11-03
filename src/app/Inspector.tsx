@@ -1,7 +1,7 @@
 // The GM's side panel: what is at the clicked place, and every state, people, town, river and point of interest with
 // its facts. Picking an entry highlights it and moves the map to it.
 import { useMemo, useState } from "react";
-import { ageOf, altitude, BIOMES, emblemOf, latitudeOf, localFromMarker, raiseArmies, renderEmblem, SEA_LEVEL, settingOf, techEra, type Emblem, type Marker, type PastEvent, type Planet, type RouteKind } from "../core/index";
+import { cellKm2, ageOf, altitude, BIOMES, emblemOf, latitudeOf, localFromMarker, raiseArmies, renderEmblem, SEA_LEVEL, settingOf, techEra, type Emblem, type Marker, type PastEvent, type Planet, type RouteKind } from "../core/index";
 import { Chronicle, eventText, RealmStory, TownStory } from "./Chronicle";
 import { area, km, people } from "./format";
 import type { T } from "./i18n";
@@ -195,7 +195,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
       let rural = 0;
       for (let cell = 0; cell < planet.mesh.cells; cell++) {
         if (planet.province[cell] !== id || planet.water[cell]) continue;
-        land += planet.mesh.area[cell];
+        land += cellKm2(planet, cell);
         rural += planet.population[cell];
       }
       const towns = planet.burgs.filter((burg) => burg.province === id && !burg.removed);
@@ -208,7 +208,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
           </h3>
           <Row label={t("place.state")} value={<Link label={stateName(province.state)} onClick={() => pick("state", province.state, planet.states[province.state].pole)} />} />
           {province.burg && centre && !centre.removed ? <Row label={t("province.centre")} value={<Link label={nm(centre.name)} onClick={() => pick("burg", centre.id, [centre.x, centre.y])} />} /> : null}
-          <Row label={t("stat.area")} value={area(land * planet.scale * planet.scale, t)} />
+          <Row label={t("stat.area")} value={area(land, t)} />
           <Row label={t("stat.population")} value={people(rural + towns.reduce((sum, burg) => sum + burg.population, 0), t)} />
           <Row label={t("stat.burgs")} value={towns.length} />
           {onOpenRegion ? (
@@ -225,14 +225,14 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
       const realms = new Set<number>();
       for (let cell = 0; cell < planet.mesh.cells; cell++) {
         if (planet.feature[cell] !== id) continue;
-        size += planet.mesh.area[cell];
+        size += cellKm2(planet, cell);
         if (feature.land && planet.state[cell]) realms.add(planet.state[cell]);
       }
       const ports = feature.land ? 0 : planet.burgs.filter((burg) => !burg.removed && burg.port && burg.cell >= 0 && planet.mesh.neighbors[burg.cell].some((next) => planet.feature[next] === id)).length;
       return (
         <div className="card">
           <h3>{featureName(id)}</h3>
-          <Row label={t("stat.area")} value={area(size * planet.scale * planet.scale, t)} />
+          <Row label={t("stat.area")} value={area(size, t)} />
           {feature.land ? null : <Row label={t("feature.ports")} value={ports} />}
           {realms.size ? (
             <>

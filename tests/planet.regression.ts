@@ -1,6 +1,6 @@
 // Planet-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { pastPlanet, shiftLanguage, createLanguage, createRng, armsOf, emblemOf, MIXES, SETTINGS, settingFromText, settingToText, coatOfArms, editPlanet, emptyEdits, foundedSize, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
+import { cellKm2, pastPlanet, shiftLanguage, createLanguage, createRng, armsOf, emblemOf, MIXES, SETTINGS, settingFromText, settingToText, coatOfArms, editPlanet, emptyEdits, foundedSize, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -285,6 +285,14 @@ test("a lived history makes the realms and towns of the map, and living on keeps
   const parent = createLanguage(createRng("tongue"));
   const daughter = shiftLanguage(parent, createRng("shift"));
   assert.equal(daughter.morphemes.town.length > 0, parent.morphemes.town.length > 0);
+});
+
+test("a whole world measures the area of a globe, not of a flat sheet", () => {
+  const whole = generatePlanet({ seed: "globe-area", cells: 3000, width: 2000, height: 1000, latitudeNorth: 90, latitudeSouth: -90 });
+  let total = 0;
+  for (let cell = 0; cell < whole.mesh.cells; cell++) total += cellKm2(whole, cell);
+  const sphere = 4 * Math.PI * ((180 * 111) / Math.PI) ** 2;
+  assert.ok(Math.abs(total / sphere - 1) < 0.08, `${Math.round(total / 1e6)} million km² for a globe of ${Math.round(sphere / 1e6)}`);
 });
 
 test("the world's age reshapes towns, realms, roads, places, armies and banners, and the medieval age is the classic world", () => {

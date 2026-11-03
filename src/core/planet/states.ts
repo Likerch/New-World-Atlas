@@ -8,6 +8,7 @@ import type { Rng } from "../random";
 import { ageOf, isClassic, settingOf, type EraId, type Rule, type Setting } from "../setting";
 import { BIOMES } from "./biomes";
 import type { Burg, Culture, Ground, Province, Relation, State, StateForm } from "./model";
+import { cellKm2 } from "./geo";
 
 function growthCost(g: Ground, cell: number, state: State, culture: Uint16Array, cultures: Culture[]): number {
   if (g.water[cell]) return cultures[state.culture].kind === "naval" ? 120 : 900;
@@ -284,11 +285,11 @@ export function formStates(g: Ground, culture: Uint16Array, cultures: Culture[],
 
   // Statistics, neighbours, form, pole.
   const cellsOf: number[][] = states.map(() => []);
-  const km2 = g.scale * g.scale;
+
   for (let cell = 0; cell < n; cell++) {
     if (g.water[cell]) continue;
     cellsOf[state[cell]].push(cell);
-    states[state[cell]].area += g.mesh.area[cell] * km2;
+    states[state[cell]].area += cellKm2(g, cell);
   }
   for (const item of burgs.slice(1)) {
     item.state = state[item.cell];

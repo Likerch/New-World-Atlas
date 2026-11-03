@@ -9,6 +9,7 @@ import { PriorityQueue } from "../queue";
 import type { Rng } from "../random";
 import { ageOf, isClassic, settingOf, type EraId } from "../setting";
 import type { Burg, Culture, CultureKind, Ground, Religion, ReligionForm, ReligionKind, State } from "./model";
+import { cellKm2 } from "./geo";
 
 const FOLK: Record<CultureKind, [ReligionForm, number][]> = {
   generic: [["ancestors", 3], ["nature", 3], ["animism", 2], ["sky", 1]],
@@ -138,12 +139,11 @@ export function spreadReligions(
   const cults = towns.slice(0, rng.int(1, 3)).map((burg): [Religion, number, number] => [add("cult", rng.weighted(cultForms), cultures[burg.culture] ?? cultures[1], burg.id, 0), burg.cell, reach * rng.float(0.05, 0.15)]);
   spread(cults, (cell) => religions[religion[cell]].kind !== "cult");
 
-  const km2 = ground.scale * ground.scale;
   for (let cell = 0; cell < mesh.cells; cell++) {
     if (water[cell] || !religion[cell]) continue;
     const faith = religions[religion[cell]];
     faith.cells++;
-    faith.area += mesh.area[cell] * km2;
+    faith.area += cellKm2(ground, cell);
     faith.followers += population[cell];
   }
   for (const burg of burgs.slice(1)) religions[religion[burg.cell]].followers += burg.population;

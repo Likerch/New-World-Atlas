@@ -7,7 +7,7 @@ import { emblemOf } from "../planet/arms";
 import { BIOMES } from "../planet/biomes";
 import { oceanCurrents, windAt } from "../planet/currents";
 import { raiseArmies } from "../planet/military";
-import { wrapsRound } from "../planet/generate";
+import { wrapsRound } from "../planet/geo";
 import type { MarkerKind, Planet } from "../planet/model";
 import { ageOf, settingOf } from "../setting";
 import { renderEmblem } from "./heraldry-svg";

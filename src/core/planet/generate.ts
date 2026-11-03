@@ -19,6 +19,7 @@ import { hydrology } from "./rivers";
 import { buildRoutes } from "./routes";
 import { formStates } from "./states";
 import { marksOfHistory, realmsOfHistory, renumberTowns, simulateHistory, standingOf, townsOfHistory } from "./history";
+import { wrapsRound } from "./geo";
 
 /** Parameters for a seed: every unset value is rolled from the seed itself. */
 export function planetParams(input: Partial<PlanetParams> = {}): PlanetParams {
@@ -168,10 +169,7 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   return { ...ground, ...(terrain?.length ? { relief: hashString(JSON.stringify(terrain)).toString(36) } : {}), name: worldName, population, culture, cultures, religion, religions, ...(secular ? { secular } : {}), burg, burgs, state, states, province, provinces, routes, markers };
 }
 
-/** A map of the whole planet: its longitudes go all the way round, so its left and right edges are one meridian. */
-export function wrapsRound(params: PlanetParams): boolean {
-  return params.latitudeNorth - params.latitudeSouth >= 179 && params.width >= params.height * 2 - 1;
-}
+export { wrapsRound } from "./geo";
 
 /** A whole-planet map's antimeridian runs through open sea, as Earth's date line does: near either edge the ground
  * sinks smoothly below the waves, so nothing is cut where the map's two sides meet round the back of the globe. */

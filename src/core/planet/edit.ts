@@ -5,6 +5,7 @@ import type { Mesh } from "../mesh";
 import type { Burg, Planet } from "./model";
 import { buildRoutes } from "./routes";
 import { poleOf } from "./states";
+import { cellKm2 } from "./geo";
 
 export interface PlanetEdits {
   /** Relief brush strokes: [x, y, radius, height change at the centre]. */
@@ -122,13 +123,12 @@ export function editPlanet(planet: Planet, edits: PlanetEdits | null | undefined
   }
 
   // Realms recounted, roads relaid between the towns that stand.
-  const km2 = planet.scale * planet.scale;
   const states = planet.states.map((item) => ({ ...item, cells: 0, area: 0, rural: 0, urban: 0, burgs: 0 }));
   for (let cell = 0; cell < mesh.cells; cell++) {
     if (water[cell]) continue;
     const realm = states[state[cell]];
     realm.cells++;
-    realm.area += mesh.area[cell] * km2;
+    realm.area += cellKm2(planet, cell);
     realm.rural += planet.population[cell];
   }
   for (const town of burgs.slice(1)) {
