@@ -1,12 +1,12 @@
 // A new world in one go: its name and seed, its age, how much of the planet the map covers (the whole sphere, a
 // hemisphere, a continent or a region), relief, climate, peoples and realms, and how far its map may be zoomed out
 // and in. Nothing is made until the game master presses Create.
+import { Modal } from "./Modal";
 import { useState } from "react";
 import { randomSeed, TEMPLATES, type PlanetParams } from "../core/index";
 import type { T } from "./i18n";
 import { SettingPanel } from "./SettingPanel";
 import { NumberInput } from "./NumberInput";
-import { useEscape } from "./keys";
 
 export type Coverage = "planet" | "hemisphere" | "continent" | "region" | "custom";
 const COVERAGES: Coverage[] = ["planet", "hemisphere", "continent", "region", "custom"];
@@ -33,7 +33,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 export function WorldForm({ t, initial, zoom, onCreate, onClose }: { t: T; initial: PlanetParams; zoom: ZoomRange; onCreate: (params: PlanetParams, zoom: ZoomRange) => void; onClose: () => void }) {
   const [params, setParams] = useState<PlanetParams>(initial);
   // Esc closes the form; a click beside it does not, so nothing typed is lost by a slip.
-  useEscape(onClose);
   const [range, setRange] = useState<ZoomRange>(zoom);
   const [coverage, setCoverage] = useState<Coverage>(() => coverageOf(initial));
   const [centre, setCentre] = useState(() => Math.round((initial.latitudeNorth + initial.latitudeSouth) / 2));
@@ -54,122 +53,120 @@ export function WorldForm({ t, initial, zoom, onCreate, onClose }: { t: T; initi
   const wide = Math.round((tall * params.width) / params.height);
 
   return (
-    <div className="modal-back">
-      <div className="modal" role="dialog" aria-modal="true" aria-label={t("world.title")} onClick={(event) => event.stopPropagation()}>
-        <div className="modal-head">
-          <h2>{t("world.title")}</h2>
-          <button type="button" className="ghost" onClick={onClose} aria-label={t("action.cancel")}>
-            ✕
-          </button>
-        </div>
-        <div className="modal-grid">
-          <section>
-            <h3>{t("world.basics")}</h3>
-            <Field label={t("world.name")}>
-              <input value={params.name ?? ""} placeholder={t("world.namePlaceholder")} onChange={(event) => set("name", event.target.value)} />
-            </Field>
-            <Field label={t("field.seed")}>
-              <span className="inline">
-                <input value={params.seed} onChange={(event) => set("seed", event.target.value)} />
-                <button type="button" onClick={() => set("seed", randomSeed())} title={t("action.random")}>
-                  🎲
-                </button>
-              </span>
-            </Field>
-            <SettingPanel t={t} value={params.setting} onApply={(setting) => set("setting", setting)} applyLabel={t("world.useSetting")} />
-          </section>
-          <section>
-            <h3>{t("world.extent")}</h3>
-            <Field label={t("world.coverage")}>
-              <select value={coverage} onChange={(event) => cover(event.target.value as Coverage)}>
-                {COVERAGES.map((id) => (
-                  <option key={id} value={id}>
-                    {t(`coverage.${id}`)}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            {coverage !== "planet" && coverage !== "custom" ? (
-              <Field label={`${t("world.centre")}: ${centre}°`}>
-                <input
-                  type="range"
-                  min={-70}
-                  max={70}
-                  value={centre}
-                  onChange={(event) => {
-                    setCentre(Number(event.target.value));
-                    cover(coverage, Number(event.target.value));
-                  }}
-                />
-              </Field>
-            ) : null}
-            {coverage === "custom" ? (
-              <>
-                <Field label={t("field.latitudeNorth")}>{number("latitudeNorth", -90, 90)}</Field>
-                <Field label={t("field.latitudeSouth")}>{number("latitudeSouth", -90, 90)}</Field>
-              </>
-            ) : null}
-            <p className="muted">{t("world.size", { w: wide, h: tall })}</p>
-            <Field label={t("field.template")}>
-              <select value={params.template} onChange={(event) => set("template", event.target.value as PlanetParams["template"])}>
-                {TEMPLATES.map((id) => (
-                  <option key={id} value={id}>
-                    {t(`template.${id}`)}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label={t("field.cells")}>
-              <select value={params.cells} onChange={(event) => set("cells", Number(event.target.value))}>
-                {[3000, 5000, 10000, 20000, 30000, 50000].map((count) => (
-                  <option key={count} value={count}>
-                    {count.toLocaleString(t.locale)}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label={t("field.peakHeight")}>{number("peakHeight", 500, 12000, 100)}</Field>
-            <h3>{t("world.climate")}</h3>
-            <Field label={t("field.temperatureEquator")}>{number("temperatureEquator", -20, 50)}</Field>
-            <Field label={t("field.temperaturePole")}>{number("temperaturePole", -60, 20)}</Field>
-            <Field label={t("field.precipitation")}>{number("precipitation", 0.1, 3, 0.1)}</Field>
-          </section>
-          <section>
-            <h3>{t("world.peoples")}</h3>
-            <Field label={t("field.cultures")}>{number("cultures", 1, 40)}</Field>
-            <Field label={t("field.states")}>{number("states", 1, 60)}</Field>
-            <Field label={t("field.towns")}>{number("towns", 0, 2000, 10)}</Field>
-            <Field label={t("field.provinceShare")}>{number("provinceShare", 0, 1, 0.05)}</Field>
-            <Field label={t("field.growth")}>{number("growth", 0.3, 3, 0.1)}</Field>
-            <Field label={t("history.depth")}>
-              <select value={params.history ?? 0} onChange={(event) => set("history", Number(event.target.value) || undefined)}>
-                {[0, 200, 400, 700, 1000].map((years) => (
-                  <option key={years} value={years}>
-                    {years ? t("history.years", { years }) : t("history.noneShort")}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <p className="muted">{t("history.depthHint")}</p>
-            <h3>{t("world.scale")}</h3>
-            <Field label={`${t("world.zoomOut")}: ×${range[0]}`}>
-              <input type="range" min={0.3} max={1} step={0.05} value={range[0]} onChange={(event) => setRange([Number(event.target.value), range[1]])} />
-            </Field>
-            <Field label={`${t("world.zoomIn")}: ×${range[1]}`}>
-              <input type="range" min={4} max={200} step={1} value={range[1]} onChange={(event) => setRange([range[0], Number(event.target.value)])} />
-            </Field>
-            <p className="muted">{t("world.scaleHint", { far: Math.round(wide / range[0]), near: Math.max(1, Math.round(wide / range[1])) })}</p>
-          </section>
-        </div>
-        <div className="modal-actions">
-          <button type="button" onClick={onClose}>
-            {t("action.cancel")}
-          </button>
-          <button type="button" className="primary" onClick={() => onCreate(params, range)}>
-            {t("world.create")}
-          </button>
-        </div>
+    <Modal label={t("world.title")} onClose={onClose}>
+      <div className="modal-head">
+        <h2>{t("world.title")}</h2>
+        <button type="button" className="ghost" onClick={onClose} aria-label={t("action.cancel")}>
+          ✕
+        </button>
       </div>
-    </div>
+      <div className="modal-grid">
+        <section>
+          <h3>{t("world.basics")}</h3>
+          <Field label={t("world.name")}>
+            <input value={params.name ?? ""} placeholder={t("world.namePlaceholder")} onChange={(event) => set("name", event.target.value)} />
+          </Field>
+          <Field label={t("field.seed")}>
+            <span className="inline">
+              <input value={params.seed} onChange={(event) => set("seed", event.target.value)} />
+              <button type="button" onClick={() => set("seed", randomSeed())} title={t("action.random")}>
+                🎲
+              </button>
+            </span>
+          </Field>
+          <SettingPanel t={t} value={params.setting} onApply={(setting) => set("setting", setting)} applyLabel={t("world.useSetting")} />
+        </section>
+        <section>
+          <h3>{t("world.extent")}</h3>
+          <Field label={t("world.coverage")}>
+            <select value={coverage} onChange={(event) => cover(event.target.value as Coverage)}>
+              {COVERAGES.map((id) => (
+                <option key={id} value={id}>
+                  {t(`coverage.${id}`)}
+                </option>
+              ))}
+            </select>
+          </Field>
+          {coverage !== "planet" && coverage !== "custom" ? (
+            <Field label={`${t("world.centre")}: ${centre}°`}>
+              <input
+                type="range"
+                min={-70}
+                max={70}
+                value={centre}
+                onChange={(event) => {
+                  setCentre(Number(event.target.value));
+                  cover(coverage, Number(event.target.value));
+                }}
+              />
+            </Field>
+          ) : null}
+          {coverage === "custom" ? (
+            <>
+              <Field label={t("field.latitudeNorth")}>{number("latitudeNorth", -90, 90)}</Field>
+              <Field label={t("field.latitudeSouth")}>{number("latitudeSouth", -90, 90)}</Field>
+            </>
+          ) : null}
+          <p className="muted">{t("world.size", { w: wide, h: tall })}</p>
+          <Field label={t("field.template")}>
+            <select value={params.template} onChange={(event) => set("template", event.target.value as PlanetParams["template"])}>
+              {TEMPLATES.map((id) => (
+                <option key={id} value={id}>
+                  {t(`template.${id}`)}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label={t("field.cells")}>
+            <select value={params.cells} onChange={(event) => set("cells", Number(event.target.value))}>
+              {[3000, 5000, 10000, 20000, 30000, 50000].map((count) => (
+                <option key={count} value={count}>
+                  {count.toLocaleString(t.locale)}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label={t("field.peakHeight")}>{number("peakHeight", 500, 12000, 100)}</Field>
+          <h3>{t("world.climate")}</h3>
+          <Field label={t("field.temperatureEquator")}>{number("temperatureEquator", -20, 50)}</Field>
+          <Field label={t("field.temperaturePole")}>{number("temperaturePole", -60, 20)}</Field>
+          <Field label={t("field.precipitation")}>{number("precipitation", 0.1, 3, 0.1)}</Field>
+        </section>
+        <section>
+          <h3>{t("world.peoples")}</h3>
+          <Field label={t("field.cultures")}>{number("cultures", 1, 40)}</Field>
+          <Field label={t("field.states")}>{number("states", 1, 60)}</Field>
+          <Field label={t("field.towns")}>{number("towns", 0, 2000, 10)}</Field>
+          <Field label={t("field.provinceShare")}>{number("provinceShare", 0, 1, 0.05)}</Field>
+          <Field label={t("field.growth")}>{number("growth", 0.3, 3, 0.1)}</Field>
+          <Field label={t("history.depth")}>
+            <select value={params.history ?? 0} onChange={(event) => set("history", Number(event.target.value) || undefined)}>
+              {[0, 200, 400, 700, 1000].map((years) => (
+                <option key={years} value={years}>
+                  {years ? t("history.years", { years }) : t("history.noneShort")}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <p className="muted">{t("history.depthHint")}</p>
+          <h3>{t("world.scale")}</h3>
+          <Field label={`${t("world.zoomOut")}: ×${range[0]}`}>
+            <input type="range" min={0.3} max={1} step={0.05} value={range[0]} onChange={(event) => setRange([Number(event.target.value), range[1]])} />
+          </Field>
+          <Field label={`${t("world.zoomIn")}: ×${range[1]}`}>
+            <input type="range" min={4} max={200} step={1} value={range[1]} onChange={(event) => setRange([range[0], Number(event.target.value)])} />
+          </Field>
+          <p className="muted">{t("world.scaleHint", { far: Math.round(wide / range[0]), near: Math.max(1, Math.round(wide / range[1])) })}</p>
+        </section>
+      </div>
+      <div className="modal-actions">
+        <button type="button" onClick={onClose}>
+          {t("action.cancel")}
+        </button>
+        <button type="button" className="primary" onClick={() => onCreate(params, range)}>
+          {t("world.create")}
+        </button>
+      </div>
+    </Modal>
   );
 }

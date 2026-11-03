@@ -1,9 +1,9 @@
 // The world's handbook in the app: a page for a place (read it, or write it), and the book of all pages with its
 // index, a Markdown file of it and a printed atlas.
+import { Modal } from "./Modal";
 import { useMemo, useState } from "react";
 import { emptyPage, findPage, handbookMarkdown, markdown, titleOf, type Page, type WorldDoc } from "../core/index";
 import type { T } from "./i18n";
-import { useEscape } from "./keys";
 
 /** A picture made small enough to keep in the world: at most 640 px across, as JPEG. */
 async function shrink(file: File): Promise<string> {
@@ -119,7 +119,6 @@ export function Handbook({
   onBook: () => void;
   onClose: () => void;
 }) {
-  useEscape(onClose);
   const pages = world.pages ?? {};
   const [open, setOpen] = useState<string | null>(focus?.key ?? null);
   const [query, setQuery] = useState("");
@@ -131,70 +130,68 @@ export function Handbook({
     .sort(([, a], [, b]) => titleOf(a).localeCompare(titleOf(b)));
   const page = open ? pages[open] ?? (focus && focus.key === open ? emptyPage(focus.map, focus.entity, focus.name) : null) : null;
   return (
-    <div className="modal-back">
-      <div className="modal handbook" role="dialog" aria-modal="true" aria-label={t("book.title.book")}>
-        <div className="modal-head">
-          <h2>📖 {t("book.title.book")}</h2>
-          <button type="button" className="ghost" onClick={onClose} aria-label={t("action.close")}>
-            ✕
-          </button>
-        </div>
-        <div className="handbook-grid">
-          <aside>
-            <input className="search" value={query} placeholder={t("search")} onChange={(event) => setQuery(event.target.value)} />
-            {tags.length ? (
-              <select value={tag} onChange={(event) => setTag(event.target.value)} aria-label={t("book.tags")}>
-                <option value="">{t("book.allTags")}</option>
-                {tags.map((item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-            <ul className="list">
-              {list.map(([key, item]) => (
-                <li key={key} aria-selected={key === open} onClick={() => setOpen(key)}>
-                  <span className="grow">{titleOf(item)}</span>
-                  {item.secret && !players ? <small>🔒</small> : null}
-                </li>
-              ))}
-            </ul>
-            {!list.length ? <p className="muted">{t("book.none")}</p> : null}
-            <div className="row-buttons">
-              <button type="button" onClick={() => download(`${world.name || "world"}.md`, handbookMarkdown(world, false))}>
-                ⬇ {t("book.markdown")}
-              </button>
-              {!players ? (
-                <button type="button" onClick={() => download(`${world.name || "world"}-gm.md`, handbookMarkdown(world, true))}>
-                  ⬇ {t("book.markdownGm")}
-                </button>
-              ) : null}
-              <button type="button" onClick={onBook}>
-                🖨 {t("book.atlas")}
-              </button>
-            </div>
-          </aside>
-          <section>
-            {page && open ? (
-              <PageView
-                key={open}
-                t={t}
-                page={page}
-                players={players}
-                onChange={(next) => onSave(open, next)}
-                onFollow={(title) => {
-                  const found = findPage(pages, title);
-                  if (found) setOpen(found[0]);
-                }}
-                onShow={() => onShow(page)}
-              />
-            ) : (
-              <p className="muted">{t("book.pick")}</p>
-            )}
-          </section>
-        </div>
+    <Modal className="handbook" label={t("book.title.book")} onClose={onClose}>
+      <div className="modal-head">
+        <h2>📖 {t("book.title.book")}</h2>
+        <button type="button" className="ghost" onClick={onClose} aria-label={t("action.close")}>
+          ✕
+        </button>
       </div>
-    </div>
+      <div className="handbook-grid">
+        <aside>
+          <input className="search" value={query} placeholder={t("search")} onChange={(event) => setQuery(event.target.value)} />
+          {tags.length ? (
+            <select value={tag} onChange={(event) => setTag(event.target.value)} aria-label={t("book.tags")}>
+              <option value="">{t("book.allTags")}</option>
+              {tags.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+          ) : null}
+          <ul className="list">
+            {list.map(([key, item]) => (
+              <li key={key} aria-selected={key === open} onClick={() => setOpen(key)}>
+                <span className="grow">{titleOf(item)}</span>
+                {item.secret && !players ? <small>🔒</small> : null}
+              </li>
+            ))}
+          </ul>
+          {!list.length ? <p className="muted">{t("book.none")}</p> : null}
+          <div className="row-buttons">
+            <button type="button" onClick={() => download(`${world.name || "world"}.md`, handbookMarkdown(world, false))}>
+              ⬇ {t("book.markdown")}
+            </button>
+            {!players ? (
+              <button type="button" onClick={() => download(`${world.name || "world"}-gm.md`, handbookMarkdown(world, true))}>
+                ⬇ {t("book.markdownGm")}
+              </button>
+            ) : null}
+            <button type="button" onClick={onBook}>
+              🖨 {t("book.atlas")}
+            </button>
+          </div>
+        </aside>
+        <section>
+          {page && open ? (
+            <PageView
+              key={open}
+              t={t}
+              page={page}
+              players={players}
+              onChange={(next) => onSave(open, next)}
+              onFollow={(title) => {
+                const found = findPage(pages, title);
+                if (found) setOpen(found[0]);
+              }}
+              onShow={() => onShow(page)}
+            />
+          ) : (
+            <p className="muted">{t("book.pick")}</p>
+          )}
+        </section>
+      </div>
+    </Modal>
   );
 }

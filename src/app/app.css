@@ -1152,3 +1152,12 @@ table.figures td span:not(.bar) {
   background: var(--accent);
   color: var(--on-accent);
 }
+
+/* Modal windows are <dialog>s: the browser keeps focus inside and dims the page behind. */
+dialog.modal {
+  max-height: calc(100% - 32px);
+  color: var(--text);
+}
+dialog.modal::backdrop {
+  background: #0000008c;
+}
