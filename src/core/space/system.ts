@@ -161,6 +161,8 @@ export interface SystemOptions {
   custom?: CustomKind[];
   /** For a galaxy's star: the jumps to its power's capital, when they are already known. */
   hops?: number;
+  /** For a galaxy's star: its whole place among the stars, when it is already known. */
+  context?: StarContext;
 }
 
 /** Where a galaxy's star stands: its power, its distance from the capital, the regions round it, its borders. */
@@ -209,7 +211,7 @@ export function generateSystem(galaxy: Galaxy, starId: number, options: SystemOp
   const gate = (galaxy.gates ?? []).find(([a, b]) => a === starId || b === starId);
   const hole = galaxy.wormholes.find(([a, b]) => a === starId || b === starId);
   const leads = star.farGate ?? (gate ? (gate[0] === starId ? gate[1] : gate[0]) : hole ? (hole[0] === starId ? hole[1] : hole[0]) : undefined);
-  return furnish(bare, star, starContext(galaxy, starId, options.hops), galaxy.age ?? spaceAge(), starId, { ...options, leads });
+  return furnish(bare, star, options.context ?? starContext(galaxy, starId, options.hops), galaxy.age ?? spaceAge(), starId, { ...options, leads });
 }
 
 /** How a lone system is asked for. */

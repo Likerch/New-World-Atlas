@@ -8,8 +8,22 @@ import { PriorityQueue } from "../queue";
 import { createRng } from "../random";
 import type { SystemEdits } from "./edit";
 import type { EmpireForm, Galaxy } from "./galaxy";
-import type { WorldProfile } from "./profile";
-import { generateSystem } from "./system";
+import type { StarContext, WorldProfile } from "./profile";
+import { generateSystem, inEllipse } from "./system";
+
+/** Profiles already worked out, by everything a profile depends on: an edit re-surveys only the stars it touched. */
+const known = new Map<string, WorldProfile>();
+function profileOf(galaxy: Galaxy, id: number, context: StarContext, edits: SystemEdits | null | undefined): WorldProfile {
+  const star = galaxy.stars[id];
+  const key = JSON.stringify([galaxy.params.seed, id, star.spectral, star.farGate ?? "", context, galaxy.age?.setting ?? null, edits ?? null]);
+  const hit = known.get(key);
+  if (hit) return hit;
+  const profile = generateSystem(galaxy, id, { context, edits }).profile;
+  // ponytail: a plain cap rather than an LRU; the cache only saves time, so dropping it all is safe.
+  if (known.size > 40_000) known.clear();
+  known.set(key, profile);
+  return profile;
+}
 
 export interface LaneInfo {
   /** Trade along it: 0 none, 1 local, 2 a trade route, 3 a main artery. */
@@ -142,7 +156,13 @@ export function surveyGalaxy(galaxy: Galaxy, systemEdits?: (star: number) => Sys
     }
     for (const star of galaxy.stars) if (star.empire === empire.id) hops[star.id] = seen.get(star.id) ?? 99;
   }
-  const worlds = galaxy.stars.map((star) => generateSystem(galaxy, star.id, { hops: hops[star.id], edits: systemEdits?.(star.id) }).profile);
+  // Each star's place among the stars, from the ways already laid out.
+  const zones = (galaxy.zones ?? []).filter((z) => z.kind !== "custom");
+  const worlds = galaxy.stars.map((star) => {
+    const border = next[star.id].some((way) => way.lane >= 0 && galaxy.stars[way.to].empire !== star.empire && (star.empire > 0 || galaxy.stars[way.to].empire > 0));
+    const context: StarContext = { spectral: star.spectral, power: star.empire, form: star.empire ? galaxy.empires[star.empire].form : null, capital: star.capital, settled: star.settled, independent: !!star.independent, natives: !!star.natives, feature: star.feature, hops: hops[star.id], zones: zones.filter((z) => inEllipse(z, star.x, star.y)).map((z) => z.kind as StarContext["zones"][number]), border };
+    return profileOf(galaxy, star.id, context, systemEdits?.(star.id));
+  });
 
   const lanes = laneInfo(galaxy, worlds, next);
   const { chokeLanes, chokeStars } = chokepoints(n, next);
