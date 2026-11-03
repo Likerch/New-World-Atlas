@@ -1,6 +1,6 @@
 // Building-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { PROPS, tierLegend, cityTiers, generateDistrict, BUILDING_THEMES, BUILDING_TYPES, buildingAt, buildingFromCity, centroid, ERA_BUILDINGS, generateBuilding, generateCity, generateRoom, pointInPolygon, renderBuilding, renderRoom, hashString, BUILDING_SHAPES, buildingKey, CRAFT_IDS, CRAFTS, shopInventory, craftFor, craftsOf, editBuilding, localFromHatch, placeOwnerKey, citySociety, cityShops } from "../src/core/index";
+import { PROPS, tierLegend, cityTiers, generateDistrict, BUILDING_THEMES, BUILDING_TYPES, buildingAt, buildingFromCity, centroid, ERA_BUILDINGS, generateBuilding, generateCity, generateRoom, pointInPolygon, renderBuilding, renderRoom, hashString, BUILDING_SHAPES, buildingKey, CRAFT_IDS, CRAFTS, shopInventory, craftFor, craftsOf, editBuilding, localFromHatch, placeOwnerKey, citySociety, cityShops, ROLES } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -322,6 +322,15 @@ test("a house opened from the city knows its street, its quarter's wealth, its c
   assert.ok(typeof params.wealth === "number");
   const shop = cityShops(city)[0];
   if (shop) assert.equal(buildingFromCity(city, shop.building).craft, shop.craft, "the directory and the plan agree on the craft");
+  // Every house has a head of household in a real role.
+  for (const era of ["medieval", "modern", "post-apocalypse"] as const) {
+    const town = generateCity({ seed: `owners-${era}`, era, population: era === "modern" ? 300 : 10 });
+    town.buildings.forEach((b, index) => {
+      if (index % 37 || PROPS.includes(b.kind) || b.kind === "shed") return;
+      const role = buildingKey(generateBuilding(buildingFromCity(town, index)), town.language).owner.role;
+      assert.ok(ROLES.includes(role), `${era}: an owner with no role (${role})`);
+    });
+  }
 });
 
 console.log(`building: ${passed} regressions passed`);

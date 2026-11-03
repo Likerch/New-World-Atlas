@@ -140,6 +140,14 @@ const UNKEYED = new Set<RoomKind>(["stairs", "corridor", "passage"]);
 
 const fit = (roles: Role[], era: Era) => roles.filter((role) => roleFits(role, era));
 
+/** Who heads a plain household: the rich are noble (or bosses), the comfortable trade, the rest work the land or serve. */
+function householder(wealth: number, era: Era): Role {
+  if (era === "stone") return wealth > 0.6 ? "elder" : "hunter";
+  if (era === "post-apocalypse") return wealth > 0.6 ? "boss" : "scavenger";
+  const machine = ["industrial", "modern", "cyberpunk", "far-future"].includes(era);
+  return wealth > 0.72 ? (machine ? "boss" : "noble") : wealth > 0.4 ? (machine ? "engineer" : "merchant") : machine ? "servant" : "farmer";
+}
+
 /** The key of a building: `language` names its people; `salts` reroll single rooms ("level:room" → number). */
 export function buildingKey(plan: BuildingPlan, language?: Language | null, salts: Record<string, number> = {}): BuildingKey {
   const { params } = plan;
@@ -147,9 +155,9 @@ export function buildingKey(plan: BuildingPlan, language?: Language | null, salt
   const tongue = language ?? createLanguage(createRng(params.seed).fork("language"));
   const base = `${params.seed}/key`;
   const wealth = params.wealth ?? 0.5;
-  // The owner: the city's person for this house when it says, else one of its own.
-  const role = (params.owner?.role as Role | undefined) ?? OWNER[params.type] ?? "elder";
-  const ownerRole = roleFits(role, era) ? role : "merchant";
+  // The owner: the city's person for this house when it says, else one of its own — a plain house's head by its purse.
+  const role = (params.owner?.role as Role | undefined) || OWNER[params.type] || householder(wealth, era);
+  const ownerRole = roleFits(role, era) ? role : householder(wealth, era);
   const owner = makeNpc(params.owner?.key ?? `${params.seed}/owner`, tongue, ownerRole, { secretChance: 0.6, ...(params.owner?.faction ? { faction: params.owner.faction.id } : {}) });
 
   // Rooms in key order: the ground floor up, the cellar last.
