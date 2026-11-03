@@ -84,6 +84,8 @@ export interface LoreInput {
   enemy?: string;
   /** Names of stars nearby (along the lanes), for the lies and for where goods go. */
   near: string[];
+  /** Other powers by name, for a lie about a war. */
+  rivals?: string[];
   /** A trade hub or a capital nearby, where its goods sell. */
   market?: string;
   /** Where its gate or wormhole leads, by name. */
@@ -131,7 +133,7 @@ export function loreOf(input: LoreInput): Lore {
     lies.push({ key: "rumour.space.trade", vars: { goods: `@goods.${goods === "ore" ? "tech" : "ore"}`, place, market: input.market } });
   }
   if (input.enemy && input.power) truths.push({ key: "rumour.space.war", vars: { a: input.power, b: input.enemy, place } });
-  else if (input.power && others.length) lies.push({ key: "rumour.space.war", vars: { a: input.power, b: other("war"), place } });
+  else if (input.power && input.rivals?.length) lies.push({ key: "rumour.space.war", vars: { a: input.power, b: input.rivals[Math.floor(createRng(`${key}/lie-war`).next() * input.rivals.length)], place } });
   if (profile.natives) truths.push({ key: "rumour.space.natives", vars: { place } });
   if (input.leads) {
     truths.push({ key: "rumour.space.leads", vars: { place, to: input.leads } });
@@ -139,7 +141,8 @@ export function loreOf(input: LoreInput): Lore {
   }
   if (input.zone) truths.push({ key: "rumour.space.zone", vars: { place, zone: input.zone.name, kind: `@zone.${input.zone.kind}` } });
   if (!profile.population && !context.feature) lies.push({ key: "rumour.space.hidden", vars: { place } });
-  const rumours = truths.length || lies.length ? rumoursOf(`${key}/space`, truths, lies) : [];
+  // Nothing true to tell, nothing told: a lie alone is no rumour mill.
+  const rumours = truths.length ? rumoursOf(`${key}/space`, truths, lies) : [];
   return { people, rumours, hooks: hooksOf(key, place, profile, context, people, input) };
 }
 
@@ -185,7 +188,7 @@ export function starLore(galaxy: Galaxy, survey: GalaxySurvey, starId: number): 
 
 /** What a galaxy says about a star for its lore: its power and that power's enemy, its neighbours, its market, where
  * its gate leads and the region round it. */
-export function galaxyLoreInput(galaxy: Galaxy, survey: GalaxySurvey | null, starId: number): Pick<LoreInput, "power" | "enemy" | "near" | "market" | "leads" | "zone"> {
+export function galaxyLoreInput(galaxy: Galaxy, survey: GalaxySurvey | null, starId: number): Pick<LoreInput, "power" | "enemy" | "near" | "rivals" | "market" | "leads" | "zone"> {
   const star = galaxy.stars[starId];
   const near = galaxy.lanes.filter(([a, b]) => a === starId || b === starId).map(([a, b]) => (a === starId ? b : a));
   const power = star.empire ? galaxy.empires[star.empire] : null;
@@ -203,6 +206,7 @@ export function galaxyLoreInput(galaxy: Galaxy, survey: GalaxySurvey | null, sta
     ...(power ? { power: power.name } : {}),
     ...(enemyId ? { enemy: galaxy.empires[enemyId].name } : {}),
     near: near.map((id) => galaxy.stars[id].name),
+    rivals: galaxy.empires.slice(1).filter((empire) => empire.id !== star.empire).map((empire) => empire.name),
     ...(market ? { market: market.name } : {}),
     ...(star.farGate ? { leads: star.farGate } : gate ? { leads: galaxy.stars[gate[0] === starId ? gate[1] : gate[0]].name } : {}),
     ...(zone ? { zone: { name: zone.name, kind: zone.kind } } : {}),
@@ -265,7 +269,9 @@ export function cosmicHooks(universe: Universe, target: { kind: "galaxy" | "anom
   for (let k = 0; k < 2 && weights.size; k++) {
     const hook = rng.weighted([...weights.entries()]);
     weights.delete(hook);
-    hooks.push({ key: `hook.u.${hook}`, vars: { place, other, power: power?.name ?? other } });
+    // A sky of magic words some hooks its own way ("hook.u.war@spheres"); the plain words stand in for the rest.
+    const sky = universe.params.cosmology && universe.params.cosmology !== "web" ? `@${universe.params.cosmology}` : "";
+    hooks.push({ key: `hook.u.${hook}${sky}`, vars: { place, other, power: power?.name ?? other } });
   }
   return hooks;
 }

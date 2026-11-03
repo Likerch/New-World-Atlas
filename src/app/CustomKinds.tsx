@@ -1,6 +1,7 @@
 // The game master's own kinds of thing for a space map: each a row with its mark, colour, name, how many, where it
-// turns up and whether it is a region. They are kept in this browser, so the next map starts with them.
-import type { CustomKind, Placement } from "../core/index";
+// turns up and whether it is a region; what it is, whether the players may see it, and what it opens into. They are
+// kept in this browser, so the next map starts with them.
+import type { CustomKind, KindOpening, Placement } from "../core/index";
 import type { T } from "./i18n";
 import { NumberInput } from "./NumberInput";
 
@@ -21,7 +22,7 @@ export function saveKinds(key: string, kinds: CustomKind[]) {
   }
 }
 
-export function CustomKinds({ t, value, places, onChange }: { t: T; value: CustomKind[]; places: Placement[]; onChange: (next: CustomKind[]) => void }) {
+export function CustomKinds({ t, value, places, openings, onChange }: { t: T; value: CustomKind[]; places: Placement[]; openings?: KindOpening[]; onChange: (next: CustomKind[]) => void }) {
   const update = (index: number, patch: Partial<CustomKind>) => onChange(value.map((kind, k) => (k === index ? { ...kind, ...patch } : kind)));
   return (
     <details className="custom-kinds" open={value.length > 0}>
@@ -51,6 +52,22 @@ export function CustomKinds({ t, value, places, onChange }: { t: T; value: Custo
             <label className="check">
               <input type="checkbox" checked={kind.area} onChange={(event) => update(index, { area: event.target.checked })} />
               {t("custom.area")}
+            </label>
+          </div>
+          <textarea className="custom-about" rows={2} value={kind.about ?? ""} placeholder={t("custom.about")} aria-label={t("custom.about")} onChange={(event) => update(index, { about: event.target.value })} />
+          <div className="custom-row">
+            {openings ? (
+              <select className="grow" value={kind.opens ?? "none"} aria-label={t("custom.opens")} title={t("custom.opens")} onChange={(event) => update(index, { opens: event.target.value as KindOpening })}>
+                {openings.map((opening) => (
+                  <option key={opening} value={opening}>
+                    {t(`opens.${opening}`)}
+                  </option>
+                ))}
+              </select>
+            ) : null}
+            <label className="check" title={t("custom.secretHint")}>
+              <input type="checkbox" checked={!!kind.secret} onChange={(event) => update(index, { secret: event.target.checked })} />
+              🔒 {t("custom.secret")}
             </label>
           </div>
         </div>

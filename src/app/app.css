@@ -801,3 +801,94 @@ button.back {
   margin: 4px 0;
   font-style: italic;
 }
+
+/* Space: a world's profile code with its travel zone, trade codes, tags, hooks, filters and layers. */
+.profile {
+  margin: 8px 0;
+}
+.uwp {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.uwp code {
+  font-size: 15px;
+  letter-spacing: 1px;
+}
+.zone-badge {
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-size: 11px;
+  background: var(--accent-soft);
+}
+.zone-badge.amber {
+  background: #ffb000;
+  color: #1b120c;
+}
+.zone-badge.red {
+  background: #d63b3b;
+  color: #ffffff;
+}
+.trade-code {
+  margin-left: 4px;
+  text-decoration: none;
+  border-bottom: 1px dotted var(--muted);
+  cursor: help;
+}
+.card p.tag-line {
+  margin: 6px 0 0;
+  font-size: 12px;
+}
+.hooks li {
+  margin: 4px 0;
+}
+.space-layers,
+.lone-settings {
+  margin: 8px 0;
+}
+.space-layers summary,
+.lone-settings summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.filters {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0;
+}
+.search-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.search-row .search {
+  flex: 1;
+}
+.relation.war,
+.relation.rival {
+  color: #c0392b;
+}
+.relation.alliance,
+.relation.trade,
+.relation.overlord,
+.relation.vassal {
+  color: #2e8b57;
+}
+.custom-about {
+  width: 100%;
+  margin: 4px 0;
+  font: inherit;
+  resize: vertical;
+}
+.custom-thing {
+  margin-top: 6px;
+}
+.sky p {
+  font-size: 12px;
+}
+.list li.sub {
+  padding-left: 18px;
+  font-size: 12px;
+}

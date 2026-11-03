@@ -5,6 +5,8 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ageOf,
   buildingFromCity,
+  buildingParams,
+  cityParams,
   localFromCavern,
   cityFromBurg,
   editPlanet,
@@ -15,8 +17,8 @@ import {
   levelsOf,
   localFromLandmark,
   localFromMarker,
-  localFromStar,
   localParams,
+  mapKeyOf,
   overlaySvg,
   pathTo,
   planetParams,
@@ -52,7 +54,7 @@ import { useLocalLevel } from "./levels/local";
 import { useRegionLevel } from "./levels/region";
 import { useUnderworldLevel } from "./levels/underworld";
 import { usePlanetLevel } from "./levels/planet";
-import { useGalaxyLevel, useSystemLevel, useUniverseLevel } from "./levels/space";
+import { useGalaxyLevel, useSystemLevel, useUniverseLevel, type SpaceLinks } from "./levels/space";
 import type { Level, LevelContext, LevelId } from "./levels/types";
 import { MapView, type Focus } from "./MapView";
 import { LEVEL_ICON, WorldLibrary } from "./WorldLibrary";
@@ -280,33 +282,51 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     },
     back: back("planet"),
   });
-  const system = useSystemLevel(
-    ctx,
-    (params, body) => {
-      // A world of a star system lives in the age of the world (or of a planet above it the GM changed).
-      const base = planetParams({ ...params, setting: settingAt(world, system.worldKey ?? system.mapKey ?? null) }) as unknown as Record<string, unknown>;
-      linkTo("planet", system, `body:${body}`, base);
+  // Links from the space maps: a star's system hangs from its galaxy (also when reached along a lane from another
+  // system); places, worlds, colonies, galaxies and lone stars hang from the map they were opened on.
+  const spaceLinks = (from: () => Level): SpaceLinks => ({
+    openSystem: (made, star, survey) => {
+      pending.current.system = { parent: mapKeyOf("galaxy", made.params as unknown as Record<string, unknown>), step: { entity: `star:${star}` }, base: { galaxy: made.params as unknown as Record<string, unknown>, star } };
+      system.open(made, star, survey);
+      setView("system");
+    },
+    openLoneSystem: (params, entity) => {
+      const base = { seed: randomSeed(), ...params } as Record<string, unknown>;
+      linkTo("system", from(), entity, base);
+      system.restore!(resolve(world, `system:lone/${base.seed}`, base));
+      setView("system");
+    },
+    openLocal: (link, entity) => openLocal(from(), link, entity),
+    openBuilding: (params, entity) => {
+      const base = buildingParams(params) as unknown as Record<string, unknown>;
+      linkTo("building", from(), entity, base);
+      building.restore!(resolve(world, `building:${base.seed}`, base));
+      setView("building");
+    },
+    openCity: (params, language, entity) => {
+      const base = cityParams(params) as unknown as Record<string, unknown>;
+      linkTo("city", from(), entity, base);
+      city.restore!(resolve(world, `city:${base.seed}`, base), language);
+      setView("city");
+    },
+    openPlanet: (params, entity) => {
+      // A world of a star system lives in its technology's age when it has one, else in the world's (or of a planet
+      // above it the GM changed).
+      const base = planetParams({ ...params, setting: params.setting ?? settingAt(world, from().worldKey ?? from().mapKey ?? null) }) as unknown as Record<string, unknown>;
+      linkTo("planet", from(), entity, base);
       planet.restore!(resolve(world, `planet:${base.seed}`, base));
       setView("planet");
     },
-    back("system"),
-  );
-  const galaxy = useGalaxyLevel(
-    ctx,
-    (made, star) => {
-      linkTo("system", galaxy, `star:${star}`, { galaxy: made.params as unknown as Record<string, unknown>, star });
-      system.open(made, star);
-      setView("system");
+    openGalaxy: (params, entity) => {
+      const base = galaxyParams({ custom: loadKinds("atlas.kinds.galaxy"), ...params }) as unknown as Record<string, unknown>;
+      linkTo("galaxy", from(), entity, base);
+      galaxy.restore!(resolve(world, `galaxy:${base.seed}`, base));
+      setView("galaxy");
     },
-    (made, star) => openLocal(galaxy, localFromStar(made, star), `star:${star}`),
-    back("galaxy"),
-  );
-  const universe = useUniverseLevel(ctx, (params, id) => {
-    const base = galaxyParams({ custom: loadKinds("atlas.kinds.galaxy"), ...params }) as unknown as Record<string, unknown>;
-    linkTo("galaxy", universe, `galaxy:${id}`, base);
-    galaxy.restore!(resolve(world, `galaxy:${base.seed}`, base));
-    setView("galaxy");
   });
+  const system = useSystemLevel(ctx, spaceLinks(() => system), back("system"), world.setting);
+  const galaxy = useGalaxyLevel(ctx, spaceLinks(() => galaxy), back("galaxy"), world.setting);
+  const universe = useUniverseLevel(ctx, spaceLinks(() => universe), world.setting);
   const levels: Level[] = [universe, galaxy, system, planet, region, underworld, city, building, local];
   const byId = Object.fromEntries(levels.map((item) => [item.id, item])) as Record<LevelId, Level>;
   const level = byId[view] ?? byId[world.top];

@@ -231,6 +231,8 @@ export interface SystemParams {
   form?: EmpireForm;
   /** The game master's own kinds of thing. */
   custom?: CustomKind[];
+  /** The star's own name, when the map it was opened from gives it one (a crystal sphere's). */
+  name?: string;
 }
 
 /** A star system of its own, not cut from a galaxy: for a game that starts at one star. */
@@ -243,7 +245,9 @@ export function generateLoneSystem(input: Partial<SystemParams> = {}, setting?: 
   const extra = createRng(seed).fork("lone-extra");
   const natives = input.natives ?? (["F", "G", "K"].includes(spectral) && extra.chance(0.12));
   const form = input.form ?? extra.pick(EMPIRE_FORMS.slice(0, 9));
-  const star: Star = { id: 0, x: 0, y: 0, name: name(language, rng, "plain"), spectral, empire: 0, capital: settled, settled, feature: input.feature ?? null, natives };
+  // The name drawn is drawn even when one is given, so the rest of the system stays as it was.
+  const drawn = name(language, rng, "plain");
+  const star: Star = { id: 0, x: 0, y: 0, name: input.name || drawn, spectral, empire: 0, capital: settled, settled, feature: input.feature ?? null, natives };
   const bare = buildSystem(seed, star, settled ? name(language, rng, "land") : "", settled ? language : null, { worlds: input.worlds, companion: input.companion });
   const context: StarContext = { spectral, power: settled ? 1 : 0, form: settled ? form : null, capital: settled, settled, independent: false, natives, feature: star.feature, hops: 0, zones: [], border: false };
   return furnish(bare, star, context, spaceAge(setting), null, { custom: input.custom, edits });

@@ -178,7 +178,7 @@ export function galaxyOfNode(universe: Universe, id: number): Partial<GalaxyPara
 /** A crystal sphere of the phlogiston as the star system inside it. */
 export function systemOfSphere(universe: Universe, id: number): Partial<SystemParams> {
   const node = universe.galaxies[id];
-  return { seed: `${universe.params.seed}/sphere-${id}`, settled: node.civilisations > 0, natives: node.civilisations === 0 && node.stars > 700 };
+  return { seed: `${universe.params.seed}/sphere-${id}`, name: node.name, settled: node.civilisations > 0, natives: node.civilisations === 0 && node.stars > 700 };
 }
 
 /** What each plane of existence is like as a world. */
@@ -220,12 +220,12 @@ export function openingOfAnomaly(universe: Universe, id: number): { galaxy?: Par
     const kind = (universe.params.custom ?? []).find((item) => item.id === a.custom);
     if (!kind?.opens || kind.opens === "none") return null;
     if (kind.opens === "galaxy") return { galaxy: { seed, name: a.name, shape: "elliptical", stars: 500, empires: 1, anomalies: Math.max(1, universe.params.anomalies) } };
-    if (kind.opens === "system") return { system: { seed } };
+    if (kind.opens === "system") return { system: { seed, name: a.name } };
     const way = openingOf(kind, seed, a.name, spaceAge(), null);
     return way?.local ? { local: way.local } : null;
   }
   if (a.kind === "relic") return { local: { params: { seed, kind: "dungeon", theme: "vault", danger: 3, age: "far-future", name: a.name }, language: null } };
-  if (a.kind === "supermassive") return { system: { seed, spectral: "BH", settled: false, worlds: 3 } };
+  if (a.kind === "supermassive") return { system: { seed, name: a.name, spectral: "BH", settled: false, worlds: 3 } };
   const shape: Record<string, GalaxyShape> = { "great-attractor": "elliptical", "cosmic-string": "spiral", lens: "ring", "white-hole": "clusters", "dark-flow": "barred", "bubble-wall": "clusters" };
   return { galaxy: { seed, name: a.name, shape: shape[a.kind], stars: 600, empires: 1, anomalies: 3, origin: { touched: [a.kind] } } };
 }
