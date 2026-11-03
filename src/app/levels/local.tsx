@@ -43,8 +43,8 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null): Lev
   const S = map ? localPixels(map) : 20;
   const legend = (k: LocalMap["keyed"][number]) =>
     [
-      k.monsters.length ? `${t("local.monsters")}: ${k.monsters.map(monster).join(", ")}` : "",
-      k.treasure ? `${t("local.treasure")}: ${t(`treasure.${k.treasure}`)}` : "",
+      k.monsters.length ? `${t("local.monsters")}: ${k.monsters.map((g) => `${g.count > 1 ? `${g.count} ` : ""}${monster(g.who)}`).join(", ")}` : "",
+      k.treasure ? `${t("local.treasure")}: ${t(`treasure.${k.treasure.what}`)}` : "",
       k.trap ? `${t("local.trap")}: ${t(`trap.${k.trap}`)}` : "",
       k.secret ? t("local.secret") : "",
     ].filter(Boolean);

@@ -50,3 +50,7 @@ export * from "./setting";
 export * from "./render/legend";
 export * from "./world";
 export * from "./people";
+export * from "./local/own";
+export * from "./local/describe";
+export * from "./local/edit";
+export * from "./local/scene";

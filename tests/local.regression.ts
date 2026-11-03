@@ -1,6 +1,6 @@
 // Local-map regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { generateCity, generateGalaxy, localFromCavern, localFromLandmark, localFromStar, generateUnderworld, renderUnderworld, SETTINGS, generateLocal, generatePlanet, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localFromMarker, renderLocal, TILE } from "../src/core/index";
+import { blocked, doorsOf, editLocal, generateCity, generateGalaxy, localAt, localFromCavern, localFromLandmark, localFromStar, localScene, localStory, generateUnderworld, reachOf, renderLocal, renderLocalScene, renderUnderworld, SETTINGS, generateLocal, generatePlanet, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localFromMarker, TILE, walk, type LocalMap } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -27,14 +27,16 @@ test("every room of a dungeon or cave can be reached from its entrance", () => {
         for (const n of [i - 1, i + 1, i - W, i + W]) if (n >= 0 && n < map.tiles.length && open(n) && !seen.has(n)) (seen.add(n), queue.push(n));
       }
       for (const room of map.keyed) assert.ok(room.cells.some((c) => seen.has(c)), `${theme}: room ${room.id} (${room.purpose}) is sealed off`);
-      // A deep people's hold ends in its hoard, not a lair.
-      assert.equal(map.keyed.filter((k) => k.purpose === (theme === "hold" ? "treasury" : "lair") || k.purpose === "tomb").length, 1, `${theme}: one final room`);
+      // One room ends the place: a deep people's hold ends in its hoard, not a lair.
+      assert.equal(map.keyed.filter((k) => k.final).length, 1, `${theme}: one final room`);
+      if (theme === "hold") assert.equal(map.keyed.find((k) => k.final)!.purpose, "treasury");
     }
   }
 });
 
 test("a wilderness trail crosses the map from west to east", () => {
-  for (const theme of LOCAL_THEMES.wilderness) {
+  // Under the sea one swims; there is no trail.
+  for (const theme of LOCAL_THEMES.wilderness.filter((item) => item !== "seabed")) {
     const map = generateLocal({ seed: `trail-${theme}`, kind: "wilderness", theme });
     assert.ok(map.trail.length > map.params.width * 0.6, `${theme}: trail of ${map.trail.length}`);
     assert.equal(map.trail[map.trail.length - 1][0], map.params.width - 1, `${theme}: the trail stops short`);
@@ -63,9 +65,9 @@ test("a cave on the planet map keeps its legend's dweller in the lair", () => {
   const levels = map.params.levels ?? 1;
   const bottom = levels > 1 ? generateLocal({ ...map.params, seed: `${map.params.seed}/depth-${levels}`, depth: levels }, link.language ?? undefined) : map;
   const dweller = String(cave.facts.dweller).replace(/ /gu, "-");
-  assert.deepEqual(bottom.keyed.find((k) => k.purpose === "lair")!.monsters, [dweller]);
+  assert.equal(bottom.keyed.find((k) => k.final)!.monsters.find((g) => g.boss)!.who, dweller);
   assert.ok(!bottom.features.some((f) => f.kind === "stairs-down"), "the last level leads no further");
-  if (levels > 1) assert.notDeepEqual(map.keyed.find((k) => k.purpose === "lair")!.monsters, [dweller], "the dweller is not on the first level");
+  if (levels > 1) assert.notEqual(map.keyed.find((k) => k.final)!.monsters.find((g) => g.boss)?.who, dweller, "the dweller is not on the first level");
 });
 
 test("dungeons and caves lead further down, and a deeper level is a new place", () => {
@@ -116,8 +118,8 @@ test("one door to each run of corridor, chambers that share no ground, the lair 
       for (const n of [c - 1, c + 1, c - W, c + W]) if (n >= 0 && n < map.tiles.length && map.tiles[n] !== TILE.rock && !dist.has(n)) (dist.set(n, dist.get(c)! + 1), queue.push(n));
     }
     const reach = (r: (typeof map.keyed)[number]) => Math.min(...r.cells.map((c) => dist.get(c) ?? Infinity));
-    const end = map.keyed.find((r) => r.purpose === "tomb" || r.purpose === "lair")!;
-    for (const room of map.keyed) assert.ok(reach(room) <= reach(end) + 4, `walk-${k}: room ${room.id} lies deeper than the tomb`);
+    const end = map.keyed.find((r) => r.final)!;
+    for (const room of map.keyed.filter((r) => !r.secret)) assert.ok(reach(room) <= reach(end) + 4, `walk-${k}: room ${room.id} lies deeper than the tomb`);
     // Nothing stands on another thing; stairs and chests stay out of the water.
     const spots = map.features.filter((f) => ["stairs-down", "crate", "trap", "chest"].includes(f.kind));
     for (const f of spots) assert.ok(map.tiles[f.x + f.y * W] !== TILE.water && map.tiles[f.x + f.y * W] !== TILE.deep, `${f.kind} in the water`);
@@ -153,7 +155,7 @@ test("each place opens as itself: a precursor ruin, a vault's door, a deep peopl
     const link = localFromStar(galaxy, ruin.id)!;
     const map = generateLocal(link.params, link.language ?? undefined);
     assert.equal(map.name, ruin.name);
-    for (const room of map.keyed) for (const m of room.monsters) assert.ok(!["goblins", "orcs", "kobolds", "skeletons", "zombies"].includes(m), `${m} among the stars`);
+    for (const room of map.keyed) for (const m of room.monsters) assert.ok(!["goblins", "orcs", "kobolds", "skeletons", "zombies"].includes(m.who), `${m.who} among the stars`);
   }
   const fallen = generateCity({ seed: "vaulted", era: "post-apocalypse", population: 3 });
   const door = fallen.landmarks.find((l) => l.kind === "vault-door");
@@ -186,5 +188,200 @@ test("in every age the underworld is one web, and its ways down open close benea
     }
   }
 });
+
+/** Where one starts: the stairs up, else the way in at the map's edge. */
+const startOf = (map: LocalMap) => {
+  const way = map.features.find((f) => f.kind === "stairs-up") ?? map.features.find((f) => (f.kind === "exit" || f.kind === "airlock") && f.to === "")!;
+  return way.x + way.y * map.params.width;
+};
+
+test("topology v2: a way in from the edge, keys before their locks, secret rooms only through secret doors, chasms bridged", () => {
+  let locks = 0,
+    secrets = 0,
+    chasms = 0;
+  for (const theme of LOCAL_THEMES.dungeon)
+    for (let k = 0; k < 5; k++) {
+      const map = generateLocal({ seed: `topo-${theme}-${k}`, kind: "dungeon", theme, levels: 2 });
+      const W = map.params.width;
+      const way = map.features.find((f) => (f.kind === "exit" || f.kind === "airlock") && f.to === "")!;
+      assert.ok(way && (way.x === 0 || way.y === 0 || way.x === W - 1 || way.y === map.params.height - 1 || theme === "starship" || theme === "derelict"), `${theme}: the way in is at the edge`);
+      const doors = doorsOf(map);
+      const start = startOf(map);
+      const all = walk(map, doors, start);
+      // Every open tile can be walked to: chasms have their bridges.
+      for (let c = 0; c < map.tiles.length; c++) if (!blocked(map.tiles[c])) assert.ok(all[c] < Infinity, `${theme}-${k}: ground cut off at ${c % W},${Math.floor(c / W)}`);
+      if (map.tiles.some((t) => t === TILE.chasm)) chasms++;
+      for (const holder of map.keyed.filter((r) => r.key)) {
+        locks++;
+        const n = holder.key!;
+        const shut = new Set(map.features.filter((f) => f.kind === "locked-door" && (f.lock ?? 0) >= n).map((f) => f.x + f.y * W));
+        assert.ok(reachOf(holder, walk(map, doors, start, (c) => shut.has(c))) < Infinity, `${theme}-${k}: key ${n} lies behind its own lock`);
+        const target = map.keyed.find((r) => r.lock === n)!;
+        assert.ok(reachOf(target, walk(map, doors, start, (c) => shut.has(c))) === Infinity, `${theme}-${k}: lock ${n} keeps nothing out`);
+      }
+      const hidden = new Set(map.features.filter((f) => f.kind === "secret-door").map((f) => f.x + f.y * W));
+      const plain = walk(map, doors, start, (c) => hidden.has(c));
+      for (const room of map.keyed) assert.equal(room.secret, reachOf(room, plain) === Infinity, `${theme}-${k}: room ${room.id} secret is ${room.secret}`);
+      secrets += map.keyed.filter((r) => r.secret).length;
+    }
+  assert.ok(locks > 10 && secrets > 10 && chasms > 3, `locks ${locks}, secret rooms ${secrets}, chasms ${chasms}`);
+});
+
+test("levels link up: a level's stairs down stand where the next one's stairs up do", () => {
+  for (const [kind, theme] of [["dungeon", "crypt"], ["dungeon", "metro"], ["dungeon", "starship"], ["cave", "lair"], ["cave", "mine"]] as const) {
+    const first = generateLocal({ seed: `link-${theme}`, kind, theme, levels: 3 });
+    const second = generateLocal({ ...first.params, seed: `link-${theme}/depth-2`, depth: 2 });
+    const down = first.features.find((f) => f.kind === "stairs-down")!;
+    const up = second.features.find((f) => f.kind === "stairs-up")!;
+    assert.deepEqual([up.x, up.y], [down.x, down.y], `${theme}: the stairs do not meet`);
+  }
+});
+
+test("a stable key: danger, ruler and age never move rooms or change what they are for", () => {
+  for (const theme of ["crypt", "mine", "starship"] as const) {
+    const a = generateLocal({ seed: `stable-${theme}`, kind: "dungeon", theme, danger: 1 });
+    const b = generateLocal({ seed: `stable-${theme}`, kind: "dungeon", theme, danger: 3, boss: "troll", age: "modern", levels: 3 });
+    assert.deepEqual(Array.from(b.tiles), Array.from(a.tiles), `${theme}: tiles moved`);
+    assert.deepEqual(b.keyed.map((r) => [r.id, r.purpose, r.cells.length]), a.keyed.map((r) => [r.id, r.purpose, r.cells.length]), `${theme}: rooms changed`);
+  }
+});
+
+test("themes build their own rooms: a ship's bridge, engines and airlocks, sewer canals, mine rails and veins, a metro's platforms, a crypt's niches", () => {
+  const ship = generateLocal({ seed: "theme-ship", kind: "dungeon", theme: "starship" });
+  for (const purpose of ["ship-bridge", "engine-room"]) assert.ok(ship.keyed.some((r) => r.purpose === purpose), purpose);
+  assert.ok(ship.features.filter((f) => f.kind === "airlock").length >= 2 && ship.tiles.some((t) => t === TILE.hull), "a hull with airlocks");
+  const sewer = generateLocal({ seed: "theme-sewer", kind: "dungeon", theme: "sewer" });
+  assert.ok(sewer.tiles.filter((t) => t === TILE.water).length > 40 && sewer.features.some((f) => f.kind === "grate"), "canals under grates");
+  const mine = generateLocal({ seed: "theme-mine", kind: "dungeon", theme: "mine" });
+  assert.ok(mine.tiles.some((t) => t === TILE.rail) && mine.features.some((f) => f.kind === "vein"), "rails and veins");
+  const metro = generateLocal({ seed: "theme-metro", kind: "dungeon", theme: "metro" });
+  assert.ok(metro.tiles.some((t) => t === TILE.platform) && metro.keyed.some((r) => r.purpose === "platform"), "platforms");
+  assert.equal(metro.features.filter((f) => f.kind === "exit" && f.to === "line").length, 2, "the line runs off both edges");
+  const crypt = generateLocal({ seed: "theme-crypt", kind: "dungeon", theme: "crypt" });
+  assert.ok(crypt.features.some((f) => f.kind === "niche") && crypt.features.some((f) => f.kind === "coffin"), "niches and a sarcophagus");
+  for (const map of [ship, sewer, mine, metro, crypt]) assert.doesNotMatch(renderLocal(map, { coords: true, units: "ft" }), /NaN|undefined|Infinity/u);
+});
+
+test("bands come in numbers by age and magic, people are led by someone with a name", () => {
+  const counted = generateLocal({ seed: "bands", kind: "dungeon", theme: "crypt", danger: 3 });
+  const groups = counted.keyed.flatMap((r) => r.monsters);
+  assert.ok(groups.length > 2 && groups.every((g) => g.count >= 1));
+  assert.ok(groups.some((g) => g.count > 1), "some come in bands");
+  assert.equal(counted.wandering.length, 6);
+  const undead = ["skeletons", "zombies", "ghouls", "lich", "wraith", "vampire", "mummy"];
+  const plain = generateLocal({ seed: "bands", kind: "dungeon", theme: "crypt", age: "renaissance", danger: 3 });
+  assert.ok(plain.keyed.flatMap((r) => r.monsters).every((g) => !undead.includes(g.who)), "the dead lie still without magic");
+  const magic = generateLocal({ seed: "bands", kind: "dungeon", theme: "crypt", age: "renaissance", magic: 2, danger: 3 });
+  assert.ok(magic.keyed.flatMap((r) => r.monsters).some((g) => undead.includes(g.who)), "and walk where magic stirs");
+  const gang = generateLocal({ seed: "gang", kind: "dungeon", theme: "sewer", age: "modern", danger: 3 });
+  const led = gang.keyed.flatMap((r) => r.monsters).filter((g) => g.leader);
+  assert.ok(led.length > 0 && led.every((g) => g.leader!.name.includes(" ")), "a gang has a named boss");
+  for (const room of gang.keyed) assert.ok(room.look.length >= 1 && room.look.every((key) => key.startsWith("look.") || key.startsWith("object.")));
+});
+
+test("legends come true: a tomb holds its ruler, a mine its veins and miners, a camp its whole band, a cave goes as deep as told", () => {
+  const planet = generatePlanet({ seed: "regression", template: "continents", cells: 6000 });
+  const ancient = generatePlanet({ seed: "legends", cells: 4000, setting: { ...SETTINGS.ancient, magic: 1 } });
+  const tomb = ancient.markers.find((m) => m.kind === "tomb");
+  if (tomb) {
+    const link = localFromMarker(ancient, tomb.id)!;
+    const levels = link.params.levels ?? 1;
+    const bottom = generateLocal({ ...link.params, seed: `${link.params.seed}/depth-${levels}`, depth: levels }, link.language ?? undefined);
+    const final = bottom.keyed.find((r) => r.final)!;
+    assert.equal(final.purpose, "tomb");
+    assert.equal(final.name, tomb.facts.ruler, "the tomb is its ruler's");
+    assert.equal(final.monsters.find((g) => g.boss)?.name, tomb.facts.ruler, "the ruler rises");
+  }
+  const mine = planet.markers.find((m) => m.kind === "mine")!;
+  const dug = generateLocal(localFromMarker(planet, mine.id)!.params);
+  assert.ok(dug.features.some((f) => f.kind === "vein") && dug.tiles.some((t) => t === TILE.rail));
+  assert.ok(dug.keyed.flatMap((r) => r.monsters).some((g) => g.who === "miners"), "a working mine has its miners");
+  // Brigands are rare on a small planet: the camp is made as a planet's link makes it.
+  const camp = generateLocal({ seed: "camp", kind: "wilderness", theme: "forest", age: "medieval", origin: { kind: "brigands", facts: { band: 23 } } });
+  const band = camp.keyed.flatMap((r) => r.monsters).filter((g) => g.who === "bandits");
+  assert.equal(band.reduce((sum, g) => sum + g.count, 0), 23, "the whole band is there");
+  assert.ok(band.some((g) => g.boss && g.leader), "led by its chief");
+  assert.ok(camp.features.some((f) => f.kind === "fence") && camp.keyed.some((r) => r.object === "bandit-camp"));
+  for (const cave of planet.markers.filter((m) => m.kind === "cave")) assert.equal(localFromMarker(planet, cave.id)!.params.levels, Math.min(9, Number(cave.facts.depth)));
+  const fallen = generatePlanet({ seed: "age-under", cells: 3000, setting: SETTINGS["post-apocalypse"] });
+  const vault = fallen.markers.find((m) => m.kind === "bunker" && Number(m.facts.dwellers) > 0);
+  if (vault) {
+    const lived = generateLocal(localFromMarker(fallen, vault.id)!.params);
+    assert.ok(lived.keyed.flatMap((r) => r.monsters).some((g) => g.who === "survivors"), "a lived-in vault");
+    assert.equal(localStory(lived).hook.key, "hook.vault");
+  }
+});
+
+test("every place of a planet opens: a bridge on its river, a wreck on the sea floor, any spot as the land there", () => {
+  const planet = generatePlanet({ seed: "regression", template: "continents", cells: 6000 });
+  const bridge = planet.markers.find((m) => m.kind === "bridge");
+  if (bridge) {
+    const map = generateLocal(localFromMarker(planet, bridge.id)!.params);
+    assert.ok(map.river.length > 0 && map.features.some((f) => f.kind === "bridge") && map.keyed.some((r) => r.object === "bridge"));
+    assert.equal(map.params.river, bridge.facts.river);
+  }
+  const wreck = planet.markers.find((m) => m.kind === "shipwreck");
+  if (wreck) {
+    const map = generateLocal(localFromMarker(planet, wreck.id)!.params);
+    assert.equal(map.params.theme, "seabed");
+    assert.ok(map.keyed.some((r) => r.treasure?.what === `fact:${wreck.facts.cargo}`), "the cargo lies in the hold");
+  }
+  const sea = Array.from({ length: planet.mesh.cells }, (_, c) => c).find((c) => planet.water[c])!;
+  assert.equal(localAt(planet, sea)!.params.theme, "seabed");
+  const river = Array.from({ length: planet.mesh.cells }, (_, c) => c).find((c) => planet.river[c] && !planet.water[c] && !planet.burg[c])!;
+  assert.equal(localAt(planet, river)!.params.river, planet.rivers[planet.river[river]].name);
+  const town = planet.burgs[1];
+  assert.equal(localAt(planet, town.cell), null, "a town opens as its city");
+  for (const theme of ["jungle", "steppe", "tundra", "seabed"] as const) assert.doesNotMatch(renderLocal(generateLocal({ seed: `land-${theme}`, kind: "wilderness", theme })), /NaN|undefined/u);
+  const city = generateCity({ seed: "crypts", era: "medieval", population: 20 });
+  const temple = city.landmarks.find((l) => l.kind === "temple");
+  if (temple) assert.equal(localFromLandmark(city, temple.id)?.params.theme, "crypt");
+});
+
+test("the wilds go on past their edges: a sheet's trail and stream meet its neighbours'", () => {
+  const here = generateLocal({ seed: "sheets", kind: "wilderness", theme: "forest" });
+  const east = generateLocal({ ...here.params, sheet: [1, 0] });
+  assert.equal(east.trail[0][1], here.trail[here.trail.length - 1][1], "the trail meets at the east edge");
+  const south = generateLocal({ ...here.params, sheet: [0, 1] });
+  const leaving = here.stream.filter(([, y]) => y === here.params.height - 1).map(([x]) => x);
+  const entering = south.stream.filter(([, y]) => y === 0).map(([x]) => x);
+  assert.ok(leaving.length && entering.length && Math.abs(leaving[leaving.length - 1] - entering[0]) <= 2, "the stream runs on south");
+  assert.notDeepEqual(east.keyed.map((r) => [r.x, r.y]), here.keyed.map((r) => [r.x, r.y]), "each sheet has places of its own");
+});
+
+test("a place's story: a hook, three rumours with one lie, its bands as factions", () => {
+  for (let k = 0; k < 6; k++) {
+    const map = generateLocal({ seed: `story-${k}`, kind: "dungeon", theme: "sewer", age: "modern", danger: 3 });
+    const story = localStory(map);
+    assert.ok(story.hook.key.startsWith("hook."));
+    assert.equal(story.rumours.length, 3);
+    assert.equal(story.rumours.filter((r) => !r.true).length, 1);
+    for (const faction of story.factions) for (const rival of faction.rivals) assert.ok(story.factions.find((f) => f.id === rival)!.rivals.includes(faction.id));
+    assert.deepEqual(localStory(map), story, "the same story every time");
+  }
+});
+
+test("the game master edits a room's key and rolls a room anew; a room opens as a scene", () => {
+  const map = generateLocal({ seed: "edit", kind: "dungeon", theme: "crypt", danger: 2 });
+  const room = map.keyed.find((r) => r.purpose !== "entrance" && !r.final)!;
+  const edited = editLocal(map, { rooms: { [room.id]: { monsters: [{ who: "ghouls", count: 4 }], trap: "pit", text: "Cold." } } });
+  const after = edited.keyed.find((r) => r.id === room.id)!;
+  assert.deepEqual(after.monsters, [{ who: "ghouls", count: 4 }]);
+  assert.equal(after.trap, "pit");
+  assert.equal(after.text, "Cold.");
+  assert.ok(edited.features.some((f) => f.kind === "trap" && f.room === room.id), "the trap is on the map");
+  assert.deepEqual(map.keyed.find((r) => r.id === room.id), room, "the map itself is untouched");
+  const once = editLocal(map, { rooms: { [room.id]: { reroll: 1 } } });
+  assert.deepEqual(editLocal(map, { rooms: { [room.id]: { reroll: 1 } } }).keyed, once.keyed, "a roll is the same every time");
+  const rolls = [1, 2, 3, 4].map((n) => JSON.stringify(editLocal(map, { rooms: { [room.id]: { reroll: n } } }).keyed.find((r) => r.id === room.id)));
+  assert.ok(new Set(rolls).size > 1, "rolls differ");
+  assert.deepEqual(once.keyed.filter((r) => r.id !== room.id), map.keyed.filter((r) => r.id !== room.id), "other rooms stay");
+  const busy = map.keyed.find((r) => r.monsters.length)!;
+  const scene = localScene(map, busy.id)!;
+  assert.equal(scene.tokens.length, Math.min(busy.monsters.reduce((sum, g) => sum + g.count, 0), busy.cells.length));
+  for (const token of scene.tokens) assert.ok(busy.cells.includes(token.x + token.y * map.params.width));
+  assert.doesNotMatch(renderLocalScene(map, scene), /NaN|undefined|Infinity/u);
+});
+
 
 console.log(`local: ${passed} regressions passed`);
