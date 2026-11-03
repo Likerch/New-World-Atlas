@@ -1336,6 +1336,8 @@ const TERMS: Record<string, [string, string]> = {
   "hook.u.expedition@planes": ["An expedition into {{place}} needs guides; the last one came back changed.", "Экспедиции в {{place}} нужны проводники: прошлая вернулась изменившейся."],
   "hook.u.signal@planes": ["A voice from {{place}} calls the living by name; {{power}} wants to answer it first.", "Голос из {{place}} зовёт живых по именам; ответить ему спешит {{power}}."],
   "space.yearDays": ["{{n#day|days}}", "{{n#день|дня|дней}}"],
+  "space.chain": ["Held by {{power}}, ruled by {{ruler}}; here {{governor}} ({{role}}) governs in their name.", "Владеет {{power}}, правит {{ruler}}; здесь от их имени управляет {{governor}} ({{role}})."],
+  "profile.code": ["Profile", "Профиль"],
   "universe.gateTo": ["Gate to", "Врата к"],
   "universe.gatesCount": ["{{gates#gate|gates}} between galaxies", "врат между галактиками: {{gates}}"],
   "universe.heldBy": ["Held by", "Под властью"],

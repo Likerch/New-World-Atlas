@@ -279,6 +279,26 @@ export function profileWorld(seed: string, context: StarContext, bodies: Body[],
   return { body: body?.id ?? null, ...(main?.moon !== undefined ? { moon: main.moon } : {}), starport, size, atmosphere, hydrographics, population, government, law, tech, code, people, trade, bases, zone, tags, independent: context.independent, natives };
 }
 
+/** A code for any world of a system, the main world's own or a lesser one's: a secondary port by its people (F good,
+ * G poor, H basic, Y none), its own size, air, water and people, the system's government and law where people live,
+ * technology a step behind the main world's. */
+export function bodyCode(profile: WorldProfile, body: Body, seed: string): { code: string; trade: TradeCode[] } {
+  if (profile.body === body.id && profile.moon === undefined) return { code: profile.code, trade: profile.trade };
+  const rng = createRng(`${seed}/body-${body.id}`).fork("code");
+  const people = body.population * 1e6;
+  const population = people >= 1 ? Math.min(12, Math.floor(Math.log10(people))) : 0;
+  const size = body.kind === "belt" ? 0 : body.kind === "gas-giant" || body.kind === "ice-giant" ? 15 : Math.max(1, Math.min(10, Math.round(body.radius * 8)));
+  const atmosphere = body.kind === "gas-giant" || body.kind === "ice-giant" ? 15 : airOf(body, rng);
+  const hydrographics = Math.max(0, Math.min(10, Math.round(body.water * 10)));
+  const lived = population > 0 && !body.natives;
+  const government = lived ? profile.government : 0;
+  const law = lived ? profile.law : 0;
+  const tech = lived ? Math.max(0, profile.tech - 1) : body.natives ? Math.min(profile.tech, 3) : 0;
+  const port = !lived ? "Y" : population >= 6 ? "F" : population >= 4 ? "G" : "H";
+  const digits = { size, atmosphere, hydrographics, population, government, law, tech };
+  return { code: `${port}${ehex(size)}${ehex(atmosphere)}${ehex(hydrographics)}${ehex(population)}${ehex(government)}${ehex(law)}-${ehex(tech)}`, trade: tradeCodes(digits) };
+}
+
 /** Red: interdicted, sealed or deadly; amber: dangerous, lawless or harsh. */
 function zoneOf(context: StarContext, tags: WorldTag[], law: number, interdicted: boolean): TravelZone {
   const red = interdicted || context.feature === "quarantine" || context.feature === "time-rift" || context.zones.some((z) => z === "dead-zone" || z === "plasma-sea") || tags.some((tag) => tag === "sealed-menace" || tag === "doomed-world" || tag === "quarantined");

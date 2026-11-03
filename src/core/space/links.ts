@@ -92,6 +92,13 @@ export function localOfSite(system: StarSystem, site: Site): LocalLink | null {
   return { params: { seed: siteKey(system, site), kind: local.kind, theme: local.theme, danger: local.danger ?? 2, age: localAge(system.age), name: site.main ? system.name : site.name }, language: system.language };
 }
 
+/** An asteroid belt as a local map: tunnels and caverns of a worked rock. */
+export function localOfBelt(system: StarSystem, bodyId: number): LocalLink | null {
+  const body = bodyOf(system, bodyId);
+  if (!body || body.kind !== "belt") return null;
+  return { params: { seed: `${system.seed}/body-${bodyId}/belt`, kind: "cave", theme: "mine", danger: 2, age: localAge(system.age), name: body.name }, language: system.language };
+}
+
 /** The building type a station is, if it is one. */
 function buildingType(kind: SiteKind): BuildingType | null {
   return kind === "highport" || kind === "station" || kind === "habitat" || kind === "military-base" ? "hab" : kind === "research-station" ? "lab" : kind === "trade-station" ? "store" : null;

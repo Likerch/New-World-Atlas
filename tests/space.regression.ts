@@ -1,6 +1,6 @@
 // Galaxy and star-system regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { anomalyDistance, anomalyPoint, buildingOfSite, cityOfBody, cleanGalaxyEdits, cleanKind, cosmicHooks, editGalaxy, editUniverse, emptyGalaxyEdits, filamentPath, galaxyOfNode, generateUniverse, localFromStar, localOfSite, openingOfAnomaly, powersOf, renameGalaxy, renderUniverse, shapeOf, siteOfStar, skyOf, starLore, surveyGalaxy, systemLore, tradeCodes, GALAXY_SHAPES, generateGalaxy, generateLoneSystem, generatePlanet, generateSystem, planetFromBody, renderGalaxy, renderSystem, type SpaceFeature } from "../src/core/index";
+import { anomalyDistance, anomalyPoint, bodyCode, buildingOfSite, localOfBelt, systemLegend, cityOfBody, cleanGalaxyEdits, cleanKind, cosmicHooks, editGalaxy, editUniverse, emptyGalaxyEdits, filamentPath, galaxyOfNode, generateUniverse, localFromStar, localOfSite, openingOfAnomaly, powersOf, renameGalaxy, renderUniverse, shapeOf, siteOfStar, skyOf, starLore, surveyGalaxy, systemLore, tradeCodes, GALAXY_SHAPES, generateGalaxy, generateLoneSystem, generatePlanet, generateSystem, planetFromBody, renderGalaxy, renderSystem, type SpaceFeature } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -416,6 +416,25 @@ test("a galaxy opens with its node: its peoples by name, the strange nearby, a g
   assert.ok(way && way.path.length >= 2 && way.length > 0);
   for (const a of universe.anomalies) if (a.kind !== "custom") assert.ok(openingOfAnomaly(universe, a.id), `${a.kind} opens nothing`);
   assert.equal(cosmicHooks(universe, { kind: "galaxy", id: held.id }).length, 2);
+});
+
+test("a system inside a region of trouble shows it; every world has its code; a belt opens as a local map", () => {
+  const galaxy = generateGalaxy({ seed: "regions", anomalies: 3 });
+  const inside = galaxy.stars.find((s) => galaxy.zones.some((z) => z.kind !== "custom" && Math.hypot(z.x - s.x, z.y - s.y) < z.r * z.squash * 0.9))!;
+  const system = generateSystem(galaxy, inside.id);
+  assert.ok(system.context.zones.length > 0, "the star knows the region round it");
+  assert.ok(systemLegend(system).some((section) => section.key === "legend.zones"));
+  assert.doesNotMatch(renderSystem(system), /NaN|undefined|Infinity/u);
+  for (const body of system.bodies) assert.match(bodyCode(system.profile, body, system.seed).code, /^[ABCDEXFGHY][0-9A-F]{6}-[0-9A-F]$/u);
+  const main = system.bodies.find((b) => b.id === system.profile.body);
+  if (main) assert.equal(bodyCode(system.profile, main, system.seed).code, system.profile.code);
+  for (let k = 0; k < 20; k++) {
+    const lone = generateLoneSystem({ seed: `belt-${k}`, worlds: 10 });
+    const belt = lone.bodies.find((b) => b.kind === "belt");
+    if (!belt) continue;
+    assert.equal(localOfBelt(lone, belt.id)!.params.theme, "mine");
+    return;
+  }
 });
 
 console.log(`space: ${passed} regressions passed`);

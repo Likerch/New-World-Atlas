@@ -8,6 +8,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CustomKinds, loadKinds, saveKinds } from "../CustomKinds";
 import {
   BODY_KINDS,
+  bodyCode,
   bodyOf,
   bodyPoint,
   buildingOfSite,
@@ -25,6 +26,7 @@ import {
   generateGalaxy,
   generateLoneSystem,
   generateSystem,
+  localOfBelt,
   localOfSite,
   mapKeyOf,
   moonPoint,
@@ -123,6 +125,15 @@ export function useSystemLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
   );
   const legend = useMemo(() => (system ? systemLegend(system, { players: ctx.players, exits: exits.length > 0 }) : undefined), [system, ctx.players, exits]);
   const lore = useMemo(() => (system ? systemLore(system, source?.galaxy ?? null, source?.survey ?? null) : null), [system, source]);
+  // The chain of power: the galaxy's power and its ruler, down to the governor of this system's main world.
+  const chain = useMemo(() => {
+    if (!system || !source?.survey || !system.context.power || system.profile.body === null) return null;
+    const power = source.galaxy.empires[system.context.power];
+    const ruler = source.survey.powers[system.context.power]?.leader;
+    const governor = worldLore(system, system.profile.body)[0];
+    if (!power || !ruler || !governor) return null;
+    return t("space.chain", { power: t(`eform.${power.form}`, { name: nm(power.name) }), ruler: nm(ruler.name), governor: nm(governor.name), role: t(`role.${governor.role}`) });
+  }, [system, source, t, nm]);
   const era = system?.age.era ?? "far-future";
   const reset = () => {
     setSelection(null);
@@ -485,6 +496,10 @@ export function useSystemLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
             edit={editBody}
             remove={(id) => change((e) => ({ ...e, removed: [...e.removed, id] }))}
             openPlanet={(params, entity) => links.openPlanet(params, entity)}
+            openBelt={(id) => {
+              const belt = localOfBelt(system, id);
+              if (belt) links.openLocal(belt, `body:${id}`);
+            }}
             openCity={(id, moon) => {
               const city = cityOfBody(system, id, moon);
               if (city) links.openCity(city.params, city.language, moon !== undefined ? `moon:${id}:${moon}/city` : `body:${id}/city`);
@@ -501,6 +516,15 @@ export function useSystemLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
             <Row label={t("space.owner")} value={system.empire ? (system.context.form && edits?.owner === undefined ? t(`eform.${system.context.form}`, { name: nm(system.empire) }) : nm(system.empire)) : system.context.independent ? t("space.independent") : t("space.unclaimed")} />
             <Row label={t("space.zone")} value={`${system.zone[0].toFixed(2)}–${system.zone[1].toFixed(2)} AU`} />
             <Row label={t("legend.frost-line")} value={`${system.frost.toFixed(2)} AU`} />
+            {system.context.zones.map((kind) => (
+              <p key={kind} className="muted">
+                <b>
+                  {t("zone.inside")}: {t(`zone.${kind}`)}.
+                </b>{" "}
+                {t(`zone.${kind}.about`)}
+              </p>
+            ))}
+            {chain ? <p className="muted">{chain}</p> : null}
             <ProfileCard t={t} profile={system.profile} locale={ctx.locale} />
             {lore ? <LoreBlock t={t} nm={nm} era={era} people={lore.people} factions={lore.factions} rumours={lore.rumours} hooks={lore.hooks} players={ctx.players} /> : null}
           </div>
@@ -587,7 +611,7 @@ function TriState({ t, label, value, onChange }: { t: T; label: string; value: b
 }
 
 /** A world's (or a moon's) card: what it is, its life, sky and calendar, who governs it, the way down, the GM's edits. */
-function BodyCard({ t, nm, locale, system, body: id, moon: moonIndex, era, owners, edit, remove, openPlanet, openCity }: { t: T; nm: (name: string) => string; locale: string; system: StarSystem; body: number; moon?: number; era: string; owners: string[]; edit: (id: number, value: SystemEdits["bodies"][number]) => void; remove: (id: number) => void; openPlanet: (params: ReturnType<typeof planetFromBody>, entity: string) => void; openCity: (id: number, moon?: number) => void }) {
+function BodyCard({ t, nm, locale, system, body: id, moon: moonIndex, era, owners, edit, remove, openPlanet, openCity, openBelt }: { t: T; nm: (name: string) => string; locale: string; system: StarSystem; body: number; moon?: number; era: string; owners: string[]; edit: (id: number, value: SystemEdits["bodies"][number]) => void; remove: (id: number) => void; openPlanet: (params: ReturnType<typeof planetFromBody>, entity: string) => void; openCity: (id: number, moon?: number) => void; openBelt: (id: number) => void }) {
   const body = bodyOf(system, id)!;
   const moon = moonIndex !== undefined ? body.moons[moonIndex] : undefined;
   const sky = skyOf(system, id, moonIndex);
@@ -596,6 +620,7 @@ function BodyCard({ t, nm, locale, system, body: id, moon: moonIndex, era, owner
   const people = moon ? moon.population ?? 0 : body.population;
   const main = system.profile.body === id && system.profile.moon === moonIndex;
   const temperature = moon ? body.temperature - (moon.habitable ? 0 : 20) : body.temperature;
+  const code = moon ? null : bodyCode(system.profile, body, system.seed);
   return (
     <div className="card">
       <h3>{moon ? `${nm(body.name)} ${moon.name}` : nm(body.name)}</h3>
@@ -604,6 +629,21 @@ function BodyCard({ t, nm, locale, system, body: id, moon: moonIndex, era, owner
       {!moon && body.homeworld ? <Row label={t("space.homeworld")} value={system.empire ? nm(system.empire) : "—"} /> : null}
       {!moon && body.natives ? <p className="muted">☘ {t("space.nativesWorld", { name: system.nativeTongue ? nm(body.name) : nm(body.name) })}</p> : null}
       {main ? <p className="muted">★ {t("space.mainWorld")}</p> : null}
+      {code ? (
+        <Row
+          label={t("profile.code")}
+          value={
+            <>
+              <code>{code.code}</code>
+              {code.trade.map((item) => (
+                <abbr key={item} title={t(`trade.${item}`)} className="trade-code">
+                  {item}
+                </abbr>
+              ))}
+            </>
+          }
+        />
+      ) : null}
       <Row label={t("space.orbit")} value={`${body.orbit.toFixed(2)} AU`} />
       <Row label={t("space.year")} value={t("space.yearDays", { n: body.year })} />
       {body.kind !== "belt" ? (
@@ -640,6 +680,11 @@ function BodyCard({ t, nm, locale, system, body: id, moon: moonIndex, era, owner
       {solid ? (
         <button type="button" className="primary wide" onClick={() => openPlanet(planetFromBody(system, id, moonIndex), moonIndex !== undefined ? `moon:${id}:${moonIndex}` : `body:${id}`)}>
           🌍 {t("action.openPlanet")}
+        </button>
+      ) : null}
+      {!moon && body.kind === "belt" ? (
+        <button type="button" className="primary wide" onClick={() => openBelt(id)}>
+          🗺️ {t("action.openLocal")}
         </button>
       ) : null}
       {cityOfBody(system, id, moonIndex) ? (

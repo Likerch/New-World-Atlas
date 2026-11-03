@@ -572,6 +572,30 @@ export function exitPoint(system: StarSystem, exit: SystemExit, view: SystemView
   return { x: centre[0] + dx * t, y: centre[1] + dy * t };
 }
 
+/** A region of trouble as it looks from inside a system: a wash over the whole map. */
+function regionOver(kind: ZoneKind, W: number, H: number): string {
+  const style = ZONE_STYLE[kind];
+  const scatter = (count: number, draw: (x: number, y: number, k: number) => string) => Array.from({ length: count }, (_, k) => draw(((k * 0.618034) % 1) * W, ((k * 0.381966 + (k % 7) * 0.13) % 1) * H, k)).join("");
+  switch (kind) {
+    case "ion-storm":
+      return `<rect width="${W}" height="${H}" fill="${style.fill}" opacity="0.06"/><g stroke="${style.edge}" stroke-width="0.8" opacity="0.35" fill="none">${Array.from({ length: 7 }, (_, k) => `<path d="M${(k * 233) % W},0l40,120l-30,40l50,160l-20,60l45,180"/>`).join("")}</g>`;
+    case "dead-zone":
+      return `<rect width="${W}" height="${H}" fill="#000" opacity="0.25"/><rect x="6" y="6" width="${W - 12}" height="${H - 12}" fill="none" stroke="${style.edge}" stroke-width="2" stroke-dasharray="6 8" opacity="0.6"/>`;
+    case "dark-nebula":
+      return `<rect width="${W}" height="${H}" fill="#000" opacity="0.4"/>`;
+    case "radiation-belt":
+      return `<rect width="${W}" height="${H}" fill="${style.fill}" opacity="0.05"/><rect x="10" y="10" width="${W - 20}" height="${H - 20}" fill="none" stroke="${style.edge}" stroke-width="10" stroke-opacity="0.12" stroke-dasharray="4 10"/>`;
+    case "asteroid-field":
+      return `<g fill="${style.edge}" opacity="0.35">${scatter(320, (x, y, k) => `<circle cx="${r1(x)}" cy="${r1(y)}" r="${k % 6 ? 0.8 : 1.6}"/>`)}</g>`;
+    case "gravity-rift":
+      return `<path d="M0,${r1(H * 0.2)}L${r1(W * 0.3)},${r1(H * 0.35)}L${r1(W * 0.5)},${r1(H * 0.3)}L${r1(W * 0.75)},${r1(H * 0.55)}L${W},${r1(H * 0.5)}" fill="none" stroke="${style.fill}" stroke-width="10" opacity="0.15"/><path d="M0,${r1(H * 0.2)}L${r1(W * 0.3)},${r1(H * 0.35)}L${r1(W * 0.5)},${r1(H * 0.3)}L${r1(W * 0.75)},${r1(H * 0.55)}L${W},${r1(H * 0.5)}" fill="none" stroke="${style.edge}" stroke-width="0.8" opacity="0.6"/>`;
+    case "crystal-field":
+      return `<g fill="${style.fill}" fill-opacity="0.35">${scatter(120, (x, y) => `<path d="M${r1(x)},${r1(y - 3)}L${r1(x + 1.8)},${r1(y)}L${r1(x)},${r1(y + 3)}L${r1(x - 1.8)},${r1(y)}Z"/>`)}</g>`;
+    case "plasma-sea":
+      return `<rect width="${W}" height="${H}" fill="${style.fill}" opacity="0.08"/>`;
+  }
+}
+
 export interface SystemRenderOptions {
   script?: "latin" | "cyrillic";
   /** The world picked, a moon of it, or a place. */
@@ -606,6 +630,8 @@ export function renderSystem(system: StarSystem, options: SystemRenderOptions = 
   out.push(`<defs><radialGradient id="sun"><stop offset="0" stop-color="#ffffff"/><stop offset="0.45" stop-color="${spec.color}"/><stop offset="1" stop-color="${spec.color}" stop-opacity="0"/></radialGradient><radialGradient id="brass" cx="35%" cy="35%" r="75%"><stop offset="0" stop-color="#f6dc96"/><stop offset="0.6" stop-color="#c9a24a"/><stop offset="1" stop-color="#7a5a22"/></radialGradient><radialGradient id="wood" cx="50%" cy="50%" r="75%"><stop offset="0" stop-color="#2e2014"/><stop offset="1" stop-color="#120c07"/></radialGradient>`);
   for (const [kind, [light, dark]] of Object.entries(WORLD_COLORS)) out.push(`<radialGradient id="w-${kind}" cx="35%" cy="35%" r="70%"><stop offset="0" stop-color="${light}"/><stop offset="1" stop-color="${dark}"/></radialGradient>`);
   out.push(`</defs><rect width="${W}" height="${H}" fill="${brass ? "url(#wood)" : "#04050b"}"/>`);
+  // The regions of trouble the star lies in wash over the whole system.
+  for (const zone of system.context?.zones ?? []) out.push(regionOver(zone, W, H));
   // Habitable zone and frost line.
   const [zi, zo] = system.zone;
   out.push(`<circle cx="${sx}" cy="${sy}" r="${r1((rOf(zi) + rOf(zo)) / 2)}" fill="none" stroke="#36e0a0" stroke-opacity="${brass ? 0.1 : 0.12}" stroke-width="${r1(Math.max(4, rOf(zo) - rOf(zi)))}"/>`);
@@ -933,10 +959,12 @@ export function systemLegend(system: StarSystem, options: { players?: boolean; e
   const custom = new Map((system.custom ?? []).map((kind) => [kind.id, kind]));
   const places: LegendEntry[] = present((system.sites ?? []).filter((s) => s.kind !== "custom").map((s) => s.kind)).map((kind) => ({ key: `site.${kind}`, swatch: { glyph: SITE_GLYPH[kind], color: kind === "pirate-den" || kind === "prison" || kind === "cordon" ? "#ff7a5c" : "#ffd27a" } }));
   const used = new Set((system.sites ?? []).flatMap((s) => (s.custom ? [s.custom] : [])));
+  const regions: LegendEntry[] = (system.context?.zones ?? []).map((kind) => ({ key: `zone.${kind}`, swatch: { fill: ZONE_STYLE[kind].fill, stroke: ZONE_STYLE[kind].edge, opacity: 0.35 } }));
   return [
     { key: "legend.stars", entries: suns },
     { key: "legend.worlds", entries: worlds },
     { key: "legend.orbits", entries: orbits },
+    { key: "legend.zones", entries: regions },
     { key: "legend.sites", entries: places },
     { key: "legend.custom", entries: customEntries([...custom.values()], used, options.players) },
   ].filter((section) => section.entries.length);
