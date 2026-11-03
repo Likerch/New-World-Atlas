@@ -6,6 +6,7 @@ import type { Language } from "../language";
 import type { Mesh } from "../mesh";
 import type { Setting } from "../setting";
 import type { TemplateId } from "./heightmap";
+import type { History } from "./history";
 
 export const SEA_LEVEL = 20;
 
@@ -40,6 +41,8 @@ export interface PlanetParams {
   provinceShare: number;
   /** A world nobody lives on: no peoples, towns, realms or faiths, only the land, its waters and their names. */
   lifeless?: boolean;
+  /** Years of history lived before the map: realms, towns, wars and rulers come out of it. None: the map is drawn at once. */
+  history?: number;
 }
 
 export type FeatureKind = "ocean" | "lake" | "continent" | "island" | "isle";
@@ -133,6 +136,8 @@ export interface State {
   pole: Point;
   neighbors: number[];
   relations: Record<number, Relation>;
+  /** The realm of the world's history it is, when the history was lived. */
+  polity?: number;
 }
 
 export interface Province {
@@ -255,6 +260,8 @@ export interface Marker {
 
 export interface Planet {
   params: PlanetParams;
+  /** How the world came to be as it is, when its history was lived. */
+  history?: History;
   /** A print of the GM's relief strokes when the world was regrown under them. */
   relief?: string;
   /** The world's own name, in the tongue of its first people. */

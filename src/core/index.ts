@@ -50,3 +50,4 @@ export * from "./setting";
 export * from "./render/legend";
 export * from "./world";
 export * from "./people";
+export * from "./planet/history";

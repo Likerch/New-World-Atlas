@@ -170,3 +170,23 @@ export function toCyrillic(text: string): string {
   }
   return out;
 }
+
+/** Sound changes a daughter tongue may go through: consonants voiced, unvoiced or softened, vowels raised or lowered. */
+const SHIFTS: Record<string, string> = { p: "f", b: "v", t: "d", d: "t", k: "g", g: "k", s: "z", z: "s", m: "n", n: "m", r: "l", l: "r", f: "p", v: "b", h: "k", a: "o", o: "u", u: "o", e: "i", i: "e" };
+
+/** A daughter tongue: some of the parent's sounds shifted the same way everywhere, so its names sound akin to the
+ * parent's yet clearly their own (Latin and its daughters, Norse and Icelandic). */
+export function shiftLanguage(lang: Language, rng: Rng): Language {
+  const change = new Map<string, string>();
+  for (const sound of [...lang.consonants, ...lang.vowels]) if (SHIFTS[sound] && rng.chance(0.3)) change.set(sound, SHIFTS[sound]);
+  const shift = (text: string) => [...text].map((letter) => change.get(letter) ?? letter).join("");
+  const unique = (list: string[]) => [...new Set(list.map(shift))];
+  return {
+    ...lang,
+    consonants: unique(lang.consonants),
+    vowels: unique(lang.vowels),
+    onsets: unique(lang.onsets),
+    codas: unique(lang.codas),
+    morphemes: Object.fromEntries(Object.entries(lang.morphemes).map(([kind, list]) => [kind, unique(list)])) as Language["morphemes"],
+  };
+}

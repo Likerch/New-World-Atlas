@@ -1,11 +1,12 @@
 // The planet level: world settings, the world map and its inspector.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createRng, editPlanet, mapKeyOf, eraTheme, emptyEdits, foundedSize, generatePlanet, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
+import { createRng, editPlanet, mapKeyOf, pastPlanet, eraTheme, emptyEdits, foundedSize, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { SettingPanel } from "../SettingPanel";
 import { WorldForm, type ZoomRange } from "../WorldForm";
 import { WorldEditor, type EditTool } from "../WorldEditor";
 import type { T } from "../i18n";
+import { growPlanet } from "../work";
 import { useLayers } from "./layers";
 import type { Level, LevelContext } from "./types";
 import { NumberInput } from "../NumberInput";
@@ -82,9 +83,12 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     latest.current = terrainKey;
     if (!raw || !edits?.terrain.length || (regrown?.raw === raw && regrown.key === terrainKey)) return;
     const terrain = edits.terrain;
-    ctx.run(() => {
-      if (latest.current === terrainKey) setRegrown({ raw, key: terrainKey, planet: generatePlanet(raw.params, terrain, raw) });
-    });
+    ctx.task(
+      (report) => growPlanet(raw.params, terrain, report),
+      (made) => {
+        if (latest.current === terrainKey) setRegrown({ raw, key: terrainKey, planet: made });
+      },
+    );
   }, [raw, terrainKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const shaped = !raw ? null : !edits?.terrain.length ? raw : regrown?.raw === raw ? regrown.planet : null;
   const planet = useMemo(() => (shaped ? renamePlanet(editPlanet(shaped, edits), names) : null), [shaped, edits, names]);
@@ -93,7 +97,10 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   const [realm, setRealm] = useState(1);
   const [moving, setMoving] = useState<number | null>(null);
   const [history, setHistory] = useState<PlanetEdits[]>([]);
+  // Bumped with each new world, so the map view starts afresh.
   const [time, setTime] = useState(0);
+  // The map of a past year of the world's history, when the GM looks back.
+  const [past, setPast] = useState<number | null>(null);
   const [theme, setTheme] = useState<ThemeId>(() => (initialSetting ? eraTheme(settingOf(initialSetting)) : "atlas"));
   const { layers, restyle, toggle } = useLayers(initialSetting ? eraTheme(settingOf(initialSetting)) : "atlas");
   const [selection, setSelection] = useState<Selection | null>(null);
@@ -129,23 +136,26 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   };
   const pending = useRef(false);
 
+  // Worlds grow in a worker: the page stays alive, shows the stage and can stop a long history.
   const load = (next: Partial<PlanetParams>) => {
     pending.current = true;
-    ctx.run(() => {
-      pending.current = false;
-      const started = performance.now();
-      const made = generatePlanet({ ...params, ...next });
-      setTime(Math.round(performance.now() - started));
-      setPlanet(made);
-      setParams(made.params);
-      setSelection(null);
-      setHistory([]);
-      setMoving(null);
-    });
+    ctx.task(
+      (report) => growPlanet({ ...params, ...next }, undefined, report),
+      (made) => {
+        pending.current = false;
+        setTime((count) => count + 1);
+        setPlanet(made);
+        setParams(made.params);
+        setSelection(null);
+        setHistory([]);
+        setMoving(null);
+        setPast(null);
+      },
+    );
   };
   const set = <K extends keyof PlanetParams>(key: K, value: PlanetParams[K]) => setParams((current) => ({ ...current, [key]: value }));
   const highlight = selection && (selection.kind === "state" || selection.kind === "province" || selection.kind === "culture" || selection.kind === "religion") ? { kind: selection.kind, id: selection.id } : null;
-  const svg = useMemo(() => (!planet ? "" : globe ? renderGlobe(planet, { theme, layers, script: ctx.script, ...globe, mark: markOf(planet, selection), unknown, quick: turning }) : renderPlanet(planet, { theme, layers, script: ctx.script, highlight, words: { km: t("unit.km"), atEquator: t("scale.equator") } })), [planet, theme, layers, ctx.script, highlight?.kind, highlight?.id, globe, globe && selection, unknown, turning, t]); // eslint-disable-line react-hooks/exhaustive-deps
+  const svg = useMemo(() => (!planet ? "" : globe ? renderGlobe(planet, { theme, layers, script: ctx.script, ...globe, mark: markOf(planet, selection), unknown, quick: turning }) : past !== null && planet.history ? renderPlanet(pastPlanet(planet, past), { theme, layers: { ...layers, provinces: false, routes: false, religions: false, emblems: false, military: false }, script: ctx.script, words: { km: t("unit.km"), atEquator: t("scale.equator") } }) : renderPlanet(planet, { theme, layers, script: ctx.script, highlight, words: { km: t("unit.km"), atEquator: t("scale.equator") } })), [planet, theme, layers, ctx.script, highlight?.kind, highlight?.id, globe, globe && selection, unknown, turning, t, past]); // eslint-disable-line react-hooks/exhaustive-deps
   const legend = useMemo(() => (planet ? planetLegend(planet, { theme, layers }) : undefined), [planet, theme, layers]);
   const pick = (x: number, y: number) => {
     if (!planet) return;
@@ -295,6 +305,37 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
             </label>
           </>
         ) : null}
+        {planet?.history ? (
+          <>
+            <h2>{t("history.title")}</h2>
+            <p className="muted">{t("history.now", { year: planet.history.years })}</p>
+            <div className="row-buttons">
+              {[25, 100].map((more) => (
+                <button key={more} type="button" onClick={() => load({ history: planet.history!.years + more })} title={t("history.laterHint")}>
+                  {t("history.later", { years: more })}
+                </button>
+              ))}
+            </div>
+            <label className="check">
+              <input type="checkbox" checked={past !== null} onChange={(event) => setPast(event.target.checked ? Math.max(1, Math.round(planet.history!.years / 2)) : null)} />
+              {t("history.pastMap")}
+            </label>
+            {past !== null ? (
+              <label>
+                {t("history.inYear", { year: past })}
+                <input type="range" min={1} max={planet.history.years} step={1} value={past} onChange={(event) => setPast(Number(event.target.value))} />
+              </label>
+            ) : null}
+          </>
+        ) : planet && !planet.params.lifeless ? (
+          <>
+            <h2>{t("history.title")}</h2>
+            <p className="muted">{t("history.none")}</p>
+            <button type="button" className="wide" onClick={() => load({ history: 300 })}>
+              📜 {t("history.live", { years: 300 })}
+            </button>
+          </>
+        ) : null}
         <SettingPanel
           t={t}
           value={params.setting}
@@ -402,7 +443,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
         }}
       />
     ) : null,
-    status: planet ? t("stats.summary", { states: planet.states.length - 1, burgs: planet.burgs.length - 1, rivers: planet.rivers.length - 1, time }) : "",
+    status: planet ? (past !== null ? t("history.pastStatus", { year: past }) : t("stats.summary", { states: planet.states.length - 1, burgs: planet.burgs.filter((burg) => burg.id && !burg.removed).length, rivers: planet.rivers.length - 1 })) : "",
     data: () => (planet ? planetToJson(planet) : null),
   };
 }

@@ -14,6 +14,8 @@ export interface LevelContext {
   focus: (x: number, y: number) => void;
   /** Runs heavy work after the "busy" note has painted. */
   run: (work: () => void) => void;
+  /** Runs long work in the background with a progress bar and a stop button; `done` gets the result. */
+  task: <V>(start: (progress: (share: number, stage: string) => void) => { promise: Promise<V>; cancel: () => void }, done: (value: V) => void) => void;
   /** Switches the visible level. */
   show: (level: LevelId) => void;
   /** The GM's new names for a map's things. */

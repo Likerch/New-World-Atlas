@@ -246,6 +246,20 @@ input {
 .busy {
   top: 12px;
 }
+/* A long task: its stage, a bar and a way to stop it. */
+.busy.task {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  pointer-events: auto;
+}
+.busy.task progress {
+  width: 140px;
+}
+.busy.task button {
+  color: #fff;
+  padding: 1px 8px;
+}
 .status {
   bottom: 10px;
   font-size: 11px;

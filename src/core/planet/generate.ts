@@ -18,6 +18,7 @@ import { spreadReligions } from "./religions";
 import { hydrology } from "./rivers";
 import { buildRoutes } from "./routes";
 import { formStates } from "./states";
+import { marksOfHistory, realmsOfHistory, renumberTowns, simulateHistory, standingOf, townsOfHistory } from "./history";
 
 /** Parameters for a seed: every unset value is rolled from the seed itself. */
 export function planetParams(input: Partial<PlanetParams> = {}): PlanetParams {
@@ -52,8 +53,12 @@ export function planetParams(input: Partial<PlanetParams> = {}): PlanetParams {
   return params;
 }
 
+/** How a long generation reports itself: the share done (0–1) and the stage it is at. */
+export type Progress = (share: number, stage: string) => void;
+
 /** A world from its settings; `terrain` replays the GM's relief brush before anything grows on it. */
-export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: PlanetEdits["terrain"], plain?: Planet): Planet {
+export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: PlanetEdits["terrain"], options: { plain?: Planet; progress?: Progress } = {}): Planet {
+  const { plain, progress } = options;
   const params = planetParams(input);
   // Relief strokes regrow the world, but its towns and peoples are anchored where they stood on the untouched world,
   // so their numbers, names and the GM's notes stay with them.
@@ -88,12 +93,18 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   const ground: Ground = { params, mesh, height, water, feature, features, coast, temperature, precipitation: rain, flux: hydro.flux, river: hydro.river, rivers: hydro.rivers, biome, scale };
   const { culture, cultures } = settleCultures(ground, params.cultures, rng.fork("cultures"), anchors?.cultures);
   const lifeless = params.lifeless === true;
-  const { burg, burgs } = placeBurgs(ground, culture, cultures, lifeless ? 0 : params.states, lifeless ? -1 : params.towns, rng.fork("burgs"), anchors?.burgs);
+  progress?.(0.25, "peoples");
+  // A lived history decides where the towns stand and who rules them; without one they are placed at once.
+  const history = params.history && !lifeless ? simulateHistory(ground, culture, cultures, { years: params.history, polities: params.states, tech: settingOf(params.setting).tech }, rng.fork("history"), (share) => progress?.(0.25 + share * 0.55, "history")) : undefined;
+  const lived = history ? townsOfHistory(ground, history, cultures) : null;
+  const { burg, burgs } = lived ?? placeBurgs(ground, culture, cultures, lifeless ? 0 : params.states, lifeless ? -1 : params.towns, rng.fork("burgs"), anchors?.burgs);
+  progress?.(0.82, "realms");
   // The age decides how big towns grow and what guards them; the classic world keeps its towns as they were.
   const setting = settingOf(params.setting);
   settleAge(burgs, setting, rng.fork("age"));
   const rural = isClassic(setting) ? 1 : peopleOf(setting).rural;
-  const { state, states, province, provinces } = formStates(ground, culture, cultures, burgs, params.provinceShare, rng.fork("states"));
+  const given = history && lived ? { owner: history.eras[history.eras.length - 1].owner, realms: realmsOfHistory(history, burgs, lived.order), relation: (a: number, b: number) => standingOf(history, a, b) } : undefined;
+  const { state, states, province, provinces } = formStates(ground, culture, cultures, burgs, params.provinceShare, rng.fork("states"), given);
 
   // Country folk: thousands per cell, by how kind the land is.
   const population = new Float32Array(mesh.cells);
@@ -131,8 +142,10 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
     item.name = name(people.language, names, item.kind === "lake" ? "lake" : item.land ? "land" : "plain");
   }
 
+  progress?.(0.9, "roads");
   const routes = buildRoutes(ground, burgs, states);
   let markers = placeMarkers(ground, culture, cultures, state, states, burgs, burg, routes, rng.fork("markers"));
+  if (history) marksOfHistory(ground, history, markers);
   if (lifeless) {
     // Nobody lives there: no peoples on the map and no faiths; of the places, only what the ground itself makes.
     markers = markers.filter((m, k) => k === 0 || m.kind === "volcano" || m.kind === "crater").map((m, k) => ({ ...m, id: k }));
@@ -142,6 +155,16 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
     for (const item of cultures) item.population = 0;
   }
   const worldName = params.name || name((cultures[1] ?? cultures[0]).language, names, "land");
+  progress?.(1, "done");
+  if (history && lived) {
+    // Every town of the history keeps its own number: the fallen ones as razed slots between the living.
+    const { burgs: all, to } = renumberTowns(history, burgs, lived.order);
+    for (let cell = 0; cell < mesh.cells; cell++) if (burg[cell]) burg[cell] = to[burg[cell]];
+    for (const item of states) item.capital = to[item.capital] ?? item.capital;
+    for (const item of provinces) item.burg = to[item.burg] ?? item.burg;
+    for (const item of religions) item.center = to[item.center] ?? item.center;
+    return { ...ground, history, ...(terrain?.length ? { relief: hashString(JSON.stringify(terrain)).toString(36) } : {}), name: worldName, population, culture, cultures, religion, religions, ...(secular ? { secular } : {}), burg, burgs: all, state, states, province, provinces, routes, markers };
+  }
   return { ...ground, ...(terrain?.length ? { relief: hashString(JSON.stringify(terrain)).toString(36) } : {}), name: worldName, population, culture, cultures, religion, religions, ...(secular ? { secular } : {}), burg, burgs, state, states, province, provinces, routes, markers };
 }
 

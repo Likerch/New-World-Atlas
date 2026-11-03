@@ -107,6 +107,17 @@ export function buildMesh(width: number, height: number, cellCount: number, rng:
     area[cell] = Math.abs(sum) / 2;
   }
 
+  return withFind({ width, height, spacing, cells, x, y, neighbors, sides, corners, cornerX, cornerY, edge, area });
+}
+
+/** A mesh with its nearest-cell lookup: built with the mesh, and again for a mesh that came from a worker (which
+ * cannot carry a function). */
+export function withFind(mesh: Omit<Mesh, "find">): Mesh {
+  const { width, height, spacing, cells, x, y } = mesh;
+  const columns = Math.max(2, Math.round(width / spacing));
+  const rows = Math.max(2, Math.round(height / spacing));
+  const stepX = width / columns;
+  const stepY = height / rows;
   // A bucket grid for nearest-cell lookups.
   const bucket = (value: number, step: number, count: number) => Math.min(count - 1, Math.max(0, Math.floor(value / step)));
   const grid: number[][] = Array.from({ length: columns * rows }, () => []);
@@ -129,6 +140,5 @@ export function buildMesh(width: number, height: number, cellCount: number, rng:
     }
     return best;
   };
-
-  return { width, height, spacing, cells, x, y, neighbors, sides, corners, cornerX, cornerY, edge, area, find };
+  return { ...mesh, find };
 }

@@ -1,7 +1,8 @@
 // The GM's side panel: what is at the clicked place, and every state, people, town, river and point of interest with
 // its facts. Picking an entry highlights it and moves the map to it.
 import { useMemo, useState } from "react";
-import { ageOf, altitude, BIOMES, emblemOf, latitudeOf, localFromMarker, raiseArmies, renderEmblem, SEA_LEVEL, settingOf, techEra, type Emblem, type Marker, type Planet, type RouteKind } from "../core/index";
+import { ageOf, altitude, BIOMES, emblemOf, latitudeOf, localFromMarker, raiseArmies, renderEmblem, SEA_LEVEL, settingOf, techEra, type Emblem, type Marker, type PastEvent, type Planet, type RouteKind } from "../core/index";
+import { Chronicle, eventText, RealmStory, TownStory } from "./Chronicle";
 import { area, km, people } from "./format";
 import type { T } from "./i18n";
 
@@ -10,7 +11,7 @@ export interface Selection {
   kind: SelectionKind;
   id: number;
 }
-export type Tab = "place" | "states" | "cultures" | "religions" | "burgs" | "rivers" | "markers";
+export type Tab = "place" | "states" | "cultures" | "religions" | "burgs" | "rivers" | "markers" | "chronicle";
 
 interface Props {
   planet: Planet;
@@ -67,7 +68,15 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
   const setting = settingOf(planet.params.setting);
   const age = ageOf(setting);
   const at = (key: string, vars?: Record<string, string | number>) => t(`${key}@${age}`, vars);
-  const tabs: Tab[] = ["place", "states", "cultures", "religions", "burgs", "rivers", "markers"];
+  const tabs: Tab[] = ["place", "states", "cultures", "religions", "burgs", "rivers", "markers", ...(planet.history ? (["chronicle"] as Tab[]) : [])];
+  // An event picked in the chronicle: its town if it still stands, else its place on the map.
+  const pickEvent = (event: PastEvent) => {
+    const town = event.town ? planet.burgs[event.town] : undefined;
+    if (town && !town.removed) return pick("burg", town.id, [town.x, town.y]);
+    const ruin = planet.markers.find((marker) => marker.facts.town === event.town && event.town);
+    if (ruin) return pick("marker", ruin.id, [ruin.x, ruin.y]);
+    if (event.cell !== undefined) pick("cell", event.cell, [planet.mesh.x[event.cell], planet.mesh.y[event.cell]]);
+  };
   const stateName = (id: number) => (id ? t(`form.${planet.states[id].formKey}`, { name: nm(planet.states[id].name) }) : t("form.wild"));
   const provinceName = (id: number) => (id ? t(`province.${planet.provinces[id].formKey}`, { name: nm(planet.provinces[id].name) }) : "—");
   const pick = (kind: SelectionKind, id: number, at?: [number, number]) => onSelect({ kind, id }, at);
@@ -159,6 +168,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
               </ul>
             </>
           ) : null}
+          {planet.history && state.polity ? <RealmStory t={t} nm={nm} history={planet.history} polity={state.polity} /> : null}
           {id && onOpenCountry ? (
             <button type="button" className="primary wide" onClick={() => onOpenCountry(id)}>
               🗺 {t("action.openCountry")}
@@ -268,6 +278,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
           <Row label={t("place.province")} value={provinceName(burg.province)} />
           <Row label={t("place.culture")} value={<Link label={nm(planet.cultures[burg.culture].name)} onClick={() => pick("culture", burg.culture)} />} />
           <p>{traits.join(" · ")}</p>
+          {planet.history ? <TownStory t={t} nm={nm} history={planet.history} town={id} onPick={pickEvent} /> : null}
           {onOpenCity ? (
             <button type="button" className="primary wide" onClick={() => onOpenCity(burg.id)}>
               🏰 {t("action.openCity")}
@@ -316,6 +327,8 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
             {marker.name ? ` ${nm(marker.name)}` : ""}
           </h3>
           <p>{legendOf(marker, t, nm, age)}</p>
+          {planet.history && typeof marker.facts.town === "number" ? <TownStory t={t} nm={nm} history={planet.history} town={marker.facts.town} onPick={pickEvent} /> : null}
+          {planet.history && typeof marker.facts.event === "number" && planet.history.events[marker.facts.event] ? <p className="muted">{eventText(t, nm, planet.history, planet.history.events[marker.facts.event])}</p> : null}
           <Row label={t("place.state")} value={stateName(planet.state[marker.cell])} />
           {onOpenLocal && localFromMarker(planet, marker.id) ? (
             <button type="button" className="primary wide" onClick={() => onOpenLocal(marker.id)}>
@@ -431,7 +444,9 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
         ))}
       </nav>
       {card}
-      {tab !== "place" ? (
+      {tab === "chronicle" && planet.history ? (
+        <Chronicle t={t} nm={nm} history={planet.history} onPick={pickEvent} />
+      ) : tab !== "place" ? (
         <>
           <input className="search" value={query} placeholder={t("search")} onChange={(event) => setQuery(event.target.value)} />
           <ul className="list">{list}</ul>
@@ -450,6 +465,7 @@ function WorldCard({ planet, t, nm }: { planet: Planet; t: T; nm: (name: string)
   return (
     <div className="card">
       <h3>{nm(planet.name)}</h3>
+      {planet.history ? <Row label={t("history.year")} value={planet.history.years} /> : null}
       <Row label={t("setting.era")} value={t(`era.${ageOf(setting)}`)} />
       {techEra(setting.tech) !== techEra(setting.transport) ? <Row label={t("setting.transport")} value={t(`era.${techEra(setting.transport)}`)} /> : null}
       <Row label={t("setting.magic")} value={t(`setting.magic.${setting.magic}`)} />

@@ -1,6 +1,6 @@
 // Planet-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { createLanguage, createRng, armsOf, emblemOf, MIXES, SETTINGS, settingFromText, settingToText, coatOfArms, editPlanet, emptyEdits, foundedSize, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
+import { pastPlanet, shiftLanguage, createLanguage, createRng, armsOf, emblemOf, MIXES, SETTINGS, settingFromText, settingToText, coatOfArms, editPlanet, emptyEdits, foundedSize, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -254,6 +254,37 @@ test("the map names its continents, keys every heat map shown and speaks the rea
   assert.match(svg, /\d+ км</u);
   const whole = generatePlanet({ seed: "regression", cells: 3000, width: 2000, height: 1000, latitudeNorth: 90, latitudeSouth: -90 });
   assert.match(renderPlanet(whole, { words: { atEquator: "на экваторе" } }), /на экваторе/u, "a world map's scale holds at the equator");
+});
+
+test("a lived history makes the realms and towns of the map, and living on keeps what was", () => {
+  const world = generatePlanet({ seed: "lived", template: "continents", cells: 5000, history: 300 });
+  const history = world.history!;
+  assert.ok(history.events.length > 50 && history.figures.length > 20, "a history happened");
+  assert.equal(world.burgs.length, history.towns.length, "every town of the history has its burg");
+  for (const burg of world.burgs.slice(1)) {
+    const town = history.towns[burg.id];
+    assert.equal(burg.name, town.name);
+    assert.equal(!!burg.removed, town.fell !== undefined, `${burg.name}: fallen towns are razed slots, the living stand`);
+    if (!burg.removed) assert.equal(world.burg[burg.cell], burg.id);
+  }
+  for (const state of world.states.slice(1)) {
+    const seat = world.burgs[state.capital];
+    assert.ok(seat && !seat.removed && seat.capital && seat.state === state.id, `${state.name} sits in its own capital`);
+    assert.equal(history.polities[state.polity!].name, state.name);
+  }
+  for (const marker of world.markers.filter((item) => item.kind === "ruins" && typeof item.facts.town === "number")) assert.ok(history.towns[marker.facts.town as number].fell !== undefined, "ruins are of fallen towns");
+  assert.doesNotMatch(renderPlanet(world), /NaN|undefined|Infinity/u);
+  assert.doesNotMatch(renderPlanet(pastPlanet(world, 120)), /NaN|undefined|Infinity/u);
+  // The same seed lives the same history; fifty years more begin with the same three hundred.
+  const again = generatePlanet({ seed: "lived", template: "continents", cells: 5000, history: 300 });
+  assert.deepEqual(again.history!.events.map((event) => `${event.year}:${event.kind}`), history.events.map((event) => `${event.year}:${event.kind}`));
+  const older = generatePlanet({ seed: "lived", template: "continents", cells: 5000, history: 350 }).history!;
+  assert.deepEqual(older.events.filter((event) => event.year <= 300).map((event) => `${event.year}:${event.kind}:${event.town ?? ""}`), history.events.map((event) => `${event.year}:${event.kind}:${event.town ?? ""}`));
+  for (const town of history.towns) assert.equal(older.towns[town.id].name, town.name, "a town keeps its number and name");
+  // A daughter tongue sounds akin to its parent but is its own.
+  const parent = createLanguage(createRng("tongue"));
+  const daughter = shiftLanguage(parent, createRng("shift"));
+  assert.equal(daughter.morphemes.town.length > 0, parent.morphemes.town.length > 0);
 });
 
 test("the world's age reshapes towns, realms, roads, places, armies and banners, and the medieval age is the classic world", () => {

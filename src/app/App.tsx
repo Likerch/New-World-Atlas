@@ -10,7 +10,6 @@ import {
   editPlanet,
   ERA_BUILDINGS,
   galaxyParams,
-  generatePlanet,
   legendSvg,
   levelsOf,
   localFromLandmark,
@@ -58,6 +57,7 @@ import { MapView, type Focus } from "./MapView";
 import { LEVEL_ICON, WorldLibrary } from "./WorldLibrary";
 import { useWorlds, type Worlds } from "./worlds";
 import { useListKeys } from "./keys";
+import { growPlanet } from "./work";
 
 function download(name: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
@@ -147,6 +147,9 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   const [view, setView] = useState<LevelId>(world.top);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState("");
+  // A long task in the background: how far it has come, and how to stop it.
+  const [progress, setProgress] = useState<{ share: number; stage: string } | null>(null);
+  const stopTask = useRef<(() => void) | null>(null);
   const [focus, setFocus] = useState<Focus | null>(null);
   const [library, setLibrary] = useState(false);
   const store = worldStore(world, worlds.update);
@@ -197,6 +200,31 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
           setBusy(false);
         }
       }, 30);
+    },
+    task: (start, done) => {
+      stopTask.current?.();
+      setBusy(true);
+      setProgress({ share: 0, stage: "" });
+      const job = start((share, stage) => setProgress({ share, stage }));
+      stopTask.current = job.cancel;
+      job.promise
+        .then((value) => {
+          done(value);
+          setFailed("");
+        })
+        .catch((problem: Error) => {
+          if (problem.message !== "cancelled") {
+            console.error(problem);
+            setFailed(problem.message);
+          }
+        })
+        .finally(() => {
+          if (stopTask.current === job.cancel) {
+            stopTask.current = null;
+            setBusy(false);
+            setProgress(null);
+          }
+        });
     },
     show: setView,
     names: (key) => store.patch(key).names,
@@ -330,15 +358,18 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     const parentKey = map?.parent;
     const parent = parentKey ? world.maps[parentKey] : null;
     if (!map || !parentKey || !parent || parent.level !== "planet") return;
-    ctx.run(() => {
-      const patch = world.patches[parentKey];
-      const made = renamePlanet(editPlanet(generatePlanet(parent.params as Partial<PlanetParams>, patch?.edits?.terrain), patch?.edits ?? null), patch?.names ?? {});
+    const patch = world.patches[parentKey];
+    ctx.task(
+      (report) => growPlanet(parent.params as Partial<PlanetParams>, patch?.edits?.terrain, report),
+      (grown) => {
+      const made = renamePlanet(editPlanet(grown, patch?.edits ?? null), patch?.names ?? {});
       pending.current[map.level] = { parent: parentKey, step: map.step!, base: null };
       const of = map.params as { of?: string; id?: number };
       if (map.level === "underworld") underworld.open(made);
       else if (of.of === "state") region.openCountry(made, of.id ?? 0);
       else region.open(made, of.id ?? 0);
-    });
+      },
+    );
   }
 
   // The world remembers every map shown in it: where it hangs, what it was derived from, what it was made from.
@@ -565,7 +596,28 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
       <aside className="controls">{level.controls}</aside>
       <main className="stage">
         {stage}
-        {busy ? <div className="busy">{t("generating")}</div> : null}
+        {busy && progress ? (
+          <div className="busy task" role="status">
+            <span>
+              {progress.stage ? t(`stage.${progress.stage}`) : t("generating")} · {Math.round(progress.share * 100)}%
+            </span>
+            <progress max={1} value={progress.share} />
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => {
+                stopTask.current?.();
+                stopTask.current = null;
+                setBusy(false);
+                setProgress(null);
+              }}
+            >
+              {t("action.stop")}
+            </button>
+          </div>
+        ) : busy ? (
+          <div className="busy">{t("generating")}</div>
+        ) : null}
         {failed && !busy ? (
           <div className="busy error" role="alert">
             {t("generation.failed", { reason: failed })}

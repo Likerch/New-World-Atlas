@@ -202,7 +202,15 @@ const AGE_PROVINCES: Partial<Record<EraId, Partial<Record<StateForm, string[]>>>
   "post-apocalypse": { theocracy: ["parish", "domain"], republic: ["district", "ward"], dictatorship: ["military-district", "zone"], "free-city": ["ward", "camp"] },
 };
 
-export function formStates(g: Ground, culture: Uint16Array, cultures: Culture[], burgs: Burg[], provinceShare: number, rng: Rng) {
+/** Realms a lived history hands over: who holds each cell, and each realm's name, people and seat (a burg id). */
+export interface GivenRealms {
+  owner: Uint16Array;
+  realms: { polity: number; name: string; culture: number; capital: number }[];
+  /** How two of them stand, by their history ids. */
+  relation: (a: number, b: number) => Relation;
+}
+
+export function formStates(g: Ground, culture: Uint16Array, cultures: Culture[], burgs: Burg[], provinceShare: number, rng: Rng, given?: GivenRealms) {
   const n = g.mesh.cells;
   const setting = settingOf(g.params.setting);
   const classic = isClassic(setting);
@@ -210,13 +218,17 @@ export function formStates(g: Ground, culture: Uint16Array, cultures: Culture[],
   const states: State[] = [
     { id: 0, name: "", formKey: "wild", form: "tribal", color: "#bbbbbb", capital: 0, culture: 0, expansionism: 0, cells: 0, area: 0, burgs: 0, rural: 0, urban: 0, pole: [0, 0], neighbors: [], relations: {} },
   ];
+  const polityOf: number[] = [0];
   for (const capital of burgs.filter((item) => item.capital)) {
     const id = states.length;
     const own = rng.fork(`state-${id}`);
     const people = cultures[capital.culture];
+    const realm = given?.realms.find((item) => item.capital === capital.id);
+    polityOf[id] = realm?.polity ?? 0;
     states.push({
       id,
-      name: name(people.language, own, own.chance(0.5) ? "land" : "plain"),
+      name: realm ? realm.name : name(people.language, own, own.chance(0.5) ? "land" : "plain"),
+      ...(realm ? { polity: realm.polity } : {}),
       formKey: "kingdom",
       form: "monarchy",
       color: paletteColor(id, hue, 0.55, 0.6),
@@ -238,7 +250,10 @@ export function formStates(g: Ground, culture: Uint16Array, cultures: Culture[],
   const state = new Uint16Array(n);
   const best = new Float64Array(n).fill(Infinity);
   const queue = new PriorityQueue<[number, number]>();
-  for (const item of states.slice(1)) {
+  // A lived history has drawn the borders already.
+  const stateOf = new Map(polityOf.map((polity, id) => [polity, id]));
+  if (given) for (let cell = 0; cell < n; cell++) state[cell] = g.water[cell] ? 0 : stateOf.get(given.owner[cell]) ?? 0;
+  for (const item of given ? [] : states.slice(1)) {
     const cell = burgs[item.capital].cell;
     best[cell] = 0;
     state[cell] = item.id;
@@ -261,7 +276,7 @@ export function formStates(g: Ground, culture: Uint16Array, cultures: Culture[],
   }
   for (let cell = 0; cell < n; cell++) if (g.water[cell]) state[cell] = 0;
   // Enclaves: a lone cell surrounded by one other state joins it.
-  for (let cell = 0; cell < n; cell++) {
+  for (let cell = 0; cell < (given ? 0 : n); cell++) {
     if (!state[cell] || best[cell] === 0) continue;
     const around = g.mesh.neighbors[cell].filter((next) => !g.water[next]).map((next) => state[next]);
     if (around.length && around.every((other) => other === around[0]) && around[0] !== state[cell]) state[cell] = around[0];
@@ -295,6 +310,11 @@ export function formStates(g: Ground, culture: Uint16Array, cultures: Culture[],
   for (const item of states.slice(1)) {
     for (const other of item.neighbors) {
       if (item.relations[other]) continue;
+      if (given) {
+        item.relations[other] = given.relation(polityOf[item.id], polityOf[other]);
+        states[other].relations[item.id] = item.relations[other];
+        continue;
+      }
       const own = rng.fork(`relation-${Math.min(item.id, other)}-${Math.max(item.id, other)}`);
       const them = states[other];
       const kin = item.culture === them.culture;

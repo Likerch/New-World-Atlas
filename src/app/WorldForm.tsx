@@ -140,6 +140,16 @@ export function WorldForm({ t, initial, zoom, onCreate, onClose }: { t: T; initi
             <Field label={t("field.states")}>{number("states", 1, 60)}</Field>
             <Field label={t("field.towns")}>{number("towns", 0, 2000, 10)}</Field>
             <Field label={t("field.provinceShare")}>{number("provinceShare", 0, 1, 0.05)}</Field>
+            <Field label={t("history.depth")}>
+              <select value={params.history ?? 0} onChange={(event) => set("history", Number(event.target.value) || undefined)}>
+                {[0, 200, 400, 700, 1000].map((years) => (
+                  <option key={years} value={years}>
+                    {years ? t("history.years", { years }) : t("history.noneShort")}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <p className="muted">{t("history.depthHint")}</p>
             <h3>{t("world.scale")}</h3>
             <Field label={`${t("world.zoomOut")}: ×${range[0]}`}>
               <input type="range" min={0.3} max={1} step={0.05} value={range[0]} onChange={(event) => setRange([Number(event.target.value), range[1]])} />
