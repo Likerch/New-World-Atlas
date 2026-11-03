@@ -788,3 +788,16 @@ button.back {
     font-size: 11px;
   }
 }
+
+/* People, factions and rumours: the GM's secrets stand out from what players may hear. */
+.list.people li,
+.list.factions li {
+  cursor: default;
+}
+.secret {
+  color: #b5562e;
+}
+.rumours li {
+  margin: 4px 0;
+  font-style: italic;
+}
