@@ -359,7 +359,7 @@ function wilderness(b: Build): { stream: [number, number][]; trail: [number, num
   const trail: [number, number][] = [];
   if (!seabed) {
     const rowAt = (k: number) => Math.round(H * (0.2 + 0.6 * unit(`${params.seed}/trail-${k}-${sy}`)));
-    const cost = (i: number) => (blocked(b.tiles[i]) ? Infinity : b.tiles[i] === TILE.deep ? (river.length ? 40 : Infinity) : b.tiles[i] === TILE.cliff ? 25 : b.tiles[i] === TILE.thicket ? 8 : b.tiles[i] === TILE.forest || b.tiles[i] === TILE.snow ? 3 : b.tiles[i] === TILE.water || b.tiles[i] === TILE.marsh ? 6 : b.tiles[i] === TILE.stone ? 2 : 1);
+    const cost = (i: number) => (blocked(b.tiles[i]) ? Infinity : b.tiles[i] === TILE.deep ? (river.length ? 14 : Infinity) : b.tiles[i] === TILE.cliff ? 25 : b.tiles[i] === TILE.thicket ? 8 : b.tiles[i] === TILE.forest || b.tiles[i] === TILE.snow ? 3 : b.tiles[i] === TILE.water || b.tiles[i] === TILE.marsh ? 6 : b.tiles[i] === TILE.stone ? 2 : 1);
     const row = rowAt(sx);
     let first = 0;
     while (first < W - 1 && !passable(at(first, row))) first++;

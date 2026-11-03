@@ -3,7 +3,7 @@
 // factions with their quarrels, and the people worth a name. Everything is keys and names; the app words it.
 import { rumoursOf, type Faction, type FactionKind, type Hearsay, type Npc, type Rumour } from "../people";
 import { createRng } from "../random";
-import { placeSeed, type Keyed, type LocalGroup, type LocalMap } from "./model";
+import { canStep, doorsOf, placeSeed, type Keyed, type LocalGroup, type LocalMap } from "./model";
 import { tablesFor } from "./local";
 
 export interface LocalStory {
@@ -108,4 +108,30 @@ export function localStory(map: LocalMap): LocalStory {
 /** A room as the rumours name it: by what it is for. */
 function purposeKey(room: Keyed): string {
   return room.purpose.startsWith("own:") ? room.name || room.purpose.slice(4) : `@purpose.${room.purpose}`;
+}
+
+/** Which rooms each room leads to: those reached from it without passing through another room. */
+export function roomLinks(map: LocalMap): Map<number, number[]> {
+  const W = map.params.width;
+  const owner = new Int32Array(map.tiles.length).fill(0);
+  for (const room of map.keyed) for (const c of room.cells) owner[c] = room.id;
+  const doors = doorsOf(map);
+  const out = new Map<number, number[]>();
+  for (const room of map.keyed) {
+    const found = new Set<number>();
+    const seen = new Set<number>(room.cells);
+    const queue = [...room.cells];
+    for (let k = 0; k < queue.length; k++) {
+      const c = queue[k];
+      const x = c % W;
+      for (const n of [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, c - W, c + W]) {
+        if (n < 0 || n >= map.tiles.length || seen.has(n) || !canStep(map, doors, c, n)) continue;
+        seen.add(n);
+        if (owner[n] && owner[n] !== room.id) found.add(owner[n]);
+        else if (!owner[n]) queue.push(n);
+      }
+    }
+    out.set(room.id, [...found].sort((a, b) => a - b));
+  }
+  return out;
 }

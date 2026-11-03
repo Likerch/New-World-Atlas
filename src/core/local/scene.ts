@@ -112,7 +112,7 @@ export function renderLocalScene(map: LocalMap, scene: LocalScene, options: Loca
   for (const l of scene.lights) out.push(`<circle cx="${(l.x - scene.x0 + 0.5) * S * k}" cy="${(l.y - scene.y0 + 0.5) * S * k}" r="${l.r * S * k * 0.6}" fill="url(#scene-light)"/>`);
   // Cover: a shield on what stops a blow, half or whole.
   for (const c of scene.cover) out.push(`<path d="M${(c.x - scene.x0 + 0.78) * S * k},${(c.y - scene.y0 + 0.08) * S * k}h${S * k * 0.18}v${S * k * 0.14}l${-S * k * 0.09},${S * k * 0.08}l${-S * k * 0.09},${-S * k * 0.08}Z" fill="${c.full ? "#2e9e5b" : "#c98a1a"}" stroke="#fff" stroke-width="1"/>`);
-  for (const t of options.players ? scene.tokens.filter(() => true) : scene.tokens) {
+  for (const t of scene.tokens) {
     const cx = (t.x - scene.x0 + 0.5) * S * k,
       cy = (t.y - scene.y0 + 0.5) * S * k;
     const r = S * k * (t.boss ? 0.46 : 0.38);

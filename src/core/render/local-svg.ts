@@ -260,9 +260,16 @@ export function renderLocal(map: LocalMap, options: LocalRenderOptions = {}): st
       case "bridge":
         out.push(`<rect x="${f.x * S - 1}" y="${f.y * S - 1}" width="${S + 2}" height="${S + 2}" fill="#a07a4a" stroke="#5a4428"/><path d="M${f.x * S},${cy}h${S}" stroke="#5a4428" stroke-width="0.8"/>`);
         break;
-      case "niche":
-        out.push(`<rect x="${f.x * S + S * 0.2}" y="${f.y * S + S * 0.2}" width="${S * 0.6}" height="${S * 0.6}" fill="${st.floor}" stroke="${st.wall}" stroke-width="1"/>`);
+      case "niche": {
+        // A notch cut into the wall from the open side.
+        const side = [[0, 1], [0, -1], [1, 0], [-1, 0]].find(([dx, dy]) => f.x + dx >= 0 && f.y + dy >= 0 && f.x + dx < W && f.y + dy < H && open(tileOf(at(f.x + dx, f.y + dy))));
+        if (!side) break;
+        const [dx, dy] = side;
+        const nx = dx ? (dx > 0 ? (f.x + 0.5) * S : f.x * S) : (f.x + 0.2) * S,
+          ny = dy ? (dy > 0 ? (f.y + 0.5) * S : f.y * S) : (f.y + 0.2) * S;
+        out.push(`<rect x="${nx}" y="${ny}" width="${dx ? S * 0.5 : S * 0.6}" height="${dy ? S * 0.5 : S * 0.6}" fill="${st.floor}" stroke="${st.wall}" stroke-width="1"/>`);
         break;
+      }
       case "coffin":
         out.push(`<path d="M${cx - S * 0.25},${cy - S * 0.45}h${S * 0.5}l${S * 0.1},${S * 0.3}l${-S * 0.15},${S * 0.6}h${-S * 0.4}l${-S * 0.15},${-S * 0.6}Z" fill="#8a6a4a" stroke="${st.wall}" stroke-width="1"/>`);
         break;

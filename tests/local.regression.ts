@@ -1,6 +1,6 @@
 // Local-map regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { blocked, doorsOf, editLocal, generateCity, generateGalaxy, localAt, localFromCavern, localFromLandmark, localFromStar, localScene, localStory, generateUnderworld, reachOf, renderLocal, renderLocalScene, renderUnderworld, SETTINGS, generateLocal, generatePlanet, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localFromMarker, TILE, walk, type LocalMap } from "../src/core/index";
+import { blocked, doorsOf, editLocal, editUnderworld, renderUnderworldSection, tierOf, underworldGhostSvg, generateCity, generateGalaxy, localAt, localFromCavern, localFromLandmark, localFromStar, localScene, localStory, generateUnderworld, reachOf, renderLocal, renderLocalScene, renderUnderworld, SETTINGS, generateLocal, generatePlanet, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localFromMarker, TILE, walk, type LocalMap } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -92,7 +92,8 @@ test("later ages have their own dungeons and wastes, and their underworld has me
   const modern = generatePlanet({ seed: "age-under", cells: 3000, setting: SETTINGS.modern });
   const below = generateUnderworld(modern);
   assert.ok(below.tunnels.some(([, , kind]) => kind === "line") && below.caverns.some((cavern) => cavern.kind === "metro"), "metro lines under the great cities");
-  assert.equal(below.peoples.length, 0, "no peoples of the deep without magic");
+  // Without magic no fantastic peoples live below, only the folk of the age: mole people, a doomsday cult, tunnel folk.
+  assert.ok(below.peoples.length > 0 && below.peoples.every((p) => ["mole-people", "doomsday-cult", "tunnel-folk"].includes(p.kind)), "the folk of the age live below");
   assert.doesNotMatch(renderUnderworld(below, modern), /NaN|undefined/u);
   const factory = modern.markers.find((marker) => marker.kind === "factory")!;
   assert.equal(localFromMarker(modern, factory.id)?.params.theme, "factory");
@@ -383,5 +384,73 @@ test("the game master edits a room's key and rolls a room anew; a room opens as 
   assert.doesNotMatch(renderLocalScene(map, scene), /NaN|undefined|Infinity/u);
 });
 
+
+test("the underworld has depths and tiers, tunnels with lengths and hazards, places of the deep, and catacombs under old towns", () => {
+  const planet = generatePlanet({ seed: "regression", template: "continents", cells: 6000 });
+  const world = generateUnderworld(planet);
+  assert.equal(world.ways.length, world.tunnels.length, "a way for every tunnel");
+  assert.ok(world.ways.every((way) => way.length >= 1 && way.danger >= 1 && way.danger <= 3));
+  assert.ok(world.ways.some((way) => way.hazard), "some ways are dangerous");
+  assert.ok(world.caverns.every((c) => c.depth > 0), "every cavern has its depth");
+  assert.ok(new Set(world.caverns.map((c) => tierOf(c))).size >= 2, "the dark has tiers");
+  for (const e of world.entrances.filter((e) => e.marker)) assert.ok(world.caverns[e.cavern].depth <= 400, "a way down opens on the upper dark");
+  assert.ok(world.sites.length >= 3 && world.sites.every((s) => world.caverns[s.cavern]));
+  const under = world.caverns.filter((c) => c.kind === "catacombs");
+  assert.ok(under.length > 0 && under.every((c) => c.burg && planet.burgs[c.burg].name === c.name), "catacombs under the great towns");
+  // Peoples: each has a kind, a first settlement and relations that agree both ways.
+  for (const people of world.peoples) {
+    assert.ok(people.kind && world.caverns[people.capital]?.people === people.id);
+    for (const [other, relation] of Object.entries(people.relations)) {
+      const back = world.peoples[Number(other) - 1].relations[people.id];
+      assert.equal(back, relation === "tribute" ? "tribute-from" : relation === "tribute-from" ? "tribute" : relation, "relations agree");
+    }
+  }
+  // Older underworlds keep their caverns and tunnels: the new parts come after them.
+  const again = generateUnderworld(planet);
+  assert.deepEqual(again.caverns.map((c) => [c.x, c.y, c.kind]), world.caverns.map((c) => [c.x, c.y, c.kind]));
+  for (const style of [renderUnderworld(world, planet, { surface: true, tunnel: 0, highlight: 1 }), renderUnderworldSection(world, planet, { highlight: 1 }), underworldGhostSvg(world)]) assert.doesNotMatch(style, /NaN|undefined|Infinity/u);
+  const modern = generateUnderworld(generatePlanet({ seed: "age-under", cells: 3000, setting: SETTINGS.modern }));
+  assert.ok(modern.caverns.some((c) => c.kind === "metro" && c.burg), "stations know their towns");
+  assert.ok(!modern.caverns.some((c) => c.kind === "catacombs"), "the metro age digs no catacombs");
+});
+
+test("one cavern, one map: its tunnels leave the map toward the caverns they lead to", () => {
+  const planet = generatePlanet({ seed: "regression", template: "continents", cells: 6000 });
+  const world = generateUnderworld(planet);
+  const cavern = world.caverns.find((c) => c.kind === "cavern" && world.tunnels.filter(([a, b]) => a === c.id || b === c.id).length >= 2)!;
+  const link = localFromCavern(world, cavern.id)!;
+  assert.ok(link.params.exits && link.params.exits.length >= 2);
+  const map = generateLocal(link.params, link.language ?? undefined);
+  const exits = map.features.filter((f) => f.kind === "exit" && f.to);
+  assert.equal(exits.length, link.params.exits!.length, "a way off the map for each tunnel");
+  const W = map.params.width;
+  const dist = walk(map, doorsOf(map), exits[0].x + exits[0].y * W);
+  for (const exit of exits) assert.ok(dist[exit.x + exit.y * W] < Infinity, "every way off the map is reached");
+  for (const exit of exits) assert.ok(exit.x === 0 || exit.y === 0 || exit.x === W - 1 || exit.y === map.params.height - 1, "at the edge");
+  const sea = world.caverns.find((c) => c.kind === "sea");
+  if (sea) {
+    const lake = generateLocal(localFromCavern(world, sea.id)!.params);
+    assert.ok(lake.tiles.filter((t) => t === TILE.deep).length > 80, "an underground sea fills its cave");
+  }
+});
+
+test("the game master edits the underworld: kinds and peoples, caverns removed and added, tunnels cut and dug", () => {
+  const planet = generatePlanet({ seed: "regression", template: "continents", cells: 6000 });
+  const world = generateUnderworld(planet);
+  const [a, b] = world.tunnels[0];
+  const lonely = world.caverns.find((c) => c.kind === "cavern")!;
+  const edited = editUnderworld(world, { caverns: { [lonely.id]: { kind: "settlement", people: world.peoples[0]?.id ?? 0 }, [b]: { removed: true } }, added: [{ x: 100, y: 100, kind: "crystal", people: 0 }], cut: [], joined: [[a, lonely.id, "river"]] });
+  assert.equal(edited.caverns[lonely.id].kind, "settlement");
+  assert.ok(edited.caverns[lonely.id].population > 0);
+  assert.ok(edited.caverns[b].removed && !edited.tunnels.some(([p, q]) => p === b || q === b), "a removed cavern takes its tunnels");
+  assert.equal(edited.caverns.length, world.caverns.length + 1);
+  assert.equal(edited.caverns[world.caverns.length].kind, "crystal");
+  assert.equal(edited.tunnels.length, edited.ways.length);
+  assert.ok(edited.tunnels.some(([p, q, kind]) => p === a && q === lonely.id && kind === "river") || a === lonely.id || b === lonely.id);
+  const cut = editUnderworld(world, { cut: [[a, b]] });
+  assert.equal(cut.tunnels.length, world.tunnels.length - 1);
+  assert.equal(world.tunnels.length, generateUnderworld(planet).tunnels.length, "the underworld itself is untouched");
+  assert.doesNotMatch(renderUnderworld(edited, planet), /NaN|undefined/u);
+});
 
 console.log(`local: ${passed} regressions passed`);

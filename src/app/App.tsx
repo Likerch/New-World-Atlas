@@ -217,7 +217,23 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     return parent ? () => openMap(parent) : null;
   };
 
-  const local = useLocalLevel(ctx, back("local"));
+  const local = useLocalLevel(ctx, back("local"), {
+    // A room that opens into another place opens it below this map.
+    openDeeper: (link, entity) => openLocal(local, link, entity),
+    // A cave of the underworld (or a planet's cave over a way down) is shown in the planet's underworld.
+    toUnderworld: (made) => {
+      const above = planet.planet;
+      if (!above) return false;
+      const seed = made.params.seed.replace(/\/depth-\d+$/u, "");
+      const of = (prefix: string) => (seed.startsWith(prefix) ? Number(seed.slice(prefix.length)) : undefined);
+      const cavern = of(`${above.params.seed}/underworld/cavern-`);
+      const marker = of(`${above.params.seed}/marker-`);
+      if (cavern === undefined && marker === undefined) return false;
+      linkTo("underworld", planet, "underworld", null);
+      underworld.open(above, { cavern, marker });
+      return true;
+    },
+  });
   const openLocal = (from: Level, link: LocalLink | null, entity: string) => {
     if (!link) return;
     const base = localParams(link.params) as unknown as Record<string, unknown>;
@@ -257,6 +273,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
       if (link) openLocal(underworld, link, `cavern:${cavern}`);
     },
     back("underworld"),
+    { openCity: (made, burg) => openCity(planet, made, burg) },
   );
   const region = useRegionLevel(ctx, {
     openCity: (made, burg) => openCity(region, made, burg),

@@ -116,7 +116,7 @@ const LOOKS: Partial<Record<Purpose, string[]>> = {
 /** Two lines of description: how the place feels here, and what this room is like. */
 export function lookOf(rng: Rng, family: Family, purpose: string, object?: string): string[] {
   const ambient = AMBIENT[AMBIENT_OF[family] ?? "wild"];
-  const own = object ? [`object.${object}`] : (LOOKS[purpose as Purpose] ?? []).map((id) => `look.${purpose}.${id}`);
+  const own = object ? [`look.object.${object}`] : (LOOKS[purpose as Purpose] ?? []).map((id) => `look.${purpose}.${id}`);
   return [`look.${AMBIENT_OF[family] ?? "wild"}.${rng.pick(ambient)}`, ...(own.length ? [rng.pick(own)] : [])];
 }
 
@@ -373,9 +373,10 @@ export function bridgeChasms(b: Build, from: number) {
   }
 }
 
-/** The tile one starts from: the stairs up, else the way in at the map's edge, else the first room. */
+/** The tile one starts from: the stairs up, else the way in at the map's edge, else any way off the map (a cavern's
+ * tunnel), else the first room. */
 export function startOf(b: Pick<Build, "features" | "keyed" | "W">): number {
-  const way = b.features.find((f) => f.kind === "stairs-up") ?? b.features.find((f) => (f.kind === "exit" || f.kind === "airlock") && f.to === "");
+  const way = b.features.find((f) => f.kind === "stairs-up") ?? b.features.find((f) => (f.kind === "exit" || f.kind === "airlock") && f.to === "") ?? b.features.find((f) => f.kind === "exit");
   if (way) return way.x + way.y * b.W;
   return b.keyed[0]?.cells[0] ?? 0;
 }
