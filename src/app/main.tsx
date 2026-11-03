@@ -8,3 +8,9 @@ createRoot(document.getElementById("root")!).render(
     <App />
   </StrictMode>,
 );
+
+// Installed as an app and opened without the network: the service worker keeps the built page (not during development,
+// where it would hold on to stale modules).
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => undefined));
+}

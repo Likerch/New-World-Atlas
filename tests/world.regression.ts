@@ -1,6 +1,6 @@
 // Worlds: the tree of maps, parameters handed down with the GM's overrides on top, names flowing up. Run with `npm test`.
 import assert from "node:assert/strict";
-import { emptyPage, handbookMarkdown, markdown, pageKey, searchWorld, mergeWorlds, mapKeyOf, rekey, planetParams, generateUniverse, renameUniverse, generateUnderworld, renameUnderworld, generateDistrict, buildingFromCity, cityFromBurg, emptyPatch, emptyWorld, generateCity, generatePlanet, levelsOf, nameUp, overridesOf, pathTo, readWorld, resolve, rootOf, settingAt, SETTINGS, visit, type WorldDoc } from "../src/core/index";
+import { GENERATOR, generateRegion, generateGalaxy, generateLocal, planetToJson, hashString, emptyPage, handbookMarkdown, markdown, pageKey, searchWorld, mergeWorlds, mapKeyOf, rekey, planetParams, generateUniverse, renameUniverse, generateUnderworld, renameUnderworld, generateDistrict, buildingFromCity, cityFromBurg, emptyPatch, emptyWorld, generateCity, generatePlanet, levelsOf, nameUp, overridesOf, pathTo, readWorld, resolve, rootOf, settingAt, SETTINGS, visit, type WorldDoc } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -170,6 +170,19 @@ test("a place has one handbook page at every scale; pages are safe Markdown, fou
   assert.ok(searchWorld(withPage, "lighthouse").some((found) => found.kind === "note"));
   assert.doesNotMatch(handbookMarkdown(withPage, false), /mayor/u, "the players' handbook keeps the GM's secrets");
   assert.match(handbookMarkdown(withPage, true), /mayor/u);
+});
+
+test("golden prints: the generator draws the same maps until its version says otherwise", () => {
+  // A change to what the generator draws must come with a new GENERATOR (the app then tells the GM the old maps were
+  // made by an older one) and new prints here.
+  const golden = { generator: "2026.11.2", planet: 1889868844, region: 1343108870, galaxy: 2739417600, local: 4248020585 };
+  const planet = generatePlanet({ seed: "golden", template: "continents", cells: 4000 });
+  const region = generateRegion(planet, planet.provinces.slice(1).sort((a, b) => b.cells - a.cells)[0].id, 4000);
+  const galaxy = generateGalaxy({ seed: "golden" });
+  const local = generateLocal({ seed: "golden", kind: "dungeon" });
+  const print = (value: unknown) => hashString(JSON.stringify(value));
+  const now = { generator: GENERATOR, planet: print(planetToJson(planet)), region: print(planetToJson(region)), galaxy: print(galaxy.stars.map((s) => [s.name, s.x, s.y, s.feature ?? ""])), local: print(local.keyed.map((room) => room.id)) };
+  assert.deepEqual(now, golden, now.generator === golden.generator ? "the maps changed: bump GENERATOR and the prints" : "a new GENERATOR: update the prints");
 });
 
 console.log(`world: ${passed} regressions passed`);

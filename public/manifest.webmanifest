@@ -1,0 +1,11 @@
+{
+  "name": "New World Atlas",
+  "short_name": "Atlas",
+  "description": "Maps for game masters, from the universe down to a room.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1d1b19",
+  "theme_color": "#1d1b19",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}
