@@ -376,6 +376,14 @@ test("review fixes: a close-up's own houses keep their names when a neighbour is
   const at = centroid(mapped.polygon);
   assert.ok(Math.hypot(zoom.x + at[0] * zoom.k - centroid(city.buildings[mapped.origin!].polygon)[0], zoom.y + at[1] * zoom.k - centroid(city.buildings[mapped.origin!].polygon)[1]) < 0.01, "the close-up's frame maps back onto the city");
   assert.doesNotMatch(renderCity(close), /NaN|undefined|Infinity/u);
+  // Places of one quarter up close stand on houses of their own while there are houses enough.
+  const busy = generateCity({ seed: "snap-17", era: "medieval", population: 40, walls: true });
+  for (const ward of busy.wards.filter((w) => w.urban && busy.landmarks.filter((l) => l.ward === w.id).length >= 2)) {
+    const up = generateDistrict(busy, ward.id);
+    const spots = up.landmarks.map((l) => `${l.x},${l.y}`);
+    const homes = up.buildings.filter((b) => b.origin === undefined && !PROPS.includes(b.kind) && b.kind !== "shed").length;
+    if (homes >= spots.length) assert.equal(new Set(spots).size, spots.length, `${ward.kind} ${ward.id}: two places on one house up close`);
+  }
 });
 
 console.log(`city: ${passed} regressions passed`);

@@ -149,16 +149,20 @@ export function generateDistrict(city: City, wardId: number): City {
 
   // Landmarks of the quarter keep their place; each moves to the block it now stands in, and remembers the house of the
   // whole city it stood on, so it opens as the same house from either map.
+  const taken = new Set<Building>();
   const landmarks = city.landmarks
     .filter((landmark) => landmark.ward === focus.id)
     .map((landmark) => {
       const origin = landmark.origin ?? city.buildings.findIndex((b) => b.ward === landmark.ward && !PROPS.includes(b.kind) && b.polygon.length > 2 && pointInPolygon([landmark.x, landmark.y], b.polygon));
       const at = T([landmark.x, landmark.y]);
       const block = blockWards.reduce((best, ward) => (Math.hypot(ward.center[0] - at[0], ward.center[1] - at[1]) < Math.hypot(best.center[0] - at[0], best.center[1] - at[1]) ? ward : best), blockWards[0] ?? focus);
-      // On the house it marks, not in the courtyard behind it.
+      // On the house it marks, not in the courtyard behind it; a house no other place has taken while there is one.
       const homes = buildings.filter((b) => b.ward === block.id && !PROPS.includes(b.kind) && b.kind !== "shed");
+      const free = homes.filter((b) => !taken.has(b));
       const away = (b: Building) => Math.hypot(centroid(b.polygon)[0] - at[0], centroid(b.polygon)[1] - at[1]);
-      const spot = homes.length ? centroid(homes.reduce((best, b) => (away(b) < away(best) ? b : best)).polygon) : at;
+      const home = (free.length ? free : homes).reduce<Building | null>((best, b) => (!best || away(b) < away(best) ? b : best), null);
+      if (home) taken.add(home);
+      const spot = home ? centroid(home.polygon) : at;
       return { ...landmark, x: spot[0], y: spot[1], ward: block.id, ...(origin >= 0 ? { origin } : {}) };
     });
   return {
