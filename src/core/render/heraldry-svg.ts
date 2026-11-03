@@ -1,6 +1,7 @@
 // A coat of arms as SVG on a 200 × 220 shield: the field and its division, the ordinary, the charges, a soft light
 // from the upper left and a dark rim. Charges are drawn in a 100 × 100 box and set where the ordinary leaves room.
-import type { ChargeKind, CoatOfArms, Division, Ordinary, ShieldShape, Tincture } from "../heraldry";
+// Flags and company logos of the later ages reuse the charges as their emblems.
+import type { ChargeKind, CoatOfArms, Division, Emblem, Flag, Logo, LogoMark, LogoShape, Ordinary, ShieldShape, Tincture } from "../heraldry";
 
 export const TINCTURE: Record<Tincture, string> = { or: "#e3b22b", argent: "#f3f1ea", gules: "#c0272d", azure: "#2457a6", vert: "#25793d", purpure: "#6e3482", sable: "#222222" };
 
@@ -203,4 +204,108 @@ export function renderCoatOfArms(arms: CoatOfArms, options: { size?: number; at?
   }
   out.push(`<rect width="200" height="220" fill="url(#${id}-l)"/></g><path d="${shield}" fill="none" stroke="#1a1a1a" stroke-width="4"/></svg>`);
   return out.join("");
+}
+
+const glyph = (kind: ChargeKind, x: number, y: number, size: number, color: string, outline = "#000") =>
+  `<g transform="translate(${r1(x - size / 2)},${r1(y - size / 2)}) scale(${r1(size) / 100})" fill="${color}" stroke="${outline}" stroke-opacity="0.35" stroke-width="${r1(120 / size)}" stroke-linejoin="round">${charge(kind)}</g>`;
+
+/** A flag on a 300 × 200 cloth; with `at`, nested in a larger map at that width. */
+export function renderFlag(flag: Flag, options: { size?: number; at?: { x: number; y: number; width: number } } = {}): string {
+  const [a, b, c] = flag.colors;
+  const box = options.at ? `x="${r1(options.at.x)}" y="${r1(options.at.y)}" width="${r1(options.at.width)}" height="${r1((options.at.width * 2) / 3)}"` : `width="${options.size ?? 120}" height="${r1(((options.size ?? 120) * 2) / 3)}"`;
+  const out = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 200" ${box}><rect width="300" height="200" fill="${a}"/>`];
+  let emblemAt: [number, number, number] = [150, 100, 90];
+  switch (flag.layout) {
+    case "bicolor":
+      out.push(`<rect y="100" width="300" height="100" fill="${b}"/>`);
+      break;
+    case "bicolor-v":
+      out.push(`<rect x="150" width="150" height="200" fill="${b}"/>`);
+      emblemAt = [75, 100, 80];
+      break;
+    case "tricolor":
+      out.push(`<rect y="66.7" width="300" height="66.7" fill="${b}"/><rect y="133.3" width="300" height="66.7" fill="${c}"/>`);
+      emblemAt = [150, 100, 58];
+      break;
+    case "tricolor-v":
+      out.push(`<rect x="100" width="100" height="200" fill="${b}"/><rect x="200" width="100" height="200" fill="${c}"/>`);
+      emblemAt = [150, 100, 76];
+      break;
+    case "nordic":
+      out.push(`<rect x="80" width="40" height="200" fill="${b}"/><rect y="80" width="300" height="40" fill="${b}"/><rect x="90" width="20" height="200" fill="${c}"/><rect y="90" width="300" height="20" fill="${c}"/>`);
+      emblemAt = [40, 40, 0];
+      break;
+    case "canton":
+      for (let k = 1; k < 7; k += 2) out.push(`<rect y="${r1((k * 200) / 7)}" width="300" height="${r1(200 / 7)}" fill="${b}"/>`);
+      out.push(`<rect width="130" height="${r1((4 * 200) / 7)}" fill="${c}"/>`);
+      emblemAt = [65, r1((2 * 200) / 7), 70];
+      break;
+    case "diagonal":
+      out.push(`<path d="M0,200L300,0V200Z" fill="${b}"/><path d="M0,180L270,0H300V20L30,200H0Z" fill="${c}"/>`);
+      emblemAt = [70, 60, 60];
+      break;
+    case "triangle":
+      out.push(`<rect y="100" width="300" height="100" fill="${b}"/><path d="M0,0L130,100L0,200Z" fill="${c}"/>`);
+      emblemAt = [45, 100, 50];
+      break;
+    case "border":
+      out.push(`<rect x="22" y="22" width="256" height="156" fill="${b}"/>`);
+      break;
+    case "stripes":
+      for (let k = 1; k < 9; k += 2) out.push(`<rect y="${r1((k * 200) / 9)}" width="300" height="${r1(200 / 9)}" fill="${b}"/>`);
+      emblemAt = [150, 100, 0];
+      break;
+    case "saltire":
+      out.push(`<path d="M0,0L300,200M300,0L0,200" stroke="${b}" stroke-width="42"/>`);
+      emblemAt = [150, 100, 60];
+      break;
+    case "disc":
+      out.push(`<circle cx="150" cy="100" r="62" fill="${b}"/>`);
+      emblemAt = [150, 100, 80];
+      break;
+  }
+  const [ex, ey, size] = emblemAt;
+  if (flag.emblem && size) {
+    if (flag.count > 1) {
+      const ring = Math.min(size * 0.42, 40);
+      for (let k = 0; k < flag.count; k++) {
+        const angle = (k / flag.count) * Math.PI * 2 - Math.PI / 2;
+        out.push(glyph(flag.emblem, ex + Math.cos(angle) * ring, ey + Math.sin(angle) * ring, Math.max(10, size * 0.22), flag.emblemColor, flag.emblemColor));
+      }
+    } else out.push(glyph(flag.emblem, ex, ey, size, flag.emblemColor));
+  }
+  out.push(`<rect width="300" height="200" fill="none" stroke="#1a1a1a" stroke-width="5"/></svg>`);
+  return out.join("");
+}
+
+const LOGO_SHAPE: Record<LogoShape, string> = {
+  circle: circle(100, 100, 92),
+  hex: poly([0, 1, 2, 3, 4, 5].map((k): [number, number] => [100 + Math.cos((k * Math.PI) / 3 - Math.PI / 2) * 94, 100 + Math.sin((k * Math.PI) / 3 - Math.PI / 2) * 94])),
+  square: "M14,14H186V186H14Z",
+  diamond: "M100,6L194,100L100,194L6,100Z",
+  shield: "M18,14H182V96C182,150 140,180 100,196C60,180 18,150 18,96Z",
+};
+const LOGO_MARK: Record<LogoMark, string> = {
+  chevron: "M44,128L100,64L156,128L132,128L100,92L68,128Z",
+  ring: `${circle(100, 100, 52)}${circle(100, 100, 32)}`,
+  bars: "M52,58H148V78H52ZM52,90H148V110H52ZM52,122H148V142H52Z",
+  triangle: "M100,48L156,146H44Z",
+  wave: "M40,96C60,70 80,70 100,96C120,122 140,122 160,96V124C140,150 120,150 100,124C80,98 60,98 40,124Z",
+  bolt: "M112,40L60,110H96L84,160L140,86H104Z",
+  eye: `M36,100C60,62 140,62 164,100C140,138 60,138 36,100Z${circle(100, 100, 18)}`,
+  cross: "M88,44H112V88H156V112H112V156H88V112H44V88H88Z",
+  orbit: `${circle(100, 100, 20)}M30,100A70,26 0 1 0 170,100A70,26 0 1 0 30,100ZM42,100A58,16 0 1 1 158,100A58,16 0 1 1 42,100Z`,
+  grid: "M52,52H90V90H52ZM110,52H148V90H110ZM52,110H90V148H52ZM110,110H148V148H110Z",
+};
+
+/** A company's mark on a 200 × 200 tile. */
+export function renderLogo(logo: Logo, options: { size?: number; at?: { x: number; y: number; width: number } } = {}): string {
+  const box = options.at ? `x="${r1(options.at.x)}" y="${r1(options.at.y)}" width="${r1(options.at.width)}" height="${r1(options.at.width)}"` : `width="${options.size ?? 100}" height="${options.size ?? 100}"`;
+  const [ground, ink] = logo.colors;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" ${box}><path d="${LOGO_SHAPE[logo.shape]}" fill="${ground}" stroke="${ink}" stroke-width="6"/><path d="${LOGO_MARK[logo.mark]}" fill="${ink}" fill-rule="evenodd"/></svg>`;
+}
+
+/** Arms, a flag or a logo, whichever the bearer has; `at.width` is the emblem's width on the map. */
+export function renderEmblem(emblem: Emblem, options: { size?: number; at?: { x: number; y: number; width: number } } = {}): string {
+  return emblem.kind === "arms" ? renderCoatOfArms(emblem.arms, options) : emblem.kind === "flag" ? renderFlag(emblem.flag, options) : renderLogo(emblem.logo, options);
 }

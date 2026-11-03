@@ -1,6 +1,6 @@
 // Planet-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { createLanguage, createRng, armsOf, coatOfArms, editPlanet, emptyEdits, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
+import { createLanguage, createRng, armsOf, emblemOf, MIXES, SETTINGS, coatOfArms, editPlanet, emptyEdits, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -171,6 +171,31 @@ test("the world editor reshapes the ground, repaints realms and moves towns with
   assert.equal(edited.states.slice(1).reduce((sum, item) => sum + item.cells, 0), planet.states.slice(1).reduce((sum, item) => sum + item.cells, 0), "realms recounted");
   assert.ok(!renderPlanet(edited).includes(`>${other.name}<`), "a razed town is not drawn");
   assert.equal(editPlanet(planet, emptyEdits()), planet, "no edits, the same world");
+});
+
+test("the world's age reshapes towns, realms, roads, places, armies and banners, and the medieval age is the classic world", () => {
+  const classic = generatePlanet({ seed: "regression", template: "continents", cells: 6000, setting: SETTINGS.medieval });
+  assert.equal(JSON.stringify(planetToJson({ ...classic, params: planet.params })), JSON.stringify(planetToJson(planet)), "the medieval preset changes nothing");
+  const age = (setting: (typeof SETTINGS)[keyof typeof SETTINGS]) => generatePlanet({ seed: "regression", template: "continents", cells: 4000, setting });
+  const stone = age(SETTINGS.stone);
+  assert.ok(stone.routes.slice(1).every((route) => route.kind === "trail"), "no roads or sea lanes before the wheel and the boat");
+  assert.ok(stone.states.slice(1).every((state) => state.form === "tribal"), "only bands and tribes");
+  assert.ok(stone.markers.some((marker) => marker.kind === "megalith") && !stone.markers.some((marker) => marker.kind === "portal"), "standing stones, no wonders");
+  const modern = age(SETTINGS.modern);
+  assert.ok(modern.routes.some((route) => route.kind === "air"), "air routes join great cities");
+  assert.ok(Math.max(...modern.burgs.map((b) => b.population)) > 10 * Math.max(...classic.burgs.map((b) => b.population)), "cities of millions");
+  assert.ok(modern.markers.some((marker) => marker.kind === "airport") && modern.markers.some((marker) => marker.kind === "factory"), "airports and factories");
+  assert.equal(emblemOf(modern, "state", 1)?.kind, "flag", "realms fly flags");
+  assert.ok((modern.secular ?? 0) > 0.2, "many keep no faith");
+  const future = age(SETTINGS["far-future"]);
+  assert.ok(future.markers.some((marker) => marker.kind === "space-elevator") && future.markers.some((marker) => marker.kind === "spaceport"), "a space elevator and spaceports");
+  const fallen = age(SETTINGS["post-apocalypse"]);
+  assert.ok(fallen.markers.some((marker) => marker.kind === "crater") && !fallen.routes.some((route) => route.kind === "air"), "craters and no flights after the fall");
+  assert.ok(fallen.states.slice(1).some((state) => state.form === "warlord"), "warlords rule");
+  const magic = age(MIXES["high-fantasy"]);
+  assert.ok(magic.markers.some((marker) => marker.kind === "wizard-tower"), "wizards' towers where magic is everywhere");
+  const units = (world: typeof planet) => raiseArmies(world).reduce((sum, regiment) => sum + regiment.units.cavalry, 0);
+  assert.equal(units(stone), 0, "no riders in the stone age");
 });
 
 console.log(`planet: ${passed} regressions passed`);

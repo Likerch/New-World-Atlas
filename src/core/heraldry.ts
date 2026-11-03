@@ -52,6 +52,8 @@ export interface ArmsHints {
   nomadic?: boolean;
   faith?: boolean;
   shield?: ShieldShape;
+  /** An early sign: one charge on a plain or halved field, no ordinary (a totem, a hoplite's shield). */
+  simple?: boolean;
 }
 
 export const METALS: Tincture[] = ["or", "argent"];
@@ -112,7 +114,7 @@ const CHARGES: Record<ChargeKind, number> = {
   horseshoe: 1,
   ship: 0.5,
 };
-const FAVOURED: Record<keyof Omit<ArmsHints, "shield">, Partial<Record<ChargeKind, number>>> = {
+const FAVOURED: Record<keyof Omit<ArmsHints, "shield" | "simple">, Partial<Record<ChargeKind, number>>> = {
   naval: { anchor: 6, fish: 4, ship: 6 },
   highland: { mountain: 5, tower: 2, hammer: 3 },
   nomadic: { horseshoe: 5, crescent: 2, sun: 2, tower: 0, ship: 0, anchor: 0 },
@@ -146,6 +148,11 @@ export function coatOfArms(seed: string, hints: ArmsHints = {}, parent?: CoatOfA
     return arms;
   }
 
+  if (hints.simple) {
+    const field = rng.chance(0.4) ? rng.pick(METALS) : rng.weighted(COLOURS);
+    const halved = rng.chance(0.25);
+    return { shield: hints.shield ?? "round", field, division: halved ? "perPale" : "plain", division2: opposite(field), ordinary: "none", ordinaryTincture: opposite(field), charge: charge(), chargeTincture: opposite(field), count: 1 };
+  }
   const shield = hints.shield ?? rng.weighted<ShieldShape>([["heater", 6], ["french", 3], ["spanish", 2], ["kite", 1], ["round", hints.nomadic ? 3 : 0.4]]);
   const field = rng.chance(0.42) ? rng.pick(METALS) : rng.weighted(COLOURS);
   const division = rng.weighted(DIVISIONS);
@@ -167,5 +174,85 @@ export function coatOfArms(seed: string, hints: ArmsHints = {}, parent?: CoatOfA
     charge: charged ? charge() : null,
     chargeTincture: onChief ? opposite(ordinaryTincture) : ordinary === "cross" || ordinary === "saltire" || ordinary === "pall" || ordinary === "pile" ? opposite(ordinaryTincture) : opposite(field),
     count: !crowded ? (ordinary === "pale" || ordinary === "bend" ? 2 : 1) : ordinary === "fess" || ordinary === "chevron" ? 3 : rng.weighted([[1, 5], [2, 1.5], [3, 2.5]]),
+  };
+}
+
+/** National flags of the machine ages: a field of stripes, crosses or a canton, with an emblem. */
+export type FlagLayout = "plain" | "bicolor" | "bicolor-v" | "tricolor" | "tricolor-v" | "nordic" | "canton" | "diagonal" | "triangle" | "border" | "stripes" | "saltire" | "disc";
+export type FlagEmblem = Extract<ChargeKind, "mullet" | "crescent" | "sun" | "roundel" | "wheel" | "tree" | "eagle" | "hammer" | "crossPattee" | "lozenge" | "anchor" | "tower" | "crown" | "key" | "sword">;
+
+export interface Flag {
+  layout: FlagLayout;
+  /** Two or three colours, as CSS colours. */
+  colors: string[];
+  emblem: FlagEmblem | null;
+  emblemColor: string;
+  /** Stars in a ring or a row (federations). */
+  count: number;
+}
+
+/** A company's mark: a shape, a sign inside it, and two colours. */
+export type LogoShape = "circle" | "hex" | "square" | "diamond" | "shield";
+export type LogoMark = "chevron" | "ring" | "bars" | "triangle" | "wave" | "bolt" | "eye" | "cross" | "orbit" | "grid";
+export interface Logo {
+  shape: LogoShape;
+  mark: LogoMark;
+  colors: [string, string];
+}
+
+export type Emblem = { kind: "arms"; arms: CoatOfArms } | { kind: "flag"; flag: Flag } | { kind: "logo"; logo: Logo };
+
+const FLAG_COLORS: [string, number][] = [
+  ["#c8102e", 5],
+  ["#0039a6", 4],
+  ["#009246", 3],
+  ["#ffcd00", 3],
+  ["#ffffff", 5],
+  ["#111111", 2],
+  ["#ff8200", 1],
+  ["#75aadb", 1.5],
+  ["#8d1b3d", 1],
+  ["#5b2c83", 0.6],
+];
+const light = (color: string) => ["#ffffff", "#ffcd00", "#75aadb", "#ff8200"].includes(color);
+
+export function flagOf(seed: string, hints: { federal?: boolean; faith?: boolean; naval?: boolean; future?: boolean } = {}): Flag {
+  const rng = createRng(`${seed}/flag`);
+  const layout = rng.weighted<FlagLayout>([
+    ["tricolor", 4],
+    ["tricolor-v", 4],
+    ["bicolor", 3],
+    ["bicolor-v", 1],
+    ["nordic", hints.faith ? 4 : 1.5],
+    ["canton", hints.federal ? 5 : 1.5],
+    ["diagonal", 1],
+    ["triangle", 1.5],
+    ["border", 0.6],
+    ["stripes", hints.federal ? 3 : 1],
+    ["saltire", 0.8],
+    ["disc", hints.future ? 3 : 1.2],
+    ["plain", hints.future ? 3 : 0.8],
+  ]);
+  const colors: string[] = [];
+  while (colors.length < 3) {
+    const next = rng.weighted(FLAG_COLORS.filter(([color]) => !colors.includes(color)));
+    // Neighbouring stripes contrast: light against dark.
+    if (colors.length && light(next) === light(colors[colors.length - 1]) && rng.chance(0.75)) continue;
+    colors.push(next);
+  }
+  const emblem: FlagEmblem | null = rng.chance(layout === "plain" || layout === "disc" ? 1 : 0.45)
+    ? rng.weighted<FlagEmblem>([["mullet", hints.federal ? 8 : 4], ["crescent", 1.5], ["sun", 2], ["roundel", 1], ["wheel", hints.future ? 3 : 1], ["tree", 1], ["eagle", 2], ["hammer", 0.8], ["crossPattee", hints.faith ? 4 : 0.6], ["lozenge", 0.6], ["anchor", hints.naval ? 3 : 0.3], ["tower", 0.6], ["crown", 0.8], ["key", 0.3], ["sword", 0.6]])
+    : null;
+  const emblemColor = light(colors[0]) ? rng.pick(["#111111", "#c8102e", "#0039a6"]) : rng.pick(["#ffffff", "#ffcd00"]);
+  return { layout, colors, emblem, emblemColor, count: emblem === "mullet" && hints.federal ? rng.int(5, 15) : 1 };
+}
+
+export function logoOf(seed: string, hints: { machine?: boolean } = {}): Logo {
+  const rng = createRng(`${seed}/logo`);
+  const palette: [string, string][] = [["#0b0f19", "#00e5ff"], ["#111111", "#ff2e63"], ["#f3f3f3", "#1d3557"], ["#1d1d1d", "#f9c80e"], ["#0f2027", "#2ecc71"], ["#ffffff", "#e63946"], ["#2b2d42", "#edf2f4"], ["#3a0ca3", "#f72585"]];
+  return {
+    shape: rng.weighted<LogoShape>([["circle", 3], ["hex", hints.machine ? 5 : 2], ["square", 2], ["diamond", 1.5], ["shield", 1]]),
+    mark: rng.weighted<LogoMark>([["chevron", 2], ["ring", 2], ["bars", 2], ["triangle", 2], ["wave", 1.5], ["bolt", 1.5], ["eye", hints.machine ? 5 : 1], ["cross", 1], ["orbit", 1.5], ["grid", hints.machine ? 3 : 1]]),
+    colors: rng.pick(palette),
   };
 }

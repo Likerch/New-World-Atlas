@@ -1,10 +1,13 @@
 // Faiths of the planet: a folk faith for every people; a few churches spreading from holy cities along easy ground,
 // slowed by mountains, foreign peoples and hostile borders; small cults round a single town; and heresies breaking
-// away from a church in its far provinces.
+// away from a church in its far provinces. The age shapes them: no churches before writing, pantheons in antiquity,
+// more reformers in the age of print, a growing share of people with no faith in the machine ages, and techno-cults
+// and star faiths in the future.
 import { paletteColor } from "../color";
 import { name } from "../language";
 import { PriorityQueue } from "../queue";
 import type { Rng } from "../random";
+import { ageOf, isClassic, settingOf, type EraId } from "../setting";
 import type { Burg, Culture, CultureKind, Ground, Religion, ReligionForm, ReligionKind, State } from "./model";
 
 const FOLK: Record<CultureKind, [ReligionForm, number][]> = {
@@ -18,6 +21,18 @@ const FOLK: Record<CultureKind, [ReligionForm, number][]> = {
 };
 const CHURCH: [ReligionForm, number][] = [["monotheism", 4], ["pantheon", 3], ["dualism", 2], ["henotheism", 2], ["philosophy", 1]];
 const CULT: [ReligionForm, number][] = [["mystery", 3], ["sun", 2], ["moon", 2], ["fire", 2], ["death", 2], ["serpent", 1], ["dragon", 1]];
+/** The faiths each age raises, and the share of its people who keep none. */
+const AGE_FAITH: Record<EraId, { church: [ReligionForm, number][]; cult: [ReligionForm, number][]; secular: number }> = {
+  stone: { church: [], cult: [["sun", 2], ["moon", 2], ["fire", 2], ["death", 1], ["serpent", 1]], secular: 0 },
+  ancient: { church: [["pantheon", 6], ["henotheism", 2], ["philosophy", 2], ["dualism", 1], ["monotheism", 1]], cult: CULT, secular: 0 },
+  medieval: { church: CHURCH, cult: CULT, secular: 0 },
+  renaissance: { church: CHURCH, cult: CULT, secular: 0.02 },
+  industrial: { church: CHURCH, cult: [["mystery", 3], ["death", 1], ["sun", 1], ["machine", 1]], secular: 0.1 },
+  modern: { church: CHURCH, cult: [["mystery", 2], ["cosmic", 2], ["machine", 1], ["death", 1]], secular: 0.35 },
+  cyberpunk: { church: CHURCH, cult: [["machine", 4], ["cosmic", 2], ["mystery", 1], ["death", 1]], secular: 0.5 },
+  "far-future": { church: [["philosophy", 3], ["monotheism", 2], ["cosmic", 3], ["machine", 2], ["pantheon", 1]], cult: [["machine", 3], ["cosmic", 3], ["mystery", 1]], secular: 0.55 },
+  "post-apocalypse": { church: [["monotheism", 3], ["dualism", 2], ["machine", 2], ["death", 2]], cult: [["death", 3], ["machine", 2], ["fire", 2], ["sun", 1]], secular: 0.15 },
+};
 
 export function spreadReligions(
   ground: Ground,
@@ -28,8 +43,15 @@ export function spreadReligions(
   states: State[],
   population: Float32Array,
   rng: Rng,
-): { religion: Uint16Array; religions: Religion[] } {
+): { religion: Uint16Array; religions: Religion[]; secular: number } {
   const { mesh, water } = ground;
+  const setting = settingOf(ground.params.setting);
+  const classic = isClassic(setting);
+  const ageFaith = AGE_FAITH[ageOf(setting)];
+  const churchForms = classic ? CHURCH : ageFaith.church;
+  const cultForms: [ReligionForm, number][] = classic ? CULT : setting.magic >= 2 ? [...ageFaith.cult, ["dragon", 2]] : ageFaith.cult;
+  // Where priests rule, fewer turn away from faith.
+  const secular = classic ? 0 : ageFaith.secular * (setting.rule === "faith" ? 0.3 : 1);
   const religion = new Uint16Array(mesh.cells);
   const religions: Religion[] = [{ id: 0, name: "", kind: "folk", form: "animism", deity: "", color: "#888888", culture: 0, center: 0, parent: 0, cells: 0, area: 0, followers: 0 }];
   const hue = rng.next();
@@ -91,9 +113,9 @@ export function spreadReligions(
 
   // Churches rise in a few capitals and compete for the land between them.
   const capitals = rng.shuffle(burgs.slice(1).filter((burg) => burg.capital));
-  const churches = capitals.slice(0, Math.max(1, Math.min(6, Math.round(states.length / 4))));
+  const churches = churchForms.length ? capitals.slice(0, Math.max(1, Math.min(6, Math.round(states.length / 4)))) : [];
   spread(
-    churches.map((burg): [Religion, number, number] => [add("organized", rng.weighted(CHURCH), cultures[burg.culture] ?? cultures[1], burg.id, 0), burg.cell, reach * rng.float(0.6, 1.4)]),
+    churches.map((burg): [Religion, number, number] => [add("organized", rng.weighted(churchForms), cultures[burg.culture] ?? cultures[1], burg.id, 0), burg.cell, reach * rng.float(0.6, 1.4)]),
     () => true,
   );
 
@@ -102,7 +124,7 @@ export function spreadReligions(
   for (const church of religions.filter((faith) => faith.kind === "organized")) {
     const holy = burgs[church.center];
     const size = religion.reduce((sum, id) => sum + (id === church.id ? 1 : 0), 0);
-    if (size < 60 || !rng.chance(0.5)) continue;
+    if (size < 60 || !rng.chance(!classic && ageOf(setting) === "renaissance" ? 0.85 : 0.5)) continue;
     const far = burgs
       .slice(1)
       .filter((burg) => religion[burg.cell] === church.id && !burg.capital)
@@ -113,7 +135,7 @@ export function spreadReligions(
   }
   spread(heresies, (cell, faith) => religion[cell] === faith.parent && cell !== burgs[religions[faith.parent].center].cell);
   const towns = rng.shuffle(burgs.slice(1).filter((burg) => !burg.capital && religions[religion[burg.cell]].kind !== "heresy"));
-  const cults = towns.slice(0, rng.int(1, 3)).map((burg): [Religion, number, number] => [add("cult", rng.weighted(CULT), cultures[burg.culture] ?? cultures[1], burg.id, 0), burg.cell, reach * rng.float(0.05, 0.15)]);
+  const cults = towns.slice(0, rng.int(1, 3)).map((burg): [Religion, number, number] => [add("cult", rng.weighted(cultForms), cultures[burg.culture] ?? cultures[1], burg.id, 0), burg.cell, reach * rng.float(0.05, 0.15)]);
   spread(cults, (cell) => religions[religion[cell]].kind !== "cult");
 
   const km2 = ground.scale * ground.scale;
@@ -125,9 +147,9 @@ export function spreadReligions(
     faith.followers += population[cell];
   }
   for (const burg of burgs.slice(1)) religions[religion[burg.cell]].followers += burg.population;
-  for (const faith of religions) {
-    faith.area = Math.round(faith.area);
-    faith.followers = Math.round(faith.followers * 10) / 10;
+  for (const item of religions) {
+    item.area = Math.round(item.area);
+    item.followers = Math.round(item.followers * (1 - secular) * 10) / 10;
   }
-  return { religion, religions };
+  return { religion, religions, secular };
 }

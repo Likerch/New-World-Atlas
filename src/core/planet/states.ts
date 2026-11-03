@@ -5,6 +5,7 @@ import { name } from "../language";
 import type { Point } from "../geometry";
 import { PriorityQueue } from "../queue";
 import type { Rng } from "../random";
+import { ageOf, isClassic, settingOf, type EraId, type Rule, type Setting } from "../setting";
 import { BIOMES } from "./biomes";
 import type { Burg, Culture, Ground, Province, Relation, State, StateForm } from "./model";
 
@@ -58,6 +59,124 @@ function formOf(state: State, culture: Culture, burgs: number, cells: number, rn
   }
 }
 
+/** The forms a realm of each age may take, by weight, and the titles each form bears there. */
+type Titles = (big: boolean, small: boolean, rng: Rng) => string;
+const AGE_FORMS: Record<EraId, { single: [StateForm, string[]]; forms: [StateForm, number, Titles][] }> = {
+  stone: { single: ["tribal", ["band", "tribes", "clans"]], forms: [["tribal", 10, (big, _small, rng) => rng.pick(big ? ["tribes", "chiefdom"] : ["band", "clans", "tribes", "chiefdom"])]] },
+  ancient: {
+    single: ["free-city", ["polis", "city-state"]],
+    forms: [
+      ["monarchy", 5, (big, small, rng) => (big ? rng.pick(["empire", "kingdom"]) : small ? rng.pick(["principality", "satrapy"]) : "kingdom")],
+      ["republic", 2, (_big, _small, rng) => rng.pick(["republic", "oligarchy"])],
+      ["theocracy", 1.5, (_big, _small, rng) => rng.pick(["temple-state", "theocracy"])],
+      ["union", 1, (_big, _small, rng) => rng.pick(["league", "confederation"])],
+      ["tribal", 2, (_big, _small, rng) => rng.pick(["tribes", "chiefdom"])],
+    ],
+  },
+  medieval: {
+    single: ["free-city", ["free-city", "city-state"]],
+    forms: [
+      ["monarchy", 6, (big, small, rng) => (big ? rng.pick(["empire", "kingdom"]) : small ? rng.pick(["duchy", "principality", "march", "county"]) : rng.pick(["kingdom", "kingdom", "grand-duchy", "realm"]))],
+      ["republic", 2, (big, _small, rng) => rng.pick(["republic", "commonwealth", "oligarchy", big ? "federation" : "republic"])],
+      ["theocracy", 1, (_big, _small, rng) => rng.pick(["theocracy", "holy-see", "divine-realm"])],
+      ["union", 1, (_big, _small, rng) => rng.pick(["union", "league", "confederation"])],
+    ],
+  },
+  renaissance: {
+    single: ["free-city", ["free-city", "city-state", "merchant-republic"]],
+    forms: [
+      ["monarchy", 6, (big, small, rng) => (big ? rng.pick(["empire", "kingdom"]) : small ? rng.pick(["duchy", "principality", "electorate"]) : rng.pick(["kingdom", "grand-duchy", "electorate"]))],
+      ["republic", 2.5, (_big, _small, rng) => rng.pick(["republic", "merchant-republic", "commonwealth", "oligarchy"])],
+      ["theocracy", 0.8, (_big, _small, rng) => rng.pick(["holy-see", "theocracy"])],
+      ["union", 1, (_big, _small, rng) => rng.pick(["confederation", "league", "united-provinces"])],
+    ],
+  },
+  industrial: {
+    single: ["free-city", ["free-city", "city-state"]],
+    forms: [
+      ["monarchy", 5, (big, small, rng) => (big ? "empire" : small ? rng.pick(["grand-duchy", "principality"]) : "kingdom")],
+      ["republic", 4, (big, _small, rng) => (big ? rng.pick(["republic", "federation"]) : "republic")],
+      ["union", 1.5, (_big, _small, rng) => rng.pick(["confederation", "union"])],
+      ["dictatorship", 1, (_big, _small, rng) => rng.pick(["dictatorship", "directorate"])],
+      ["colony", 1.5, (_big, _small, rng) => rng.pick(["colony", "protectorate", "dominion"])],
+      ["theocracy", 0.3, () => "theocracy"],
+    ],
+  },
+  modern: {
+    single: ["free-city", ["city-state", "principality"]],
+    forms: [
+      ["republic", 7, (big, _small, rng) => (big ? rng.pick(["federal-republic", "republic"]) : rng.pick(["republic", "republic", "peoples-republic"]))],
+      ["monarchy", 2, (_big, _small, rng) => rng.pick(["kingdom", "emirate", "sultanate"])],
+      ["union", 2, (_big, _small, rng) => rng.pick(["federation", "union", "commonwealth"])],
+      ["dictatorship", 2, (_big, _small, rng) => rng.pick(["dictatorship", "junta", "peoples-republic"])],
+      ["theocracy", 0.6, () => "theocratic-republic"],
+      ["colony", 0.5, (_big, _small, rng) => rng.pick(["territory", "protectorate"])],
+      ["corporate", 0.3, () => "company-state"],
+    ],
+  },
+  cyberpunk: {
+    single: ["free-city", ["free-port", "sprawl", "city-state"]],
+    forms: [
+      ["corporate", 5, (_big, _small, rng) => rng.pick(["corporate-state", "zaibatsu", "free-trade-zone", "conglomerate"])],
+      ["republic", 2, (_big, _small, rng) => rng.pick(["republic", "free-state"])],
+      ["union", 1.5, (_big, _small, rng) => rng.pick(["federation", "bloc"])],
+      ["dictatorship", 2, (_big, _small, rng) => rng.pick(["junta", "security-state"])],
+      ["machine", 0.5, () => "ai-directorate"],
+      ["theocracy", 0.3, () => "theocratic-republic"],
+    ],
+  },
+  "far-future": {
+    single: ["free-city", ["city-state", "free-port"]],
+    forms: [
+      ["union", 4, (_big, _small, rng) => rng.pick(["federation", "commonwealth", "hegemony", "concord"])],
+      ["monarchy", 2, (_big, _small, rng) => rng.pick(["imperium", "dominion"])],
+      ["republic", 2, (_big, _small, rng) => rng.pick(["republic", "technocracy"])],
+      ["corporate", 2, (_big, _small, rng) => rng.pick(["conglomerate", "combine"])],
+      ["machine", 2, (_big, _small, rng) => rng.pick(["ai-directorate", "synthetic-collective", "hive-mind"])],
+      ["colony", 2, (_big, _small, rng) => rng.pick(["colony", "outpost", "mandate"])],
+    ],
+  },
+  "post-apocalypse": {
+    single: ["free-city", ["settlement", "enclave"]],
+    forms: [
+      ["warlord", 5, (_big, _small, rng) => rng.pick(["warlord-domain", "raider-clans", "warband"])],
+      ["free-city", 3, (_big, _small, rng) => rng.pick(["settlement", "enclave"])],
+      ["republic", 1, (_big, _small, rng) => rng.pick(["remnant-republic", "council"])],
+      ["theocracy", 1, () => "cult-state"],
+      ["dictatorship", 1, () => "junta"],
+      ["tribal", 2, (_big, _small, rng) => rng.pick(["tribes", "clans"])],
+    ],
+  },
+};
+const BIAS: Record<Rule, Partial<Record<StateForm, number>>> = {
+  any: {},
+  crowns: { monarchy: 4 },
+  people: { republic: 3, union: 3, "free-city": 2 },
+  faith: { theocracy: 6 },
+  force: { dictatorship: 4, warlord: 4, horde: 4, monarchy: 1.5 },
+  trade: { corporate: 4, "free-city": 2, republic: 1.5 },
+  machines: { machine: 6 },
+};
+
+/** A realm's form in a world that is not the classic one: by its age, the rule that prevails and how common magic is. */
+function settingForm(setting: Setting, culture: Culture, burgs: number, cells: number, rng: Rng): [StateForm, string] {
+  const age = ageOf(setting);
+  const plan = AGE_FORMS[age];
+  if (burgs <= 1 && cells < 40) return [plan.single[0], rng.pick(plan.single[1])];
+  const early = setting.tech < 5 || age === "post-apocalypse";
+  if (early && culture.kind === "nomadic" && rng.chance(0.6)) return age === "post-apocalypse" ? ["warlord", "raider-clans"] : ["horde", rng.pick(["horde", "khaganate", "khanate"])];
+  if (setting.tech >= 1 && setting.tech < 3.5 && (culture.kind === "hunting" || culture.kind === "highland") && rng.chance(0.35)) return ["tribal", rng.pick(["tribes", "chiefdom", "clans"])];
+  const big = cells > 600;
+  const small = cells < 120;
+  const bias = BIAS[setting.rule];
+  const options = plan.forms.map(([form, weight, titles]): [[StateForm, Titles], number] => [[form, titles], weight * (bias[form] ?? 1)]);
+  // Trade before the age of companies means merchant republics.
+  if (setting.rule === "trade" && setting.tech < 5) for (const option of options) if (option[0][0] === "republic") option[1] *= 3;
+  if (setting.magic >= 2) options.push([["magocracy", (_big, _small, own) => own.pick(["magocracy", "arcane-realm", "mage-council"])], setting.magic >= 3 ? 2.5 : 1]);
+  const [form, titles] = rng.weighted(options);
+  return [form, titles(big, small, rng)];
+}
+
 const PROVINCE_FORMS: Record<StateForm, string[]> = {
   monarchy: ["county", "duchy", "barony", "march", "shire"],
   republic: ["district", "canton", "territory", "region"],
@@ -66,10 +185,27 @@ const PROVINCE_FORMS: Record<StateForm, string[]> = {
   tribal: ["clan-land", "territory"],
   horde: ["ulus", "camp", "yurt"],
   "free-city": ["ward", "district"],
+  magocracy: ["domain", "district"],
+  dictatorship: ["province", "region", "military-district"],
+  corporate: ["sector", "zone", "division"],
+  machine: ["sector", "node", "grid"],
+  colony: ["district", "territory"],
+  warlord: ["turf", "domain", "camp"],
+};
+/** Later ages call the old realms' lands provinces, regions and states, earlier ones satrapies and nomes. */
+const AGE_PROVINCES: Partial<Record<EraId, Partial<Record<StateForm, string[]>>>> = {
+  ancient: { monarchy: ["satrapy", "province", "nome"], republic: ["province", "district"], theocracy: ["nome", "temple-land"] },
+  industrial: { monarchy: ["province", "county", "region"], republic: ["province", "department", "district"], union: ["state", "land", "member-state"] },
+  modern: { monarchy: ["province", "region"], republic: ["region", "province", "department", "district"], union: ["state", "land", "republic"], theocracy: ["province", "region"] },
+  cyberpunk: { republic: ["district", "zone", "region"], union: ["state", "zone"] },
+  "far-future": { monarchy: ["sector", "dominion", "province"], republic: ["sector", "district"], union: ["state", "sector", "member-state"] },
+  "post-apocalypse": { theocracy: ["parish", "domain"], republic: ["district", "ward"], dictatorship: ["military-district", "zone"], "free-city": ["ward", "camp"] },
 };
 
 export function formStates(g: Ground, culture: Uint16Array, cultures: Culture[], burgs: Burg[], provinceShare: number, rng: Rng) {
   const n = g.mesh.cells;
+  const setting = settingOf(g.params.setting);
+  const classic = isClassic(setting);
   const hue = rng.next();
   const states: State[] = [
     { id: 0, name: "", formKey: "wild", form: "tribal", color: "#bbbbbb", capital: 0, culture: 0, expansionism: 0, cells: 0, area: 0, burgs: 0, rural: 0, urban: 0, pole: [0, 0], neighbors: [], relations: {} },
@@ -150,7 +286,7 @@ export function formStates(g: Ground, culture: Uint16Array, cultures: Culture[],
     for (const cell of cellsOf[item.id]) for (const next of g.mesh.neighbors[cell]) if (state[next] && state[next] !== item.id) neighbors.add(state[next]);
     item.neighbors = [...neighbors];
     const own = rng.fork(`form-${item.id}`);
-    [item.form, item.formKey] = formOf(item, cultures[item.culture], item.burgs, item.cells, own);
+    [item.form, item.formKey] = classic ? formOf(item, cultures[item.culture], item.burgs, item.cells, own) : settingForm(setting, cultures[item.culture], item.burgs, item.cells, own);
     item.pole = item.cells ? poleOf(g, state, item.id, cellsOf[item.id]) : item.pole;
   }
   states[0].cells = cellsOf[0].length;
@@ -184,7 +320,7 @@ export function formStates(g: Ground, culture: Uint16Array, cultures: Culture[],
     const towns = burgs.filter((burg) => burg.state === item.id).sort((a, b) => Number(b.capital) - Number(a.capital) || b.population - a.population);
     const count = Math.max(1, Math.min(towns.length, Math.round(towns.length * provinceShare)));
     const centers = towns.slice(0, count);
-    const forms = PROVINCE_FORMS[item.form];
+    const forms = AGE_PROVINCES[ageOf(setting)]?.[item.form] ?? PROVINCE_FORMS[item.form];
     const front = new PriorityQueue<[number, number]>();
     const reach = new Float64Array(n).fill(Infinity);
     for (const center of centers) {

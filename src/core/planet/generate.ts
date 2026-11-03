@@ -3,6 +3,8 @@
 import { name } from "../language";
 import { buildMesh } from "../mesh";
 import { createRng, randomSeed } from "../random";
+import { isClassic, peopleOf, settingOf } from "../setting";
+import { settleAge } from "./age";
 import { biomeOf } from "./biomes";
 import { precipitation, temperatures } from "./climate";
 import { placeBurgs } from "./burgs";
@@ -75,6 +77,10 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   const ground: Ground = { params, mesh, height, water, feature, features, coast, temperature, precipitation: rain, flux: hydro.flux, river: hydro.river, rivers: hydro.rivers, biome, scale };
   const { culture, cultures } = settleCultures(ground, params.cultures, rng.fork("cultures"));
   const { burg, burgs } = placeBurgs(ground, culture, cultures, params.states, params.towns, rng.fork("burgs"));
+  // The age decides how big towns grow and what guards them; the classic world keeps its towns as they were.
+  const setting = settingOf(params.setting);
+  settleAge(burgs, setting, rng.fork("age"));
+  const rural = isClassic(setting) ? 1 : peopleOf(setting).rural;
   const { state, states, province, provinces } = formStates(ground, culture, cultures, burgs, params.provinceShare, rng.fork("states"));
 
   // Country folk: thousands per cell, by how kind the land is.
@@ -82,12 +88,12 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   const unit = mesh.spacing * mesh.spacing;
   for (let cell = 0; cell < mesh.cells; cell++) {
     if (water[cell]) continue;
-    population[cell] = (suitability(ground, cell) * 0.3 * mesh.area[cell]) / unit;
+    population[cell] = (suitability(ground, cell) * 0.3 * mesh.area[cell] * rural) / unit;
     states[state[cell]].rural += population[cell];
     cultures[culture[cell]].population += population[cell];
   }
   for (const item of burgs.slice(1)) cultures[item.culture].population += item.population;
-  const { religion, religions } = spreadReligions(ground, culture, cultures, burgs, state, states, population, rng.fork("religions"));
+  const { religion, religions, secular } = spreadReligions(ground, culture, cultures, burgs, state, states, population, rng.fork("religions"));
 
   // Names for the waters and lands, in the tongue of the people living there.
   const names = rng.fork("names");
@@ -116,5 +122,5 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   const routes = buildRoutes(ground, burgs, states);
   const markers = placeMarkers(ground, culture, cultures, state, states, burgs, burg, routes, rng.fork("markers"));
   const worldName = params.name || name((cultures[1] ?? cultures[0]).language, names, "land");
-  return { ...ground, name: worldName, population, culture, cultures, religion, religions, burg, burgs, state, states, province, provinces, routes, markers };
+  return { ...ground, name: worldName, population, culture, cultures, religion, religions, ...(secular ? { secular } : {}), burg, burgs, state, states, province, provinces, routes, markers };
 }

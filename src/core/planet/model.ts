@@ -4,6 +4,7 @@
 import type { Point } from "../geometry";
 import type { Language } from "../language";
 import type { Mesh } from "../mesh";
+import type { Setting } from "../setting";
 import type { TemplateId } from "./heightmap";
 
 export const SEA_LEVEL = 20;
@@ -14,6 +15,8 @@ export interface PlanetParams {
   name?: string;
   /** For a close-up: the seed of the world it was cut from, so its realms and towns keep their arms. */
   world?: string;
+  /** The world's age and setting; none is the medieval world with a few wonders. */
+  setting?: Partial<Setting>;
   width: number;
   height: number;
   /** Number of Voronoi cells: detail versus speed (2 000 – 50 000). */
@@ -105,7 +108,7 @@ export interface Burg {
   kind: CultureKind;
 }
 
-export type StateForm = "monarchy" | "republic" | "theocracy" | "union" | "tribal" | "horde" | "free-city";
+export type StateForm = "monarchy" | "republic" | "theocracy" | "union" | "tribal" | "horde" | "free-city" | "magocracy" | "dictatorship" | "corporate" | "machine" | "colony" | "warlord";
 
 export type Relation = "ally" | "friendly" | "neutral" | "suspicion" | "rival" | "enemy" | "vassal" | "suzerain";
 
@@ -161,7 +164,9 @@ export type ReligionForm =
   | "fire"
   | "death"
   | "serpent"
-  | "dragon";
+  | "dragon"
+  | "machine"
+  | "cosmic";
 
 export interface Religion {
   id: number;
@@ -183,7 +188,8 @@ export interface Religion {
   followers: number;
 }
 
-export type RouteKind = "highway" | "road" | "trail" | "sea";
+/** Air routes join the great cities of an age of flight in a straight line. */
+export type RouteKind = "highway" | "road" | "trail" | "sea" | "air";
 
 export interface Route {
   id: number;
@@ -209,7 +215,30 @@ export type MarkerKind =
   | "inn"
   | "watchtower"
   | "giant-tree"
-  | "portal";
+  | "portal"
+  | "megalith"
+  | "hunting-ground"
+  | "tomb"
+  | "oracle"
+  | "factory"
+  | "dam"
+  | "power-plant"
+  | "oil-field"
+  | "base"
+  | "airport"
+  | "arcology"
+  | "data-haven"
+  | "toxic-zone"
+  | "spaceport"
+  | "space-elevator"
+  | "terraformer"
+  | "biodome"
+  | "crater"
+  | "radiation"
+  | "crash-site"
+  | "bunker"
+  | "wizard-tower"
+  | "ley-nexus";
 
 export interface Marker {
   id: number;
@@ -250,6 +279,8 @@ export interface Planet {
   cultures: Culture[];
   religion: Uint16Array;
   religions: Religion[];
+  /** Share of people who keep no faith (modern and later ages). */
+  secular?: number;
   burg: Int32Array;
   burgs: Burg[];
   state: Uint16Array;

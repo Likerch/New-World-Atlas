@@ -3,12 +3,13 @@
 import { shade } from "../color";
 import { borders, outline, pathData, smooth, type Point } from "../geometry";
 import { toCyrillic } from "../language";
-import { armsOf } from "../planet/arms";
+import { emblemOf } from "../planet/arms";
 import { BIOMES } from "../planet/biomes";
 import { oceanCurrents, windAt } from "../planet/currents";
 import { raiseArmies } from "../planet/military";
 import type { MarkerKind, Planet } from "../planet/model";
-import { renderCoatOfArms } from "./heraldry-svg";
+import { ageOf, settingOf } from "../setting";
+import { renderEmblem } from "./heraldry-svg";
 import { defaultLayers, THEME, type LayerId, type Theme, type ThemeId } from "./themes";
 
 export interface RenderOptions {
@@ -84,6 +85,29 @@ const MARKER_GLYPH: Record<MarkerKind, string> = {
   watchtower: "♖",
   "giant-tree": "♠",
   portal: "◎",
+  megalith: "⊓",
+  "hunting-ground": "➶",
+  tomb: "△",
+  oracle: "Ω",
+  factory: "⚙",
+  dam: "≋",
+  "power-plant": "ϟ",
+  "oil-field": "▼",
+  base: "★",
+  airport: "✈",
+  arcology: "⌬",
+  "data-haven": "⌘",
+  "toxic-zone": "☣",
+  spaceport: "⇑",
+  "space-elevator": "⇡",
+  terraformer: "⊛",
+  biodome: "◓",
+  crater: "◌",
+  radiation: "☢",
+  "crash-site": "✸",
+  bunker: "⊟",
+  "wizard-tower": "✧",
+  "ley-nexus": "✺",
 };
 
 interface Box {
@@ -262,21 +286,45 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
     out.push(`<path d="${d}" fill="none" stroke="${theme.halo}" stroke-width="2.4" opacity="0.35"/><path d="${d}" fill="none" stroke="${theme.border}" stroke-width="1.2" stroke-dasharray="4 2.2" stroke-linecap="round"/>`);
   }
 
-  // Roads and sea lanes.
+  // Roads and sea lanes, in the manner of the world's age: railways, motorways and maglev lines for the main ways of
+  // the machine ages, broken roads after the fall, and air routes as light arcs between great cities.
   if (layers.routes) {
-    const style = {
+    const setting = settingOf(params.setting);
+    const age = ageOf(setting, setting.transport);
+    const style: Record<string, string> = {
       highway: `stroke="${theme.road}" stroke-width="1.4"`,
       road: `stroke="${theme.road}" stroke-width="0.9"`,
       trail: `stroke="${theme.road}" stroke-width="0.7" stroke-dasharray="1.6 1.4"`,
       sea: `stroke="${theme.sea}" stroke-width="0.8" stroke-dasharray="4 3" opacity="0.6"`,
+      air: `stroke="${theme.ink}" stroke-width="0.6" stroke-dasharray="1 3.5" opacity="0.55"`,
     };
+    // A second stroke over the first: the sleepers of a railway, the light core of a motorway or a maglev line.
+    const over: Record<string, string> = {};
+    if (age === "industrial") over.highway = `stroke="${theme.halo}" stroke-width="0.7" stroke-dasharray="2.4 2.4"`;
+    if (age === "modern" || age === "cyberpunk") {
+      style.highway = `stroke="${theme.road}" stroke-width="2.2"`;
+      over.highway = `stroke="${age === "cyberpunk" ? "#ff4fa3" : "#f2a33a"}" stroke-width="1.1"`;
+      style.road = `stroke="${theme.road}" stroke-width="1"`;
+    }
+    if (age === "far-future") {
+      style.highway = `stroke="#2fb7d8" stroke-width="2" opacity="0.45"`;
+      over.highway = `stroke="#d9f6ff" stroke-width="0.7"`;
+    }
+    if (age === "post-apocalypse") for (const kind of ["highway", "road"]) style[kind] += ` stroke-dasharray="7 2.5 1.5 3" opacity="0.75"`;
     out.push(`<g fill="none" stroke-linecap="round" stroke-linejoin="round">`);
     for (const route of planet.routes.slice(1)) {
       const points = route.cells.map((cell): Point => {
         const burg = planet.burgs[planet.burg[cell]];
         return planet.burg[cell] ? [burg.x, burg.y] : [mesh.x[cell], mesh.y[cell]];
       });
-      out.push(`<path d="${pathData(smooth(points, false, 2), false)}" ${style[route.kind]}/>`);
+      let d: string;
+      if (route.kind === "air") {
+        const [[ax, ay], [bx, by]] = points;
+        const bend = 0.18;
+        d = `M${r1(ax)},${r1(ay)}Q${r1((ax + bx) / 2 - (by - ay) * bend)},${r1((ay + by) / 2 + (bx - ax) * bend)} ${r1(bx)},${r1(by)}`;
+      } else d = pathData(smooth(points, false, 2), false);
+      out.push(`<path d="${d}" ${style[route.kind]}/>`);
+      if (over[route.kind]) out.push(`<path d="${d}" ${over[route.kind]}/>`);
     }
     out.push(`</g>`);
   }
@@ -380,16 +428,17 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
     out.push(`</g>`);
   }
 
-  // Each realm's arms beside its capital.
+  // Each realm's arms, flag or logo beside its capital.
   if (layers.emblems) {
-    const w = s * 1.5;
     for (const burg of planet.burgs.slice(1)) {
-      const arms = burg.capital && !burg.removed ? armsOf(planet, "state", burg.state) : null;
-      if (!arms) continue;
+      const emblem = burg.capital && !burg.removed ? emblemOf(planet, "state", burg.state) : null;
+      if (!emblem) continue;
+      const w = s * (emblem.kind === "flag" ? 1.8 : 1.5);
+      const h = emblem.kind === "flag" ? (w * 2) / 3 : emblem.kind === "logo" ? w : w * 1.1;
       const x = burg.x - w - s * 0.4,
-        y = burg.y - w * 0.55;
-      out.push(renderCoatOfArms(arms, { at: { x, y, width: w } }));
-      placed.push({ x0: x, y0: y, x1: x + w, y1: y + w * 1.1 });
+        y = burg.y - h / 2;
+      out.push(renderEmblem(emblem, { at: { x, y, width: w } }));
+      placed.push({ x0: x, y0: y, x1: x + w, y1: y + h });
     }
   }
 

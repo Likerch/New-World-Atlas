@@ -45,3 +45,4 @@ export * from "./render/heraldry-svg";
 export * from "./planet/arms";
 export * from "./planet/military";
 export * from "./planet/edit";
+export * from "./setting";

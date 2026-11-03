@@ -6,6 +6,8 @@ import { name } from "../language";
 import { buildMesh } from "../mesh";
 import { fbm, noise2 } from "../noise";
 import { createRng } from "../random";
+import { isClassic, peopleOf, settingOf } from "../setting";
+import { settleAge } from "./age";
 import { biomeOf } from "./biomes";
 import { suitability } from "./cultures";
 import { markFeatures } from "./features";
@@ -187,6 +189,11 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
     burg[cell] = id;
   }
 
+  // Villages grow and are guarded by the world's age, like its towns.
+  const setting = settingOf(planet.params.setting);
+  settleAge(burgs.filter((village) => village.origin === undefined), setting, rng.fork("age"));
+  const rural = isClassic(setting) ? 1 : peopleOf(setting).rural;
+
   // Roads: planet's road builder over a copy of the states whose "capital" is their biggest town here.
   const states = planet.states.map((s) => ({ ...s, pole: toRegion(s.pole[0], s.pole[1]) as [number, number], capital: burgs.find((b) => b.capital && b.state === s.id)?.id ?? 0 }));
   const roadStates = states.map((s) => ({ ...s, capital: s.capital || (burgs.filter((b) => b.state === s.id && b.id).sort((a, b) => b.population - a.population)[0]?.id ?? 0) }));
@@ -194,7 +201,7 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
   const markers = placeMarkers(ground, culture, planet.cultures, state, states, burgs, burg, routes, rng.fork("markers"));
   const population = new Float32Array(n);
   // Country folk per cell, scaled to the cell's real size.
-  for (let cell = 0; cell < n; cell++) if (!water[cell]) population[cell] = (suitability(ground, cell) * 0.3 * mesh.area[cell] * k * k) / (parent.spacing * parent.spacing);
+  for (let cell = 0; cell < n; cell++) if (!water[cell]) population[cell] = (suitability(ground, cell) * 0.3 * mesh.area[cell] * k * k * rural) / (parent.spacing * parent.spacing);
   const provinces = planet.provinces.map((p) => ({ ...p, pole: toRegion(p.pole[0], p.pole[1]) as [number, number], burg: burgs.find((b) => b.capital === false && b.name === planet.burgs[p.burg]?.name)?.id ?? 0 }));
   return { ...ground, name: title, population, culture, cultures: planet.cultures, religion, religions: planet.religions, burg, burgs, state, states, province: provinceOf, provinces, routes, markers };
 }

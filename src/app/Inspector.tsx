@@ -1,7 +1,7 @@
 // The GM's side panel: what is at the clicked place, and every state, people, town, river and point of interest with
 // its facts. Picking an entry highlights it and moves the map to it.
 import { useMemo, useState } from "react";
-import { altitude, armsOf, BIOMES, latitudeOf, localFromMarker, raiseArmies, renderCoatOfArms, SEA_LEVEL, type CoatOfArms, type Marker, type Planet } from "../core/index";
+import { ageOf, altitude, BIOMES, emblemOf, latitudeOf, localFromMarker, raiseArmies, renderEmblem, SEA_LEVEL, settingOf, techEra, type Emblem, type Marker, type Planet, type RouteKind } from "../core/index";
 import { area, km, people } from "./format";
 import type { T } from "./i18n";
 
@@ -43,11 +43,12 @@ function Link({ label, onClick }: { label: string; onClick: () => void }) {
   );
 }
 
-function Arms({ arms }: { arms: CoatOfArms | null }) {
-  return arms ? <div className="arms" dangerouslySetInnerHTML={{ __html: renderCoatOfArms(arms, { size: 64 }) }} /> : null;
+function Arms({ emblem }: { emblem: Emblem | null }) {
+  return emblem ? <div className="arms" dangerouslySetInnerHTML={{ __html: renderEmblem(emblem, { size: emblem.kind === "flag" ? 84 : 64 }) }} /> : null;
 }
 
-export function legendOf(marker: Marker, t: T, nm: (name: string) => string): string {
+/** A marker's story; `age` picks the age's own wording where it has one. */
+export function legendOf(marker: Marker, t: T, nm: (name: string) => string, age = ""): string {
   const facts = Object.fromEntries(
     Object.entries(marker.facts).map(([key, value]) => {
       if (typeof value === "number") return [key, value];
@@ -55,11 +56,15 @@ export function legendOf(marker: Marker, t: T, nm: (name: string) => string): st
       return [key, term === `fact.${value}` ? nm(value) : term];
     }),
   );
-  return t(`legend.${marker.kind}`, facts);
+  return t(`legend.${marker.kind}${age ? `@${age}` : ""}`, facts);
 }
 
 export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onOpenCity, onOpenRegion, onOpenLocal, onOpenCountry }: Props) {
   const [query, setQuery] = useState("");
+  // The age's own words for places, roads and arms.
+  const setting = settingOf(planet.params.setting);
+  const age = ageOf(setting);
+  const at = (key: string, vars?: Record<string, string | number>) => t(`${key}@${age}`, vars);
   const tabs: Tab[] = ["place", "states", "cultures", "religions", "burgs", "rivers", "markers"];
   const stateName = (id: number) => (id ? t(`form.${planet.states[id].formKey}`, { name: nm(planet.states[id].name) }) : t("form.wild"));
   const provinceName = (id: number) => (id ? t(`province.${planet.provinces[id].formKey}`, { name: nm(planet.provinces[id].name) }) : "—");
@@ -69,7 +74,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
   const match = (name: string) => !query.trim() || nm(name).toLowerCase().includes(query.trim().toLowerCase());
 
   const card = useMemo(() => {
-    if (!selection) return <p className="muted">{t("place.hint")}</p>;
+    if (!selection) return <WorldCard planet={planet} t={t} />;
     const { kind, id } = selection;
     if (kind === "cell") {
       const cell = id;
@@ -117,7 +122,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
       const regiments = id ? raiseArmies(planet).filter((regiment) => regiment.state === id) : [];
       return (
         <div className="card">
-          <Arms arms={armsOf(planet, "state", id)} />
+          <Arms emblem={emblemOf(planet, "state", id)} />
           <h3>
             <span className="swatch" style={{ background: state.color }} />
             {stateName(id)}
@@ -135,9 +140,9 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
               <Row label={t("army.total")} value={regiments.reduce((sum, regiment) => sum + regiment.total, 0).toLocaleString()} />
               <ul className="plain">
                 {regiments.map((regiment) => (
-                  <li key={regiment.id} title={(["infantry", "archers", "cavalry", "artillery", "fleet"] as const).filter((unit) => regiment.units[unit]).map((unit) => `${t(`army.unit.${unit}`)} ${regiment.units[unit].toLocaleString()}`).join(", ")}>
+                  <li key={regiment.id} title={(["infantry", "archers", "cavalry", "artillery", "fleet"] as const).filter((unit) => regiment.units[unit]).map((unit) => `${at(`army.unit.${unit}`)} ${regiment.units[unit].toLocaleString()}`).join(", ")}>
                     {t(`army.stance.${regiment.stance}`)} {regiment.number} — <Link label={nm(planet.burgs[regiment.burg].name)} onClick={() => pick("burg", regiment.burg, [regiment.x, regiment.y])} />, {regiment.total.toLocaleString()}
-                    {regiment.ships ? ` · ${t("army.ships", { count: regiment.ships })}` : ""}
+                    {regiment.ships ? ` · ${at("army.ships", { count: regiment.ships })}` : ""}
                     {regiment.facing ? ` · ${t("army.facing", { name: nm(planet.states[regiment.facing].name) })}` : ""}
                   </li>
                 ))}
@@ -185,7 +190,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
       const traits = (["capital", "port", "walls", "citadel", "temple", "market", "shanty"] as const).filter((trait) => burg[trait]).map((trait) => t(`burg.${trait}`));
       return (
         <div className="card">
-          <Arms arms={armsOf(planet, "burg", id)} />
+          <Arms emblem={emblemOf(planet, "burg", id)} />
           <h3>{nm(burg.name)}</h3>
           <Row label={t("stat.population")} value={people(burg.population, t)} />
           <Row label={t("place.religion")} value={planet.religion[burg.cell] ? faithAt(planet.religion[burg.cell]) : "—"} />
@@ -237,10 +242,10 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
       return (
         <div className="card">
           <h3>
-            {t(`marker.${marker.kind}`)}
+            {at(`marker.${marker.kind}`)}
             {marker.name ? ` ${nm(marker.name)}` : ""}
           </h3>
-          <p>{legendOf(marker, t, nm)}</p>
+          <p>{legendOf(marker, t, nm, age)}</p>
           <Row label={t("place.state")} value={stateName(planet.state[marker.cell])} />
           {onOpenLocal && localFromMarker(planet, marker.id) ? (
             <button type="button" className="primary wide" onClick={() => onOpenLocal(marker.id)}>
@@ -323,11 +328,11 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
       case "markers":
         return planet.markers
           .slice(1)
-          .filter((marker) => match(`${t(`marker.${marker.kind}`)} ${marker.name}`))
+          .filter((marker) => match(`${at(`marker.${marker.kind}`)} ${marker.name}`))
           .map((marker) => (
             <li key={marker.id} aria-selected={selection?.kind === "marker" && selection.id === marker.id} onClick={() => pick("marker", marker.id, [marker.x, marker.y])}>
               <span className="grow">
-                {t(`marker.${marker.kind}`)}
+                {at(`marker.${marker.kind}`)}
                 {marker.name ? ` ${nm(marker.name)}` : ""}
               </span>
             </li>
@@ -354,5 +359,26 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
         </>
       ) : null}
     </aside>
+  );
+}
+
+/** The world as a whole when nothing is picked: its age and setting, its roads and how many keep a faith. */
+function WorldCard({ planet, t }: { planet: Planet; t: T }) {
+  const setting = settingOf(planet.params.setting);
+  const roadAge = ageOf(setting, setting.transport);
+  const lengths = new Map<RouteKind, number>();
+  for (const route of planet.routes.slice(1)) lengths.set(route.kind, (lengths.get(route.kind) ?? 0) + route.length);
+  return (
+    <div className="card">
+      <h3>{planet.name}</h3>
+      <Row label={t("setting.era")} value={t(`era.${ageOf(setting)}`)} />
+      {techEra(setting.tech) !== techEra(setting.transport) ? <Row label={t("setting.transport")} value={t(`era.${techEra(setting.transport)}`)} /> : null}
+      <Row label={t("setting.magic")} value={t(`setting.magic.${setting.magic}`)} />
+      {[...lengths].map(([kind, length]) => (
+        <Row key={kind} label={t(`route.${kind}@${roadAge}`).replace(/^./u, (first) => first.toUpperCase())} value={km(length, t)} />
+      ))}
+      {planet.secular ? <Row label={t("religion.secular")} value={`${Math.round(planet.secular * 100)}%`} /> : null}
+      <p className="muted">{t("place.hint")}</p>
+    </div>
   );
 }

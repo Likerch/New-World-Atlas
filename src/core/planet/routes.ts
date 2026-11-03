@@ -1,8 +1,11 @@
 // Roads and sea lanes. Highways link neighbouring capitals, roads knit each state's towns into a network (a spanning
 // tree plus a few shortcuts), and ports on the same waters trade by sea. Paths are found with A* over the cells, and
-// later roads prefer to follow earlier ones, so networks merge the way real ones do.
+// later roads prefer to follow earlier ones, so networks merge the way real ones do. The age decides what they are:
+// footpaths before the wheel, railways and motorways later, and air routes between the great cities of an age of
+// flight; the map draws each kind in its age's manner.
 import Delaunator from "delaunator";
 import { PriorityQueue } from "../queue";
+import { ageOf, settingOf } from "../setting";
 import { BIOMES } from "./biomes";
 import type { Burg, Ground, Route, RouteKind, State } from "./model";
 
@@ -94,8 +97,11 @@ export function buildRoutes(g: Ground, burgs: Burg[], states: State[]): Route[] 
     let length = 0;
     for (let k = 1; k < cells.length; k++) length += Math.hypot(g.mesh.x[cells[k]] - g.mesh.x[cells[k - 1]], g.mesh.y[cells[k]] - g.mesh.y[cells[k - 1]]);
     routes.push({ id: routes.length, kind, cells, length: length * g.scale });
-    if (kind !== "sea") for (const cell of cells) roads[cell] = 1;
+    if (kind !== "sea" && kind !== "air") for (const cell of cells) roads[cell] = 1;
   };
+  const setting = settingOf(g.params.setting);
+  // Before the wheel every way is a footpath, and before boats there are no sea lanes.
+  const walking = setting.transport < 1;
 
   // Highways between the capitals of neighbouring states on the same landmass.
   const capitals = states.slice(1).filter((state) => state.capital);
@@ -105,7 +111,7 @@ export function buildRoutes(g: Ground, burgs: Burg[], states: State[]): Route[] 
       const a = burgs[state.capital].cell,
         b = burgs[states[other].capital].cell;
       if (g.feature[a] !== g.feature[b]) continue;
-      add("highway", findPath(g, a, b, false, roads));
+      add(walking ? "trail" : "highway", findPath(g, a, b, false, roads));
     }
   }
   // Roads inside each state; the smallest towns hang on trails.
@@ -116,7 +122,7 @@ export function buildRoutes(g: Ground, burgs: Burg[], states: State[]): Route[] 
     for (const group of byLand.values()) {
       for (const [a, b] of network(group.map((town) => [town.x, town.y]), 0.15)) {
         const small = group[a].population < 1.5 || group[b].population < 1.5;
-        add(small ? "trail" : "road", findPath(g, group[a].cell, group[b].cell, false, roads));
+        add(small || walking ? "trail" : "road", findPath(g, group[a].cell, group[b].cell, false, roads));
       }
     }
   }
@@ -128,8 +134,19 @@ export function buildRoutes(g: Ground, burgs: Burg[], states: State[]): Route[] 
     if (water === undefined) continue;
     byWater.set(g.feature[water], [...(byWater.get(g.feature[water]) ?? []), burg]);
   }
-  for (const ports of byWater.values()) {
-    for (const [a, b] of network(ports.map((port) => [port.x, port.y]), 0.1)) add("sea", findPath(g, ports[a].cell, ports[b].cell, true, roads));
+  if (setting.transport >= 0.5) {
+    for (const ports of byWater.values()) {
+      for (const [a, b] of network(ports.map((port) => [port.x, port.y]), 0.1)) add("sea", findPath(g, ports[a].cell, ports[b].cell, true, roads));
+    }
+  }
+  // Air routes: straight between the capitals and the greatest towns, over land and sea alike.
+  if (setting.transport >= 6.5 && ageOf(setting) !== "post-apocalypse") {
+    const hubs = burgs
+      .slice(1)
+      .filter((burg) => !burg.removed)
+      .sort((a, b) => Number(b.capital) - Number(a.capital) || b.population - a.population)
+      .slice(0, Math.min(24, states.length + 6));
+    for (const [a, b] of network(hubs.map((hub) => [hub.x, hub.y]), 0.25)) add("air", [hubs[a].cell, hubs[b].cell]);
   }
   return routes;
 }
