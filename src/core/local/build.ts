@@ -51,10 +51,26 @@ export function spot(b: Build, cells: number[], wx: number, wy: number): [number
   return found;
 }
 
-/** Where one level of a place meets the next: level n's stairs down and level n + 1's stairs up stand here. */
+/** Where one level of a place meets the next: level n's stairs down and level n + 1's stairs up stand here. Never
+ * where level n's own stairs up stand, so a level always has room for both. */
 export function linkPoint(seed: string, n: number, W: number, H: number): [number, number] {
   const rng = createRng(`${placeSeed(seed)}/link-${n}`);
-  return [Math.round(rng.float(0.22, 0.78) * W), Math.round(rng.float(0.28, 0.72) * H)];
+  const above = n > 1 ? linkPoint(seed, n - 1, W, H) : null;
+  let point: [number, number] = [0, 0];
+  for (let roll = 0; roll < 8; roll++) {
+    point = [Math.round(rng.float(0.22, 0.78) * W), Math.round(rng.float(0.28, 0.72) * H)];
+    if (!above || point[0] !== above[0] || point[1] !== above[1]) break;
+  }
+  return point;
+}
+
+/** The point on a map's edge a compass way leaves by (0 north, 2 east, 4 south, 6 west). */
+export function edgePoint(W: number, H: number, dir: number): [number, number] {
+  const angle = ((dir % 8) * Math.PI) / 4;
+  const dx = Math.sin(angle),
+    dy = -Math.cos(angle);
+  const t = Math.min(dx ? (dx > 0 ? (W - 1 - W / 2) / dx : -W / 2 / dx) : Infinity, dy ? (dy > 0 ? (H - 1 - H / 2) / dy : -H / 2 / dy) : Infinity);
+  return [Math.max(0, Math.min(W - 1, Math.round(W / 2 + dx * t))), Math.max(0, Math.min(H - 1, Math.round(H / 2 + dy * t)))];
 }
 
 /** How a family of places looks, sounds and smells. */
@@ -169,6 +185,11 @@ export function furnish(b: Build, room: Keyed, rng: Rng) {
     const [x, y] = spot(b, room.cells, wx, wy);
     if (freeFloor(b, cellAt(b, x, y))) put(x, y, kind);
   };
+  // Exactly here, if here is dry floor of the room: pillars in rows and corners, tents round a fire.
+  const inside = new Set(room.cells);
+  const stand = (x: number, y: number, kind: LocalFeatureKind) => {
+    if (x >= 0 && y >= 0 && x < b.W && y < b.H && inside.has(cellAt(b, x, y)) && freeFloor(b, cellAt(b, x, y))) put(x, y, kind);
+  };
   const box = boxOf(b, room.cells);
   const cx = box.x + Math.floor(box.w / 2),
     cy = box.y + Math.floor(box.h / 2);
@@ -199,8 +220,8 @@ export function furnish(b: Build, room: Keyed, rng: Rng) {
     case "great-hall":
       if (box.w >= 7 && box.h >= 5)
         for (let x = box.x + 1; x < box.x + box.w - 1; x += 2) {
-          put(x, box.y + 1, "pillar");
-          put(x, box.y + box.h - 2, "pillar");
+          stand(x, box.y + 1, "pillar");
+          stand(x, box.y + box.h - 2, "pillar");
         }
       at(cx, box.y + Math.floor(box.h / 2), b.params.theme === "temple" ? "altar" : "fire");
       break;
@@ -261,8 +282,8 @@ export function furnish(b: Build, room: Keyed, rng: Rng) {
     case "camp":
       at(cx, cy, "fire");
       if (wild) {
-        put(cx + 2, cy - 1, "tent");
-        put(cx - 2, cy + 1, "tent");
+        stand(cx + 2, cy - 1, "tent");
+        stand(cx - 2, cy + 1, "tent");
       }
       break;
     case "nest":
@@ -272,14 +293,14 @@ export function furnish(b: Build, room: Keyed, rng: Rng) {
       at(cx, cy, "pool");
       break;
     case "ruin":
-      for (let k = 0; k < 5; k++) put(cx + rng.int(-3, 3), cy + rng.int(-3, 3), "pillar");
+      for (let k = 0; k < 5; k++) stand(cx + rng.int(-3, 3), cy + rng.int(-3, 3), "pillar");
       break;
     case "entrance":
       break;
     default:
       if (room.purpose.startsWith("own:")) at(cx, cy, "statue");
   }
-  if (b.params.kind === "dungeon" && box.w >= 7 && box.h >= 6 && (room.purpose === "shrine" || room.purpose === "tomb" || room.purpose === "guard-room")) for (const [px, py] of [[box.x + 1, box.y + 1], [box.x + box.w - 2, box.y + 1], [box.x + 1, box.y + box.h - 2], [box.x + box.w - 2, box.y + box.h - 2]]) put(px, py, "pillar");
+  if (b.params.kind === "dungeon" && box.w >= 7 && box.h >= 6 && (room.purpose === "shrine" || room.purpose === "tomb" || room.purpose === "guard-room")) for (const [px, py] of [[box.x + 1, box.y + 1], [box.x + box.w - 2, box.y + 1], [box.x + 1, box.y + box.h - 2], [box.x + box.w - 2, box.y + box.h - 2]]) stand(px, py, "pillar");
 }
 
 /** Floods a room's middle: shallow, with deep spots. */
@@ -382,7 +403,8 @@ export function startOf(b: Pick<Build, "features" | "keyed" | "W">): number {
 }
 
 /** Locks the doors of the rooms that guard a place's best (its ruler, a treasury), one lock each, and lays each key
- * in a room one can reach before its lock: a later key may lie behind an earlier lock, never behind its own. */
+ * in a room one can reach before its lock: a later key may lie behind an earlier lock, never behind its own, and a
+ * new lock never shuts away a key laid before it. */
 export function lockAndKey(b: Build, targets: Keyed[], rng: Rng) {
   const doors = doorsOf(b);
   const start = startOf(b);
@@ -390,8 +412,15 @@ export function lockAndKey(b: Build, targets: Keyed[], rng: Rng) {
     const inside = new Set(room.cells);
     return [...doors.entries()].filter(([c]) => [c - 1, c + 1, c - b.W, c + b.W].some((n) => inside.has(n))).map(([, f]) => f);
   };
+  // Where one can get holding the keys below n: with lock n and every later one shut.
+  const reachWithout = (n: number) => {
+    const shut = new Set(b.features.filter((f) => f.kind === "locked-door" && (f.lock ?? 0) >= n).map((f) => f.x + f.y * b.W));
+    return walk({ tiles: b.tiles, params: b.params }, doors, start, (c) => shut.has(c));
+  };
   let lock = 0;
   for (const target of targets) {
+    // A room that holds a key already is never locked after it: its key would lie behind the lock that needs it.
+    if (target.key !== undefined) continue;
     const own = roomDoors(target).filter((f) => f.kind === "door");
     if (!own.length || roomDoors(target).some((f) => f.kind === "secret-door")) continue;
     const n = lock + 1;
@@ -399,11 +428,11 @@ export function lockAndKey(b: Build, targets: Keyed[], rng: Rng) {
       f.kind = "locked-door";
       f.lock = n;
     }
-    // Where one can get with this lock and every later one shut.
-    const shut = new Set(b.features.filter((f) => f.kind === "locked-door" && (f.lock ?? 0) >= n).map((f) => f.x + f.y * b.W));
-    const dist = walk({ tiles: b.tiles, params: b.params }, doors, start, (c) => shut.has(c));
+    const dist = reachWithout(n);
     const reached = b.keyed.filter((room) => room !== target && room.purpose !== "entrance" && !room.secret && room.key === undefined && reachOf(room, dist) < Infinity);
-    if (!reached.length) {
+    // Every key laid before must still be reached with the keys before it.
+    const strands = b.keyed.some((room) => room.key !== undefined && reachOf(room, reachWithout(room.key)) === Infinity);
+    if (!reached.length || strands) {
       for (const f of own) {
         f.kind = "door";
         delete f.lock;

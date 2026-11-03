@@ -1,6 +1,6 @@
 // Local-map regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { blocked, doorsOf, editLocal, editUnderworld, generateBuilding, localFromCellar, renderUnderworldSection, tierOf, underworldGhostSvg, generateCity, generateGalaxy, localAt, localFromCavern, localFromLandmark, localFromStar, localScene, localStory, generateUnderworld, reachOf, renderLocal, renderLocalScene, renderUnderworld, SETTINGS, generateLocal, generatePlanet, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localFromMarker, TILE, walk, type LocalMap } from "../src/core/index";
+import { blocked, doorsOf, editLocal, editUnderworld, generateBuilding, localFromCellar, localParams, renderUnderworldSection, tierOf, underworldGhostSvg, generateCity, generateGalaxy, localAt, localFromCavern, localFromLandmark, localFromStar, localScene, localStory, generateUnderworld, reachOf, renderLocal, renderLocalScene, renderUnderworld, SETTINGS, generateLocal, generatePlanet, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localFromMarker, TILE, walk, type LocalMap, type LocalTheme } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -190,9 +190,9 @@ test("in every age the underworld is one web, and its ways down open close benea
   }
 });
 
-/** Where one starts: the stairs up, else the way in at the map's edge. */
+/** Where one starts: the stairs up, else the way in at the map's edge, else a cavern's first tunnel. */
 const startOf = (map: LocalMap) => {
-  const way = map.features.find((f) => f.kind === "stairs-up") ?? map.features.find((f) => (f.kind === "exit" || f.kind === "airlock") && f.to === "")!;
+  const way = map.features.find((f) => f.kind === "stairs-up") ?? map.features.find((f) => (f.kind === "exit" || f.kind === "airlock") && f.to === "") ?? map.features.find((f) => f.kind === "exit")!;
   return way.x + way.y * map.params.width;
 };
 
@@ -238,10 +238,10 @@ test("levels link up: a level's stairs down stand where the next one's stairs up
   }
 });
 
-test("a stable key: danger, ruler and age never move rooms or change what they are for", () => {
-  for (const theme of ["crypt", "mine", "starship"] as const) {
-    const a = generateLocal({ seed: `stable-${theme}`, kind: "dungeon", theme, danger: 1 });
-    const b = generateLocal({ seed: `stable-${theme}`, kind: "dungeon", theme, danger: 3, boss: "troll", age: "modern", levels: 3 });
+test("a stable key: danger, ruler, age, magic and depth never move rooms or change what they are for", () => {
+  for (const [kind, theme] of [["dungeon", "crypt"], ["dungeon", "mine"], ["dungeon", "starship"], ["cave", "mine"]] as const) {
+    const a = generateLocal({ seed: `stable-${theme}`, kind, theme, danger: 1, levels: 1 });
+    const b = generateLocal({ seed: `stable-${theme}`, kind, theme, danger: 3, boss: "troll", age: "modern", magic: 2, levels: 3 });
     assert.deepEqual(Array.from(b.tiles), Array.from(a.tiles), `${theme}: tiles moved`);
     assert.deepEqual(b.keyed.map((r) => [r.id, r.purpose, r.cells.length]), a.keyed.map((r) => [r.id, r.purpose, r.cells.length]), `${theme}: rooms changed`);
   }
@@ -466,6 +466,85 @@ test("a building's cellar leads down by its kind and age; a deep people's hold i
   const hold = generateLocal(localFromCavern(world, home.id)!.params);
   const folk = hold.keyed.flatMap((r) => r.monsters).filter((g) => g.who === "deep-folk");
   assert.ok(folk.length && folk.every((g) => g.name === world.peoples[home.people - 1].name));
+});
+
+test("review fixes: whole tiles, a corridor to every room, lava that cuts nothing off, keys one can reach", () => {
+  // Half a tile is no tile: the size rounds, and nothing stands between two tiles.
+  const params = localParams({ seed: "half", kind: "wilderness", width: 40.5, height: 30.4, rooms: 2.6 });
+  assert.deepEqual([params.width, params.height, params.rooms], [41, 30, 3]);
+  const half = generateLocal({ seed: "half", kind: "dungeon", width: 40.5, height: 30.5 });
+  assert.ok(half.features.every((f) => Number.isInteger(f.x) && Number.isInteger(f.y)), "a feature between tiles");
+  // Rooms on the rim of the corridors' graph are joined too (an edge of the hull has one half-edge).
+  const rims: [string, LocalTheme | undefined][] = [["hf-sewer-68", "sewer"], ["d3-235", undefined], ["d3-394", undefined], ...Array.from({ length: 40 }, (_, k): [string, undefined] => [`rim-${k}`, undefined])];
+  for (const [seed, theme] of rims) {
+    const map = generateLocal({ seed, kind: "dungeon", theme });
+    const dist = walk(map, doorsOf(map), startOf(map));
+    for (const room of map.keyed) assert.ok(reachOf(room, dist) < Infinity, `${seed}: room ${room.id} has no way in`);
+  }
+  // A magma chamber's lava never walls ground off, however wide its band; its ways off the map stay dry.
+  for (let k = 0; k < 16; k++) {
+    const map = generateLocal({ seed: `m4-${k}`, kind: "cave", theme: "lair", origin: { kind: k % 2 ? "magma" : "sea", facts: {} }, exits: [{ dir: k % 8, kind: "passage", to: "A" }, { dir: (k + 3) % 8, kind: "passage", to: "B" }] });
+    const dist = walk(map, doorsOf(map), startOf(map));
+    map.tiles.forEach((tile, c) => assert.ok(blocked(tile) || dist[c] < Infinity, `m4-${k}: ground cut off`));
+    for (const exit of map.features.filter((f) => f.kind === "exit")) assert.ok(![TILE.lava, TILE.water, TILE.deep].includes(map.tiles[exit.x + exit.y * map.params.width] as never), `m4-${k}: a way out under lava or water`);
+  }
+  // Two locks: each key is reached holding the keys before it, so every lock can be opened in turn.
+  for (const seed of ["dl-53", "dl-332", "dl-1017", ...Array.from({ length: 40 }, (_, k) => `dl-x${k}`)]) {
+    const map = generateLocal({ seed, kind: "dungeon", theme: "temple" });
+    const W = map.params.width;
+    const held = new Set<number>();
+    for (let round = 0; round < 4; round++) {
+      const shut = new Set(map.features.filter((f) => f.kind === "locked-door" && !held.has(f.lock!)).map((f) => f.x + f.y * W));
+      const dist = walk(map, doorsOf(map), startOf(map), (c) => shut.has(c));
+      for (const room of map.keyed) if (room.key && reachOf(room, dist) < Infinity) held.add(room.key);
+    }
+    for (const room of map.keyed.filter((r) => r.lock)) assert.ok(held.has(room.lock!), `${seed}: lock ${room.lock} cannot be opened`);
+  }
+});
+
+test("review fixes: stairs meet and stay dry, cisterns hold water, pieces stand on floor, small ships can be boarded", () => {
+  for (const [seed, theme] of [["lk-bunker-60/depth-2", "bunker"], ["lk-metro-105/depth-2", "metro"]] as const) {
+    const map = generateLocal({ seed, kind: "dungeon", theme, depth: 2, levels: 3 });
+    assert.ok(map.features.some((f) => f.kind === "stairs-down") && map.features.some((f) => f.kind === "stairs-up"), `${seed}: no way down`);
+  }
+  const caves: [string, LocalTheme][] = [["lk-mine-85", "mine"], ...Array.from({ length: 30 }, (_, k): [string, LocalTheme] => [`lk-${k}`, (["lair", "mine", "hold"] as const)[k % 3]])];
+  for (const [seed, theme] of caves) {
+    const first = generateLocal({ seed, kind: "cave", theme, levels: 2 });
+    const second = generateLocal({ ...first.params, seed: `${seed}/depth-2`, depth: 2 });
+    const down = first.features.find((f) => f.kind === "stairs-down")!;
+    const up = second.features.find((f) => f.kind === "stairs-up")!;
+    assert.deepEqual([down.x, down.y], [up.x, up.y], `${seed}: the stairs do not meet`);
+  }
+  for (let k = 0; k < 20; k++)
+    for (const theme of ["mine", "factory"] as const) {
+      const map = generateLocal({ seed: `wet-${k}/depth-2`, kind: "dungeon", theme, depth: 2, levels: 3 });
+      for (const f of map.features.filter((item) => item.kind === "stairs-down" || item.kind === "stairs-up")) assert.ok(![TILE.water, TILE.deep].includes(map.tiles[f.x + f.y * map.params.width] as never), `wet-${k} ${theme}: ${f.kind} in the water`);
+    }
+  let cisterns = 0;
+  for (let k = 0; k < 20; k++) {
+    const map = generateLocal({ seed: `cistern-${k}`, kind: "dungeon", theme: "sewer" });
+    for (const room of map.keyed.filter((r) => r.purpose === "cistern")) {
+      cisterns++;
+      assert.ok(room.cells.some((c) => map.tiles[c] === TILE.deep), `cistern-${k}: a dry cistern`);
+    }
+  }
+  assert.ok(cisterns > 3, `${cisterns} cisterns`);
+  // Pillars and tents stand on dry floor; a cave's chambers hold no chasm or lava; no tree grows on a wreck.
+  for (let k = 0; k < 8; k++)
+    for (const map of [generateLocal({ seed: `hold-${k}`, kind: "cave", theme: "hold" }), generateLocal({ seed: `abyss-${k}`, kind: "cave", theme: "lair", origin: { kind: k % 2 ? "abyss" : "magma", facts: {} } }), generateLocal({ seed: `wild-${k}`, kind: "wilderness", theme: k % 2 ? "swamp" : "coast", origin: { kind: "shipwreck", facts: {} } })]) {
+      const tile = (f: { x: number; y: number }) => map.tiles[f.x + f.y * map.params.width];
+      for (const f of map.features.filter((item) => item.kind === "pillar" || item.kind === "tent")) assert.ok(!blocked(tile(f)) && tile(f) !== TILE.water && tile(f) !== TILE.deep, `${map.params.seed}: a ${f.kind} in rock or water`);
+      for (const f of map.features.filter((item) => item.kind === "tree" || item.kind === "rock")) assert.notEqual(tile(f), TILE.hull, `${map.params.seed}: a tree on the hull`);
+      if (map.params.kind === "cave") for (const room of map.keyed) assert.ok(room.cells.every((c) => !blocked(map.tiles[c])), `${map.params.seed}: room ${room.id} takes in rock, chasm or lava`);
+    }
+  // However short, a ship has its engines, its bridge and a way aboard.
+  for (const theme of ["starship", "derelict"] as const)
+    for (const width of [24, 28]) {
+      const map = generateLocal({ seed: `short-${width}`, kind: "dungeon", theme, width, height: 24 });
+      const purposes = map.keyed.map((r) => r.purpose);
+      assert.ok(purposes.includes("engine-room") && purposes.includes("ship-bridge") && purposes.includes("entrance"), `${theme} ${width}: ${purposes.join(",")}`);
+      assert.ok(map.features.some((f) => f.kind === "airlock" && f.to === ""), `${theme} ${width}: no way aboard`);
+    }
 });
 
 console.log(`local: ${passed} regressions passed`);
