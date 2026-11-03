@@ -4,7 +4,7 @@
 // buildings open as floor plans like any other.
 import type { Point } from "../geometry";
 import { name } from "../language";
-import { area, centroid, ccw, clipConvex, insetConvex, longestEdge, segmentIntersection, splitConvex } from "../polygon";
+import { area, centroid, ccw, clipConvex, insetConvex, longestEdge, pointInPolygon, segmentIntersection, splitConvex } from "../polygon";
 import { createRng } from "../random";
 import { lots, scatter } from "./buildings";
 import { organicEra, PROPS, type Building, type City, type Street, type Ward } from "./model";
@@ -138,17 +138,19 @@ export function generateDistrict(city: City, wardId: number): City {
   });
   for (const ward of blockWards) ward.buildings = buildings.filter((b) => b.ward === ward.id && b.kind !== "tree" && b.kind !== "yard").length;
 
-  // Landmarks of the quarter keep their place; each moves to the block it now stands in.
+  // Landmarks of the quarter keep their place; each moves to the block it now stands in, and remembers the house of the
+  // whole city it stood on, so it opens as the same house from either map.
   const landmarks = city.landmarks
     .filter((landmark) => landmark.ward === focus.id)
     .map((landmark) => {
+      const origin = landmark.origin ?? city.buildings.findIndex((b) => b.ward === landmark.ward && !PROPS.includes(b.kind) && b.polygon.length > 2 && pointInPolygon([landmark.x, landmark.y], b.polygon));
       const at = T([landmark.x, landmark.y]);
       const block = blockWards.reduce((best, ward) => (Math.hypot(ward.center[0] - at[0], ward.center[1] - at[1]) < Math.hypot(best.center[0] - at[0], best.center[1] - at[1]) ? ward : best), blockWards[0] ?? focus);
       // On the house it marks, not in the courtyard behind it.
       const homes = buildings.filter((b) => b.ward === block.id && !PROPS.includes(b.kind) && b.kind !== "shed");
       const away = (b: Building) => Math.hypot(centroid(b.polygon)[0] - at[0], centroid(b.polygon)[1] - at[1]);
       const spot = homes.length ? centroid(homes.reduce((best, b) => (away(b) < away(best) ? b : best)).polygon) : at;
-      return { ...landmark, x: spot[0], y: spot[1], ward: block.id };
+      return { ...landmark, x: spot[0], y: spot[1], ward: block.id, ...(origin >= 0 ? { origin } : {}) };
     });
   return {
     params: { ...city.params, seed, name: focus.name || city.name, width: FRAME_W, height: FRAME_H },

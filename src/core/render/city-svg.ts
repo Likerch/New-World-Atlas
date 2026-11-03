@@ -1,10 +1,12 @@
 // A city as an SVG string: water, fields and parks, buildings (towers cast shadows), streets and highways, bridges,
 // walls with towers and gates, landmark icons and names, with a scale bar in metres. A stone-age camp gets a wooden
 // palisade, the survivors' holds of a dead city scrap barricades; ruins are drawn broken.
-import type { City, CityParams, LandmarkKind, WardKind } from "../city/model";
+import type { City, CityParams, Landmark, LandmarkKind, WardKind } from "../city/model";
 import { pathData, smooth, type Point } from "../geometry";
 import { toCyrillic } from "../language";
-import { centroid } from "../polygon";
+import { centroid, distanceToPolyline } from "../polygon";
+import { heightField } from "../city/layout";
+import { renderCoatOfArms } from "./heraldry-svg";
 import { present, type LegendEntry, type LegendSection, type Swatch } from "./legend";
 
 export type CityThemeId = "ink" | "color" | "parchment" | "blueprint" | "neon" | "future" | "wasteland";
@@ -130,6 +132,15 @@ const LANDMARK_GLYPH: Record<LandmarkKind, string> = {
   "vault-door": "⊟",
   scrapyard: "⚙",
   "radio-tower": "⫯",
+  palace: "♛",
+  cathedral: "✠",
+  bank: "¤",
+  "mage-tower": "✶",
+  "old-ruins": "⌓",
+  tents: "▲",
+  prison: "⊞",
+  "old-gate": "∩",
+  custom: "✦",
 };
 
 export interface CityRenderOptions {
@@ -138,11 +149,62 @@ export interface CityRenderOptions {
   script?: "latin" | "cyrillic";
   /** A ward drawn with an emphasis outline. */
   highlight?: number | null;
+  /** A place or a building singled out on the map (selected, or found by a search). */
+  mark?: { landmark?: number | null; building?: number | null };
+  /** Quarters washed in a colour: the faction that holds each, for the influence layer. */
+  tints?: { ward: number; color: string; opacity: number }[];
+  /** The players' view: places only the GM knows of stay off the map. */
+  players?: boolean;
 }
+
+/** A place's mark: its kind's glyph, or the game master's own. */
+export function landmarkGlyph(city: City, landmark: Landmark): { glyph: string; color: string | null } {
+  if (landmark.kind === "custom") {
+    const own = city.params.custom?.places.find((place) => place.id === landmark.custom);
+    return { glyph: own?.glyph || LANDMARK_GLYPH.custom, color: own?.color ?? null };
+  }
+  return { glyph: LANDMARK_GLYPH[landmark.kind], color: null };
+}
+
+/** The tint of a quarter of the game master's own kind. */
+const customTint = (city: City, ward: { custom?: string }) => (ward.custom ? city.params.custom?.wards.find((kind) => kind.id === ward.custom)?.color : undefined);
 
 const esc = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;").replace(/"/gu, "&quot;");
 const r1 = (value: number) => Math.round(value * 10) / 10;
 const poly = (points: Point[]) => pathData([...points, points[0]], true);
+
+/** Contour lines of a height field over the frame (marching squares), every tenth from 0.1 to 0.9, as short segments. */
+function contours(height: (at: Point) => number, W: number, H: number): Point[][] {
+  const step = 12;
+  const cols = Math.ceil(W / step) + 1,
+    rows = Math.ceil(H / step) + 1;
+  const h: number[] = [];
+  for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) h.push(height([i * step, j * step]));
+  const out: Point[][] = [];
+  for (let level = 0.1; level < 0.95; level += 0.1) {
+    for (let j = 0; j < rows - 1; j++)
+      for (let i = 0; i < cols - 1; i++) {
+        const corners: [number, Point][] = [
+          [h[j * cols + i], [i * step, j * step]],
+          [h[j * cols + i + 1], [(i + 1) * step, j * step]],
+          [h[(j + 1) * cols + i + 1], [(i + 1) * step, (j + 1) * step]],
+          [h[(j + 1) * cols + i], [i * step, (j + 1) * step]],
+        ];
+        const cuts: Point[] = [];
+        for (let k = 0; k < 4; k++) {
+          const [a, pa] = corners[k];
+          const [b, pb] = corners[(k + 1) % 4];
+          if (a < level !== b < level) {
+            const t = (level - a) / (b - a);
+            cuts.push([pa[0] + (pb[0] - pa[0]) * t, pa[1] + (pb[1] - pa[1]) * t]);
+          }
+        }
+        if (cuts.length >= 2) out.push([cuts[0], cuts[1]]);
+        if (cuts.length === 4) out.push([cuts[2], cuts[3]]);
+      }
+  }
+  return out;
+}
 
 export function renderCity(city: City, options: CityRenderOptions = {}): string {
   const themeId = options.theme ?? defaultCityTheme(city.params.era);
@@ -161,14 +223,22 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
   if (layers.wards && stone) out.push(`<g fill="${th.plaza}" filter="url(#clearing)">${city.wards.filter((ward) => ward.urban || ward.kind === "farm").map((ward) => `<path d="${poly(ward.polygon)}"/>`).join("")}</g>`);
   else if (layers.wards) {
     for (const ward of city.wards) {
-      const tint = ward.kind === "plaza" ? th.plaza : th.tint[ward.kind];
-      if (tint) out.push(`<path d="${poly(ward.polygon)}" fill="${tint}"/>`);
+      const own = customTint(city, ward);
+      const tint = own ?? (ward.kind === "plaza" ? th.plaza : th.tint[ward.kind]);
+      if (tint) out.push(`<path d="${poly(ward.polygon)}" fill="${tint}"${own ? ` fill-opacity="0.45"` : ""}/>`);
     }
   }
+  if (city.lake) out.push(`<path d="${pathData(smooth([...city.lake, city.lake[0]], true, 2), true)}" fill="${th.water}" stroke="${th.shore}" stroke-width="1.2"/>`);
+  // Contours of a hilly town, every tenth of its height.
+  const height = layers.fields ? heightField(city.params) : null;
+  if (height) out.push(`<path d="${contours(height, W, H).map((line) => `M${line.map(([x, y]) => `${r1(x)},${r1(y)}`).join("L")}`).join("")}" fill="none" stroke="${th.fieldLine}" stroke-width="0.7" opacity="0.55"/>`);
   const byKind = (kind: string) => city.buildings.filter((b) => b.kind === kind);
   if (layers.fields) {
     out.push(`<g stroke="${th.fieldLine}" stroke-width="0.5">`);
-    byKind("field").forEach((b, k) => out.push(`<path d="${poly(b.polygon)}" fill="${th.field[k % 2]}"/>`));
+    // Fields of the dry lands are pale with dust; those of the north are dark and wet.
+    const biome = city.params.biome ?? "";
+    const dry = biome === "hot-desert" || biome === "cold-desert" || biome === "savanna";
+    byKind("field").forEach((b, k) => out.push(`<path d="${poly(b.polygon)}" fill="${th.field[k % 2]}"${dry ? ` fill-opacity="0.55"` : ""}/>`));
     out.push(`</g>`);
     // Courtyards: gardens behind the houses.
     for (const yard of byKind("yard")) out.push(`<path d="${poly(yard.polygon)}" fill="${th.field[1]}" stroke="${th.fieldLine}" stroke-width="0.4"/>`);
@@ -190,15 +260,28 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
       out.push(`<path d="${d}" fill="none" stroke="${th.casing}" stroke-width="${r1(street.width + 1.4)}" stroke-linecap="round" stroke-linejoin="round" opacity="${street.kind === "main" ? 0.35 : 0.8}"/><path d="${d}" fill="none" stroke="${th.street}" stroke-width="${r1(street.width)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     }
     for (const street of city.streets.filter((s) => s.kind === "path")) out.push(`<path d="${pathData(smooth(street.points, false, 2), false)}" fill="none" stroke="${th.casing}" stroke-width="${r1(Math.max(0.8, street.width))}" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="${r1(Math.max(2, m(3)))} ${r1(Math.max(1, m(1.2)))}" opacity="0.75"/>`);
+    // Alleys: lanes cut through the quarters between the rows of houses.
+    for (const street of city.streets.filter((s) => s.kind === "alley")) out.push(`<path d="${streetPath(street.points)}" fill="none" stroke="${th.street}" stroke-width="${r1(street.width)}" stroke-linecap="butt" opacity="0.95"/>`);
+    // Boulevards where the old walls stood: a broad way with a row of trees down either side.
+    for (const street of city.streets.filter((s) => s.kind === "boulevard")) {
+      const d = streetPath(street.points);
+      out.push(`<path d="${d}" fill="none" stroke="${th.casing}" stroke-width="${r1(street.width + 1.4)}" stroke-linejoin="round" opacity="0.8"/><path d="${d}" fill="none" stroke="${th.street}" stroke-width="${r1(street.width)}" stroke-linejoin="round"/><path d="${d}" fill="none" stroke="${th.treeLine}" stroke-width="${r1(Math.max(1.2, street.width * 0.18))}" stroke-dasharray="${r1(Math.max(1.2, m(2.5)))} ${r1(Math.max(1.5, m(5)))}" stroke-linecap="round" opacity="0.7"/>`);
+    }
     for (const [a, b] of city.bridges) out.push(`<path d="M${r1(a[0])},${r1(a[1])}L${r1(b[0])},${r1(b[1])}" stroke="${th.line}" stroke-width="${r1(m(12))}" stroke-linecap="butt"/><path d="M${r1(a[0])},${r1(a[1])}L${r1(b[0])},${r1(b[1])}" stroke="${th.street}" stroke-width="${r1(m(8))}" stroke-linecap="butt"/>`);
   }
 
   if (layers.trees) {
+    // The land the town stands in: firs in the taiga, palms in the hot lands, broadleaves elsewhere.
+    const biome = city.params.biome ?? "";
+    const firs = biome === "taiga" || biome === "tundra" || biome === "temperate-rainforest";
+    const palms = biome === "hot-desert" || biome === "savanna" || biome === "tropical-seasonal-forest" || biome === "tropical-rainforest";
     out.push(`<g fill="${th.tree}" stroke="${th.treeLine}" stroke-width="0.5">`);
     for (const tree of byKind("tree")) {
       const [cx, cy] = centroid(tree.polygon);
       const r = Math.hypot(tree.polygon[0][0] - cx, tree.polygon[0][1] - cy);
-      out.push(`<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r)}"/>`);
+      if (firs) out.push(`<path d="M${r1(cx)},${r1(cy - r * 1.1)}L${r1(cx + r * 0.8)},${r1(cy + r * 0.8)}L${r1(cx - r * 0.8)},${r1(cy + r * 0.8)}Z"/>`);
+      else if (palms) out.push(`<path d="M${r1(cx - r)},${r1(cy)}L${r1(cx + r)},${r1(cy)}M${r1(cx)},${r1(cy - r)}L${r1(cx)},${r1(cy + r)}M${r1(cx - r * 0.7)},${r1(cy - r * 0.7)}L${r1(cx + r * 0.7)},${r1(cy + r * 0.7)}M${r1(cx + r * 0.7)},${r1(cy - r * 0.7)}L${r1(cx - r * 0.7)},${r1(cy + r * 0.7)}" stroke="${th.treeLine}" stroke-width="${r1(Math.max(0.5, r * 0.3))}" stroke-linecap="round"/><circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r * 0.25)}"/>`);
+      else out.push(`<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r)}"/>`);
     }
     out.push(`</g>`);
   }
@@ -210,8 +293,15 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
     const neon: Partial<Record<WardKind, [string, string]>> = { commercial: ["#ff3d7f", "#38e1ff"], megablock: ["#a46bff", "#38e1ff"], arcology: ["#ffcc33", "#ffffff"], industrial: ["#ff9f1a", "#ffcc33"], "combat-zone": ["#ff4d4d", "#ff9f1a"], port: ["#2bd9c4", "#38e1ff"] };
     const wardById = new Map(city.wards.map((ward) => [ward.id, ward]));
     city.buildings.forEach((building, index) => {
-      if (building.kind === "tree" || building.kind === "field" || building.kind === "pier" || building.kind === "yard") return;
+      if (building.kind === "tree" || building.kind === "field" || building.kind === "pier" || building.kind === "yard" || building.kind === "gone") return;
       const d = poly(building.polygon);
+      if (building.kind === "tent") {
+        // A round tent: felt or hide, the smoke hole in the middle.
+        const [cx, cy] = centroid(building.polygon);
+        const r = Math.hypot(building.polygon[0][0] - cx, building.polygon[0][1] - cy);
+        shapes.push(`<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r)}" fill="${th.rich}" stroke="${th.line}" stroke-width="0.5"/><path d="M${r1(cx - r)},${r1(cy)}H${r1(cx + r)}M${r1(cx)},${r1(cy - r)}V${r1(cy + r)}" stroke="${th.line}" stroke-width="0.3" opacity="0.6"/><circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(Math.max(0.4, r * 0.2))}" fill="${th.line}"/>`);
+        return;
+      }
       if (building.kind === "grave") {
         shapes.push(`<path d="${d}" fill="${th.rich}" stroke="none" opacity="0.7"/>`);
         return;
@@ -290,6 +380,33 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
       shapes.push(`<path d="${d}" fill="${fill}" stroke="${stroke}" stroke-width="${th.glow && tall ? 0.8 : 0.45}"${th.glow && building.floors > 60 ? ` filter="url(#glow)"` : ""}/>`);
     });
     out.push(`<g>${shadows.join("")}</g><g stroke-linejoin="round">${shapes.join("")}</g>`);
+    // Up close, every house shows its front: the wall that faces the street, and the door in it.
+    if (city.scale < 0.8) {
+      const fronts = city.streets.filter((street) => ["main", "street", "road", "avenue", "alley", "boulevard"].includes(street.kind));
+      const marks: string[] = [];
+      for (const building of city.buildings) {
+        if (!["house", "landmark", "tower", "industrial"].includes(building.kind) || building.polygon.length < 3 || !fronts.length) continue;
+        let best = -1;
+        let near = Infinity;
+        building.polygon.forEach((a, k) => {
+          const b = building.polygon[(k + 1) % building.polygon.length];
+          const mid: Point = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+          for (const street of fronts) {
+            const d = distanceToPolyline(mid, street.points) - street.width / 2;
+            if (d < near) ((near = d), (best = k));
+          }
+        });
+        if (best < 0 || near > m(12)) continue;
+        const a = building.polygon[best];
+        const b = building.polygon[(best + 1) % building.polygon.length];
+        const mx = (a[0] + b[0]) / 2,
+          my = (a[1] + b[1]) / 2;
+        const len = Math.hypot(b[0] - a[0], b[1] - a[1]) || 1;
+        const door = Math.min(len * 0.25, m(1.2));
+        marks.push(`M${r1(a[0])},${r1(a[1])}L${r1(mx - ((b[0] - a[0]) / len) * door)},${r1(my - ((b[1] - a[1]) / len) * door)}M${r1(mx + ((b[0] - a[0]) / len) * door)},${r1(my + ((b[1] - a[1]) / len) * door)}L${r1(b[0])},${r1(b[1])}`);
+      }
+      if (marks.length) out.push(`<path d="${marks.join("")}" fill="none" stroke="${th.line}" stroke-width="${r1(Math.max(1, m(0.5)))}" stroke-linecap="butt"/>`);
+    }
   }
 
   if (layers.streets) {
@@ -314,6 +431,12 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
         continue;
       }
       const width = wall.citadel ? m(5) : m(6.5);
+      if (wall.old) {
+        // An old wall the town grew past: lower, broken in places, its towers stubs.
+        out.push(`<path d="${pathData(ring, true)}" fill="none" stroke="${th.wall}" stroke-width="${r1(Math.max(1.2, width * 0.7))}" stroke-linejoin="round" stroke-dasharray="${r1(Math.max(6, m(40)))} ${r1(Math.max(2, m(8)))}" opacity="0.6"/>`);
+        for (const p of wall.towers) out.push(`<circle cx="${r1(p[0])}" cy="${r1(p[1])}" r="${r1(Math.max(m(3.5), 1.6))}" fill="${th.wall}" opacity="0.6"/>`);
+        continue;
+      }
       out.push(`<path d="${pathData(ring, true)}" fill="none" stroke="${th.wall}" stroke-width="${r1(Math.max(1.6, width))}" stroke-linejoin="round"/>`);
       if (wall.bastions) {
         // Star-fort bastions: arrowheads at each corner, pointing outwards.
@@ -334,16 +457,25 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
     }
   }
 
+  for (const tint of options.tints ?? []) {
+    const ward = city.wards.find((w) => w.id === tint.ward);
+    if (ward) out.push(`<path d="${poly(ward.polygon)}" fill="${tint.color}" fill-opacity="${r1(tint.opacity * 100) / 100}" stroke="${tint.color}" stroke-opacity="0.5" stroke-width="1"/>`);
+  }
   if (options.highlight !== null && options.highlight !== undefined) {
     const ward = city.wards.find((w) => w.id === options.highlight);
     if (ward) out.push(`<path d="${poly(ward.polygon)}" fill="#ffd34d" fill-opacity="0.15" stroke="#ffb300" stroke-width="2.5"/>`);
   }
+  const marked = options.mark?.building;
+  if (marked !== null && marked !== undefined && city.buildings[marked]) out.push(`<path d="${poly(city.buildings[marked].polygon)}" fill="#ffd34d" fill-opacity="0.55" stroke="#e08a00" stroke-width="2"/>`);
 
   if (layers.landmarks) {
     const r = 6.5;
     out.push(`<g text-anchor="middle" font-family="'Segoe UI Symbol', 'Noto Sans Symbols', sans-serif">`);
     for (const landmark of city.landmarks) {
-      out.push(`<g data-landmark="${landmark.id}"><circle cx="${r1(landmark.x)}" cy="${r1(landmark.y)}" r="${r}" fill="${th.halo}" stroke="${th.label}" stroke-width="0.8"/><text x="${r1(landmark.x)}" y="${r1(landmark.y + r * 0.42)}" font-size="${r * 1.2}" fill="${th.label}">${LANDMARK_GLYPH[landmark.kind]}</text></g>`);
+      const { glyph, color } = landmarkGlyph(city, landmark);
+      const lit = options.mark?.landmark === landmark.id;
+      if (lit) out.push(`<circle cx="${r1(landmark.x)}" cy="${r1(landmark.y)}" r="${r * 1.9}" fill="#ffd34d" fill-opacity="0.45" stroke="#e08a00" stroke-width="1.6"/>`);
+      out.push(`<g data-landmark="${landmark.id}"><circle cx="${r1(landmark.x)}" cy="${r1(landmark.y)}" r="${r}" fill="${color ?? th.halo}" stroke="${th.label}" stroke-width="${lit ? 1.6 : 0.8}"/><text x="${r1(landmark.x)}" y="${r1(landmark.y + r * 0.42)}" font-size="${r * 1.2}" fill="${color ? "#ffffff" : th.label}">${esc(glyph)}</text></g>`);
     }
     out.push(`</g>`);
   }
@@ -368,6 +500,12 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
     const title = text(city.name);
     const tw = Math.max(120, title.length * 13 + 40);
     out.push(`<rect x="16" y="16" width="${tw}" height="38" rx="3" fill="${th.halo}" fill-opacity="0.9" stroke="${th.label}"/><text x="${16 + tw / 2}" y="42" text-anchor="middle" font-size="20" letter-spacing="2" font-weight="600" fill="${th.label}">${title}</text>`);
+    // The town's arms beside its name.
+    if (city.params.arms) out.push(renderCoatOfArms(city.params.arms, { at: { x: 22 + tw, y: 12, width: 40 } }));
+    // North, up the map: under the name, clear of the map's own buttons.
+    const nx = 40,
+      ny = 92;
+    out.push(`<g><circle cx="${nx}" cy="${ny}" r="17" fill="${th.halo}" fill-opacity="0.85" stroke="${th.label}" stroke-width="0.8"/><path d="M${nx},${ny - 14}L${nx + 6},${ny + 6}L${nx},${ny + 2}L${nx - 6},${ny + 6}Z" fill="${th.label}"/><text x="${nx}" y="${ny - 19}" text-anchor="middle" font-size="11" font-weight="700" fill="${th.label}">N</text></g>`);
     const target = (W / 6) * city.scale;
     const magnitude = 10 ** Math.floor(Math.log10(target));
     const metres = [1, 2, 5, 10].map((k) => k * magnitude).reduce((best, value) => (Math.abs(value - target) < Math.abs(best - target) ? value : best));
@@ -389,11 +527,17 @@ export function cityLegend(city: City, options: CityRenderOptions = {}): LegendS
   const era = city.params.era;
   const wards: LegendEntry[] = [];
   if (layers.wards && era === "stone") wards.push({ key: "legend.clearing", swatch: { fill: th.plaza } });
-  else if (layers.wards)
-    for (const kind of present(city.wards.map((w) => w.kind))) {
+  else if (layers.wards) {
+    for (const kind of present(city.wards.filter((w) => !w.custom).map((w) => w.kind))) {
       const tint = kind === "plaza" ? th.plaza : th.tint[kind];
       if (tint) wards.push({ key: `ward.${kind}@${era}`, swatch: { fill: tint } });
     }
+    // The game master's own kinds of quarter, by their own names.
+    for (const id of present(city.wards.flatMap((w) => (w.custom ? [w.custom] : [])))) {
+      const own = city.params.custom?.wards.find((kind) => kind.id === id);
+      if (own) wards.push({ label: own.name || "?", swatch: { fill: own.color, opacity: 0.45 } });
+    }
+  }
   const looks: Partial<Record<string, Swatch>> = {
     house: { fill: th.building, stroke: th.line },
     tower: { fill: th.tower, stroke: th.line },
@@ -415,6 +559,7 @@ export function cityLegend(city: City, options: CityRenderOptions = {}): LegendS
     pen: { svg: `<circle cx="12" cy="8" r="6" fill="${th.field[0]}" fill-opacity="0.6" stroke="#7a5634" stroke-width="1" stroke-dasharray="1.4 0.9"/>` },
     rack: { svg: `<path d="M5,8H19" stroke="#7a5634" stroke-width="1.2"/><circle cx="5" cy="8" r="1.2" fill="#7a5634"/><circle cx="19" cy="8" r="1.2" fill="#7a5634"/>` },
     boat: { svg: `<path d="M3,8L12,5.5L21,8L12,10.5Z" fill="#8a5a33" stroke="${th.line}" stroke-width="0.5"/>` },
+    tent: { svg: `<circle cx="12" cy="8" r="5.5" fill="${th.rich}" stroke="${th.line}" stroke-width="0.6"/><circle cx="12" cy="8" r="1" fill="${th.line}"/>` },
   };
   const buildings = layers.buildings ? present(city.buildings.map((b) => b.kind)).flatMap((kind) => (looks[kind] ? [{ key: `bkind.${kind}`, swatch: looks[kind]! }] : [])) : [];
   const streets: LegendEntry[] = [];
@@ -431,12 +576,19 @@ export function cityLegend(city: City, options: CityRenderOptions = {}): LegendS
               ? { line: th.glow ? "#38e1ff" : th.line, width: 2, dash: "6 3" }
               : kind === "path"
                 ? { line: th.casing, width: 1.8, dash: "3 1.2" }
-                : { line: th.casing, width: 5.5, over: th.street, overWidth: 3.5 };
+                : kind === "alley"
+                  ? { line: th.building, width: 5, over: th.street, overWidth: 1.6 }
+                  : kind === "boulevard"
+                    ? { line: th.casing, width: 7, over: th.street, overWidth: 5, overDash: "" }
+                    : { line: th.casing, width: 5.5, over: th.street, overWidth: 3.5 };
       streets.push({ key: `street.${kind}`, swatch });
     }
   const water: LegendEntry[] = [];
   if (city.sea) water.push({ key: "legend.sea", swatch: { fill: th.water, stroke: th.shore } });
   if (city.river) water.push({ key: "legend.river", swatch: { line: th.water, width: 4.5 } });
+  if (city.lake) water.push({ key: "legend.lake", swatch: { fill: th.water, stroke: th.shore, round: true } });
+  if ((city.params.relief ?? 0) > 0 && layers.fields) water.push({ key: "legend.contours", swatch: { svg: `<path d="M2,11C7,4 17,4 22,11M5,13C9,8 15,8 19,13" fill="none" stroke="${th.fieldLine}" stroke-width="0.8"/>` } });
+  if (city.walls.some((wall) => wall.old) && layers.walls) water.push({ key: "legend.oldWall", swatch: { line: th.wall, width: 2, dash: "6 2", opacity: 0.6 } });
   const defences: LegendEntry[] = [];
   if (layers.walls && city.walls.length) {
     if (era === "stone") defences.push({ key: "legend.palisade", swatch: { line: "#7a5634", width: 2.4, dash: "1.2 0.8" } });
@@ -447,7 +599,12 @@ export function cityLegend(city: City, options: CityRenderOptions = {}): LegendS
         { key: "legend.gate", swatch: { svg: `<path d="M2,8H22" stroke="${th.wall}" stroke-width="3"/><rect x="8" y="4" width="8" height="8" fill="${th.paper}" stroke="${th.wall}" stroke-width="1.4"/>` } },
       );
   }
-  const landmarks = layers.landmarks ? present(city.landmarks.map((l) => l.kind)).map((kind) => ({ key: `landmark.${kind}@${era}`, swatch: { glyph: LANDMARK_GLYPH[kind], color: th.label, ring: th.label, bg: th.halo } })) : [];
+  const landmarks: LegendEntry[] = layers.landmarks ? present(city.landmarks.filter((l) => l.kind !== "custom").map((l) => l.kind)).map((kind) => ({ key: `landmark.${kind}@${era}`, swatch: { glyph: LANDMARK_GLYPH[kind], color: th.label, ring: th.label, bg: th.halo } })) : [];
+  if (layers.landmarks)
+    for (const id of present(city.landmarks.flatMap((l) => (l.kind === "custom" && l.custom ? [l.custom] : [])))) {
+      const own = city.params.custom?.places.find((place) => place.id === id);
+      if (own) landmarks.push({ label: own.name || "?", swatch: { glyph: own.glyph || LANDMARK_GLYPH.custom, color: "#ffffff", ring: th.label, bg: own.color } });
+    }
   return [
     { key: "legend.wards", entries: wards },
     { key: "legend.buildings", entries: buildings },

@@ -356,7 +356,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
           ) : null}
           {onDescend && (marker.kind === "cave" || marker.kind === "mine" || marker.kind === "volcano" || (marker.kind === "portal" && marker.facts.leadsTo === "underworld")) ? (
             <button type="button" className="wide" onClick={() => onDescend(marker.id)}>
-              🕳 {t("action.descend")}
+              🕳 {t("action.toUnderworld")}
             </button>
           ) : null}
         </div>

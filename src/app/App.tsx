@@ -20,7 +20,6 @@ import {
   galaxyParams,
   legendSvg,
   levelsOf,
-  localFromLandmark,
   localFromMarker,
   localParams,
   mapKeyOf,
@@ -291,7 +290,9 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     local.restore!(resolve(world, `local:${base.seed}`, base), link.language);
     setView("local");
   };
-  const building = useBuildingLevel(ctx, back("building"));
+  const building = useBuildingLevel(ctx, back("building"), (link, entity) => openLocal(building, link, entity));
+  // "Deeper" from a town: the underworld of the planet it hangs from (set once the planet level exists, below).
+  const cityBelow = useRef<(() => void) | null>(null);
   const city = useCityLevel(
     ctx,
     undefined,
@@ -300,11 +301,12 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
       // The GM's name for the building on the city map is the plan's name.
       const base = { ...params, ...(named ? { name: named } : {}) } as unknown as Record<string, unknown>;
       linkTo("building", city, entity, base);
-      building.restore!(resolve(world, `building:${params.seed}`, base));
+      building.restore!(resolve(world, `building:${params.seed}`, base), made.language);
       setView("building");
     },
     back("city"),
-    (made, landmark) => openLocal(city, localFromLandmark(made, landmark), `landmark:${landmark}`),
+    (link, entity) => openLocal(city, link, entity),
+    cityBelow,
   );
   const openCity = (from: Level, made: Planet, burg: number) => {
     // A town of a close-up is its planet's town: it opens as the same city, hanging from the planet.
@@ -416,6 +418,14 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   const galaxy = useGalaxyLevel(ctx, spaceLinks(() => galaxy), back("galaxy"), world.setting);
   const universe = useUniverseLevel(ctx, spaceLinks(() => universe), world.setting);
   const levels: Level[] = [universe, galaxy, system, planet, region, underworld, city, building, local];
+  const cityParent = city.worldKey ? world.maps[city.worldKey]?.parent : null;
+  cityBelow.current =
+    planet.planet && cityParent && world.maps[cityParent]?.level === "planet"
+      ? () => {
+          linkTo("underworld", planet, "underworld", null);
+          underworld.open(planet.planet!);
+        }
+      : null;
   const byId = Object.fromEntries(levels.map((item) => [item.id, item])) as Record<LevelId, Level>;
   const level = byId[view] ?? byId[world.top];
   function levelKey(id: LevelId): string | null {

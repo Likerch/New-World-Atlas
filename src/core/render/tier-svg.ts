@@ -9,7 +9,7 @@ import { present, type LegendEntry, type LegendSection } from "./legend";
 const r1 = (value: number) => Math.round(value * 10) / 10;
 const ring = (points: [number, number][]) => `M${points.map(([x, y]) => `${r1(x)},${r1(y)}`).join("L")}Z`;
 const esc = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
-const HALL_GLYPH: Record<HallPurpose, string> = { market: "¥", turf: "☠", metro: "Ⓜ", flooded: "≈", cult: "⛧", ossuary: "☩", smugglers: "⚓", squat: "⌂" };
+const HALL_GLYPH: Record<HallPurpose, string> = { market: "¥", turf: "☠", metro: "Ⓜ", flooded: "≈", cult: "⛧", ossuary: "☩", smugglers: "⚓", squat: "⌂", cistern: "◍", vault: "⊟", bunker: "▣" };
 
 export function renderTier(city: City, tiers: Tiers, tier: Tier, options: CityRenderOptions = {}): string {
   if (tier === "street") return renderCity(city, options);
@@ -23,6 +23,10 @@ export function renderTier(city: City, tiers: Tiers, tier: Tier, options: CityRe
     for (const roof of tiers.upper.roofs) out.push(`<path d="${ring(roof)}" fill="#1c2236" stroke="#38e1ff" stroke-width="0.9"/>`);
     out.push(`<path d="${tiers.upper.bridges.map(([a, b]) => `M${r1(a[0])},${r1(a[1])}L${r1(b[0])},${r1(b[1])}`).join("")}" stroke="#ff3d7f" stroke-width="2.2" stroke-linecap="round" filter="url(#tier-glow)"/>`);
     for (const [x, y] of tiers.upper.pads) out.push(`<circle cx="${r1(x)}" cy="${r1(y)}" r="6" fill="#0b0d14" stroke="#ffcc33" stroke-width="1.5"/><text x="${r1(x)}" y="${r1(y + 3.5)}" text-anchor="middle" font-size="9" font-weight="700" fill="#ffcc33" font-family="Arial">H</text>`);
+    // An old town's rooftops in the dark: the roofs warm, the planks between them, lookouts on the towers.
+    if (tiers.upper.rooftops.length) out.push(`<path d="${tiers.upper.rooftops.map(ring).join("")}" fill="#4a3426" stroke="#c98a4a" stroke-width="0.6"/>`);
+    if (tiers.upper.planks.length) out.push(`<path d="${tiers.upper.planks.map(([a, b]) => `M${r1(a[0])},${r1(a[1])}L${r1(b[0])},${r1(b[1])}`).join("")}" stroke="#f2d38a" stroke-width="1.4" stroke-linecap="round"/>`);
+    for (const [x, y] of tiers.upper.lookouts) out.push(`<circle cx="${r1(x)}" cy="${r1(y)}" r="6" fill="#0b0d14" stroke="#f2d38a" stroke-width="1.5"/><text x="${r1(x)}" y="${r1(y + 3.5)}" text-anchor="middle" font-size="9" fill="#f2d38a" font-family="'Segoe UI Symbol', sans-serif">👁</text>`);
     return base.replace(/<\/svg>$/u, `${out.join("")}</svg>`);
   }
   out.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="'Segoe UI', Arial, sans-serif">`);
@@ -45,10 +49,13 @@ export function renderTier(city: City, tiers: Tiers, tier: Tier, options: CityRe
 /** What a tier shows, for its legend: only what is on it. */
 export function tierLegend(tiers: Tiers, tier: Tier): LegendSection[] {
   if (tier === "upper") {
-    const entries: LegendEntry[] = [{ key: "legend.roof", swatch: { fill: "#1c2236", stroke: "#38e1ff" } }];
+    const entries: LegendEntry[] = tiers.upper.roofs.length || !tiers.upper.rooftops.length ? [{ key: "legend.roof", swatch: { fill: "#1c2236", stroke: "#38e1ff" } }] : [];
     if (tiers.upper.bridges.length) entries.push({ key: "legend.skybridge", swatch: { line: "#ff3d7f", width: 2.6 } });
     if (tiers.upper.pads.length) entries.push({ key: "legend.pad", swatch: { glyph: "H", color: "#ffcc33", bg: "#0b0d14" } });
-    return [{ key: "tier.upper", entries }];
+    if (tiers.upper.rooftops.length) entries.push({ key: "legend.rooftop", swatch: { fill: "#4a3426", stroke: "#c98a4a" } });
+    if (tiers.upper.planks.length) entries.push({ key: "legend.plank", swatch: { line: "#f2d38a", width: 2 } });
+    if (tiers.upper.lookouts.length) entries.push({ key: "legend.lookout", swatch: { glyph: "👁", color: "#f2d38a", bg: "#0b0d14" } });
+    return [{ key: tiers.upper.roofs.length ? "tier.upper" : "tier.upper.old", entries }];
   }
   if (tier !== "under") return [];
   const ways: LegendEntry[] = [{ key: "legend.tunnel", swatch: { line: "#4a4f5c", width: 5, over: "#2b2f38", overWidth: 3 } }];

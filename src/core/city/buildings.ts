@@ -4,7 +4,7 @@
 // camp is a scatter of huts; antiquity lays its houses on one street grid; the far future raises green towers far
 // apart; after the fall the city is a field of ruins round the survivors' crowded holds.
 import type { Point } from "../geometry";
-import { area, centroid, ccw, clipConvex, distanceToPolyline, insetConvex, longestEdge, pointInPolygon, rotate, splitConvex } from "../polygon";
+import { area, centroid, ccw, clipConvex, distanceToPolyline, insetConvex, longestEdge, pointInPolygon, rotate, segmentIntersection, splitConvex } from "../polygon";
 import type { Rng } from "../random";
 import type { Layout } from "./layout";
 import { organicEra, type Building, type BuildingKind, type CityParams, type WardKind } from "./model";
@@ -61,8 +61,9 @@ const FALLEN_RULES: Partial<Record<WardKind, Rule>> = {
   slum: { lot: 70, empty: 0.3, floors: [1, 1], kind: "house", gap: 1.2 },
 };
 
-/** Cuts a convex polygon into lots of about a target area, splitting across its longest side each time. */
-export function lots(poly: Point[], target: number, rng: Rng, out: Point[][], depth = 0): void {
+/** Cuts a convex polygon into lots of about a target area, splitting across its longest side each time. The first
+ * cuts (when `cuts` is given) are kept: the gaps along them are the alleys between the rows of houses. */
+export function lots(poly: Point[], target: number, rng: Rng, out: Point[][], depth = 0, cuts?: [Point, Point][]): void {
   const size = area(poly);
   if (size < target * rng.float(1.1, 1.9) || depth > 14) {
     out.push(poly);
@@ -74,8 +75,31 @@ export function lots(poly: Point[], target: number, rng: Rng, out: Point[][], de
   const t = rng.float(0.38, 0.62);
   const at: Point = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
   const angle = Math.atan2(b[1] - a[1], b[0] - a[0]) + Math.PI / 2 + rng.float(-0.12, 0.12);
-  for (const half of splitConvex(poly, at, [Math.cos(angle), Math.sin(angle)])) if (half.length >= 3 && area(half) > target * 0.15) lots(half, target, rng, out, depth + 1);
+  const dir: Point = [Math.cos(angle), Math.sin(angle)];
+  if (cuts && depth <= 1) {
+    // The cut's chord across the piece: where the cutting line meets its sides.
+    const far: [Point, Point] = [[at[0] - dir[0] * 1e4, at[1] - dir[1] * 1e4], [at[0] + dir[0] * 1e4, at[1] + dir[1] * 1e4]];
+    const ends = poly.map((p, k) => segmentIntersection(far[0], far[1], p, poly[(k + 1) % poly.length])).filter((p): p is Point => !!p);
+    if (ends.length >= 2) {
+      const [p, q] = ends.reduce<[Point, Point]>((best, e) => ends.reduce<[Point, Point]>((inner, f) => (Math.hypot(f[0] - e[0], f[1] - e[1]) > Math.hypot(inner[1][0] - inner[0][0], inner[1][1] - inner[0][1]) ? [e, f] : inner), best), [ends[0], ends[1]]);
+      cuts.push([p, q]);
+    }
+  }
+  for (const half of splitConvex(poly, at, dir)) if (half.length >= 3 && area(half) > target * 0.15) lots(half, target, rng, out, depth + 1, cuts);
 }
+
+/** What a rebuild of some quarters asks of the builder: only those quarters, each from a stream of the given name. */
+export interface BuildOptions {
+  only?: Set<number>;
+  label?: (ward: number) => string;
+  /** Collects the alleys cut through walled-town quarters: their ends and width, by ward. */
+  alleys?: { ward: number; a: Point; b: Point; width: number }[];
+  /** Height of the ground at a point, 0–1, when the town has relief; the steepest lots stay empty. */
+  slope?: (at: Point) => number;
+}
+
+/** Quarters whose lots are cut by alleys. */
+const ALLEYED: WardKind[] = ["craftsmen", "merchants", "slum", "patriciate", "administration", "harbour", "old-town", "military"];
 
 /** Parallel strips across a polygon: open fields. */
 function strips(poly: Point[], angle: number, width: number): Point[][] {
@@ -127,7 +151,7 @@ export function scatter(poly: Point[], spacing: number, rng: Rng, size: [number,
   }
 }
 
-export function buildBuildings(params: CityParams, layout: Layout, net: StreetNet, rng: Rng): Building[] {
+export function buildBuildings(params: CityParams, layout: Layout, net: StreetNet, rng: Rng, options: BuildOptions = {}): Building[] {
   const { diagram, sea, river, urban, kinds, wealth, angles, scale, center } = layout;
   const m = (metres: number) => metres / scale;
   // Level of detail: on a metropolis map one lot, block or tree may stand for several, so the map stays drawable.
@@ -135,7 +159,8 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
   const span = (metres: number, least: number) => Math.max(m(metres), least);
   const organic = organicEra(params.era);
   const out: Building[] = [];
-  const wet = (poly: Point[]) => poly.some((p) => (sea && pointInPolygon(p, sea)) || (river && distanceToPolyline(p, river.points) < river.width / 2 + m(1.5)));
+  const lake = layout.lake;
+  const wet = (poly: Point[]) => poly.some((p) => (sea && pointInPolygon(p, sea)) || (lake && pointInPolygon(p, lake)) || (river && distanceToPolyline(p, river.points) < river.width / 2 + m(1.5)));
   const streetHalf = m(organic ? 2.4 : params.era === "industrial" ? 4 : params.era === "modern" ? 5 : 6);
   const majorHalf = m(organic ? 5 : params.era === "cyberpunk" ? 13 : params.era === "modern" ? 10 : 7);
   const wallGap = params.walls && organic ? m(9) : streetHalf;
@@ -241,7 +266,8 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
     const kind = kinds[ward];
     const cell = diagram.cells[ward];
     if (layout.water[ward] || cell.length < 3) continue;
-    const own = rng.fork(`ward-${ward}`);
+    if (options.only && !options.only.has(ward)) continue;
+    const own = rng.fork(options.label?.(ward) ?? `ward-${ward}`);
     // Each side steps back by half the width of the street (or the wall's clear strip) along it.
     const widths = cell.map((a, k) => {
       const b = cell[(k + 1) % cell.length];
@@ -352,29 +378,41 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
 
     const rule = (params.era === "far-future" ? FUTURE_RULES[kind] : params.era === "post-apocalypse" ? FALLEN_RULES[kind] : undefined) ?? (!organic && kind === "suburb" ? MODERN_SUBURB : RULES[kind] ?? RULES.craftsmen!);
     const nearRoad = (poly: Point[]) => roads.some((road) => distanceToPolyline(centroid(poly), road.points) < m(45));
+    // A town grown in rings: the old core packs narrower lots (on a Roman grid, if that is how it began), the newest
+    // ring wider ones.
+    const ring = layout.rings?.[ward];
+    const ages = layout.ringAges;
+    const roman = ring !== undefined && ages ? ages[Math.min(ages.length - 1, ring)] === "ancient" && organic : false;
+    const lotScale = ring === undefined || !ages ? 1 : ring === 0 ? 0.8 : ring >= ages.length - 1 ? 1.25 : 1;
     const cells =
-      params.era === "ancient"
+      params.era === "ancient" || roman
         ? grid(inner, gridAngle, span(38, 8), span(5, 1))
         : rule.block && !organic && kind !== "old-town"
           ? grid(inner, angles[ward], span(rule.block, 9), span(params.era === "cyberpunk" ? 12 : params.era === "modern" ? 10 : 8, 1.2))
           : [inner];
+    // A walled town's quarter keeps its first cuts as alleys between the rows of houses.
+    const cuts: [Point, Point][] | undefined = options.alleys && organic && cells.length === 1 && cells[0] === inner && ALLEYED.includes(kind) ? [] : undefined;
     for (const block of cells) {
       const parts: Point[][] = [];
       if (kind === "megablock") parts.push(block);
-      else lots(block, lotArea(rule.lot), own, parts);
+      else lots(block, lotArea(rule.lot * lotScale), own, parts, 0, cuts);
       for (const lot of parts) {
         if (own.chance(rule.empty)) continue;
         if (kind === "suburb" && organic && !nearRoad(lot)) continue;
         if (kind === "slum" && !urban[ward] && !nearRoad(lot) && own.chance(0.6)) continue;
         const shape = insetConvex(lot, m(rule.gap));
         if (!shape || area(shape) < Math.min(lotArea(12), 3)) continue;
+        // Nobody builds on the steepest slopes of a hilly town.
+        if (options.slope && options.slope(centroid(shape)) > 0.6) continue;
         const floors = own.int(rule.floors[0], rule.floors[1]) + (organic ? Math.round(wealth[ward]) : 0);
         // A ruin keeps only part of its walls.
         const ruined = rule.kind === "ruin" ? insetConvex(shape, m(own.float(0, rule.gap))) : shape;
         if (ruined) push(ruined, rule.kind === "tower" && floors < 8 ? "house" : rule.kind, floors);
       }
     }
+    if (cuts) for (const [a, b] of cuts) options.alleys!.push({ ward, a, b, width: Math.max(m(rule.gap * 2), 0.8) });
   }
+  if (options.only) return out;
   // A camp keeps its dugouts drawn up on the bank nearest the fire.
   const shore = params.era === "stone" ? (river?.points ?? sea?.slice(0, -2) ?? null) : null;
   if (shore && shore.length > 2) {

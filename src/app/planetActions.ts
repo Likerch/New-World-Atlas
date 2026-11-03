@@ -55,7 +55,7 @@ export function planetActions(planet: Planet, t: T, nm: (name: string) => string
       const items: MenuItem[] = [];
       if (burg && open.city) items.push({ label: `🏰 ${t("action.openCity")}: ${nm(burg.name)}`, run: () => open.city!(burg.id) });
       if (marker && open.local && localFromMarker(planet, marker.id)) items.push({ label: `🗺️ ${t("action.openLocal")}${marker.name ? `: ${nm(marker.name)}` : ""}`, run: () => open.local!(marker.id) });
-      if (marker && open.descend && deep(marker.kind, marker.facts)) items.push({ label: `🕳 ${t("action.descend")}`, run: () => open.descend!(marker.id) });
+      if (marker && open.descend && deep(marker.kind, marker.facts)) items.push({ label: `🕳 ${t("action.toUnderworld")}`, run: () => open.descend!(marker.id) });
       if (!planet.water[cell]) {
         if (open.region && planet.province[cell]) items.push({ label: `🗺 ${t("action.openRegion")}: ${nm(planet.provinces[planet.province[cell]].name)}`, run: () => open.region!(planet.province[cell]) });
         if (open.country && planet.state[cell]) items.push({ label: `🗺 ${t("action.openCountry")}: ${nm(planet.states[planet.state[cell]].name)}`, run: () => open.country!(planet.state[cell]) });

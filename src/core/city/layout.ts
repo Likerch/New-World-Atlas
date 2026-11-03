@@ -1,9 +1,13 @@
 // City layout: wards as Voronoi cells packed densely around the centre, the sea and the river, which wards are
-// town proper, what each ward is for, and the wall with its gates and towers.
+// town proper, what each ward is for, and the wall with its gates and towers. Asked for, a town also gets hills (the
+// citadel and the temple on the heights) and a lake, gates where the world's roads come in, and growth in rings of
+// ages: an old core whose wall still stands inside the new one, or was pulled down for a boulevard, and newer quarters
+// round it, each ring built in its own age's way.
 import { chainSegments, type Point } from "../geometry";
 import { fbm, noise2 } from "../noise";
 import { area, distanceToPolyline, pointInPolygon } from "../polygon";
-import type { Rng } from "../random";
+import { createRng, type Rng } from "../random";
+import type { EraId } from "../setting";
 import { voronoi, type Voronoi } from "../voronoi";
 import { organicEra, type CityParams, type Wall, type WardKind } from "./model";
 
@@ -24,12 +28,57 @@ export interface Layout {
   walls: Wall[];
   /** Corner ids of the gates in the wall. */
   gates: number[];
+  /** A hilly town: the height of the ground (0–1) and how steep it is at a point. */
+  height?: (at: Point) => number;
+  slope?: (at: Point) => number;
+  lake?: Point[] | null;
+  /** A town grown in rings: each ward's ring (0 is the old core), the age each ring was built in, the boulevards where
+   * old walls were pulled down, and the corners of the old wall lines (for their gates). */
+  rings?: number[];
+  ringAges?: EraId[];
+  boulevards?: Point[][];
+  oldLines?: number[][];
 }
+
+/** The ages a town grown in rings was built in, from its core out. */
+export const GROWTH_AGES: Record<EraId, EraId[]> = {
+  stone: ["stone"],
+  ancient: ["ancient", "ancient"],
+  medieval: ["ancient", "medieval", "medieval"],
+  renaissance: ["medieval", "medieval", "renaissance"],
+  industrial: ["medieval", "renaissance", "industrial", "industrial"],
+  modern: ["medieval", "industrial", "modern", "modern"],
+  cyberpunk: ["renaissance", "industrial", "modern", "cyberpunk"],
+  "far-future": ["industrial", "modern", "cyberpunk", "far-future"],
+  "post-apocalypse": ["medieval", "industrial", "modern", "modern"],
+};
 
 /** People per hectare in the built-up area, by era. */
 const DENSITY = { stone: 60, ancient: 200, medieval: 220, renaissance: 260, industrial: 300, modern: 90, cyberpunk: 420, "far-future": 160, "post-apocalypse": 4 };
 
 const isSeaAt = (sea: Point[] | null, p: Point) => !!sea && pointInPolygon(p, sea);
+
+/** How high the ground of a hilly town stands at a point, 0–1; null for a flat town. The renderer draws its contours
+ * from the same field. */
+export function heightField(params: CityParams): ((at: Point) => number) | null {
+  const relief = params.relief ?? 0;
+  if (relief <= 0) return null;
+  const hills = noise2(createRng(`${params.seed}/layout`).fork("relief"));
+  const radius = Math.min(params.width, params.height) * 0.3;
+  return (p: Point) => Math.max(0, Math.min(1, 0.5 + fbm(hills, p[0] / (radius * 1.3), p[1] / (radius * 1.3), 4) * 0.95 * relief));
+}
+
+/** The corners round a set of wards, as closed rings of corner ids (the longest first). */
+function ringsAround(diagram: Voronoi, inside: (ward: number) => boolean, n: number): number[][] {
+  const segments: [number, number][] = [];
+  for (let ward = 0; ward < n; ward++) {
+    if (!inside(ward)) continue;
+    for (const side of diagram.sides[ward]) if (side.other >= n || !inside(side.other)) segments.push([side.b, side.a]);
+  }
+  return chainSegments(segments)
+    .filter((chain) => chain[0] === chain[chain.length - 1])
+    .sort((a, b) => b.length - a.length);
+}
 
 export function layoutCity(params: CityParams, rng: Rng): Layout {
   const W = params.width;
@@ -61,6 +110,36 @@ export function layoutCity(params: CityParams, rng: Rng): Layout {
     const far = (p: Point): Point => [p[0] + toSea[0] * reach * 2, p[1] + toSea[1] * reach * 2];
     sea = [...shore, far(shore[shore.length - 1]), far(shore[0])];
   }
+
+  // Hills: a field of heights from a stream of its own; and a lake in the lowest ground (or anywhere, on the flat).
+  const height = heightField(params) ?? undefined;
+  const slope = height ? (p: Point) => {
+    const d = radius * 0.06;
+    // Scaled so that 0.6 is a slope few would build on (a tenth of the ground of the hilliest town).
+    return (Math.hypot(height([p[0] + d, p[1]]) - height([p[0] - d, p[1]]), height([p[0], p[1] + d]) - height([p[0], p[1] - d])) / (2 * d)) * radius * 0.225;
+  } : undefined;
+  let lake: Point[] | null = null;
+  if (params.lake) {
+    const own = rng.fork("lake");
+    let best: Point = [center[0] + radius * 1.3, center[1]];
+    let low = Infinity;
+    for (let k = 0; k < 60; k++) {
+      const angle = own.float(0, Math.PI * 2);
+      const reach = radius * own.float(1.05, 1.6);
+      const p: Point = [center[0] + Math.cos(angle) * reach, center[1] + Math.sin(angle) * reach];
+      if (p[0] < radius * 0.4 || p[1] < radius * 0.4 || p[0] > W - radius * 0.4 || p[1] > H - radius * 0.4 || isSeaAt(sea, p)) continue;
+      const h = height ? height(p) : own.next();
+      if (h < low) ((low = h), (best = p));
+    }
+    const shore = noise2(own.fork("shore"));
+    const size = radius * own.float(0.25, 0.42);
+    lake = Array.from({ length: 28 }, (_, k): Point => {
+      const angle = (k / 28) * Math.PI * 2;
+      const r = size * (1 + fbm(shore, Math.cos(angle) * 1.5, Math.sin(angle) * 1.5, 3) * 0.6);
+      return [best[0] + Math.cos(angle) * r * 1.3, best[1] + Math.sin(angle) * r];
+    });
+  }
+  const isWaterAt = (p: Point) => isSeaAt(sea, p) || (!!lake && pointInPolygon(p, lake));
 
   // Sites: darts thrown over the frame, each keeping a gap from the others. The gap is small in the town and widens
   // over the countryside; a noise field makes patches of big quarters and of small ones, and stretches the gap one
@@ -105,7 +184,7 @@ export function layoutCity(params: CityParams, rng: Rng): Layout {
   const n = diagram.sites.length;
   const centerOf = (ward: number) => diagram.sites[ward];
   const dist = (ward: number) => Math.hypot(centerOf(ward)[0] - center[0], centerOf(ward)[1] - center[1]);
-  const water = diagram.cells.map((cell, ward) => isSeaAt(sea, centerOf(ward)) || area(cell) < 1);
+  const water = diagram.cells.map((cell, ward) => isWaterAt(centerOf(ward)) || area(cell) < 1);
 
   // The river: meanders through the town towards its mouth (into the sea when there is one).
   let river: Layout["river"] = null;
@@ -224,6 +303,49 @@ export function layoutCity(params: CityParams, rng: Rng): Layout {
   }
   for (let ward = 0; ward < n; ward++) if (water[ward]) kinds[ward] = "wild";
 
+  // On the heights: the citadel on the highest ground at the town's edge, the temple on the highest near the middle.
+  if (height) {
+    const swap = (from: number, to: number) => {
+      [kinds[from], kinds[to]] = [kinds[to], kinds[from]];
+      [wealth[from], wealth[to]] = [wealth[to], wealth[from]];
+    };
+    const high = (list: number[]) => list.reduce((best, ward) => (height(centerOf(ward)) > height(centerOf(best)) ? ward : best), list[0]);
+    const plain: WardKind[] = ["craftsmen", "merchants", "patriciate", "slum", "residential", "rich-residential", "commercial", "megablock"];
+    const castle = kinds.indexOf("castle");
+    const rim = urbanOrder.filter((ward) => edgeOfTown(ward) && !coastal(ward) && plain.includes(kinds[ward]));
+    if (castle >= 0 && rim.length) swap(castle, high(rim));
+    const temple = kinds.indexOf("temple");
+    const middle = urbanOrder.slice(1, Math.max(3, Math.round(urbanOrder.length * 0.35))).filter((ward) => plain.includes(kinds[ward]));
+    if (temple >= 0 && middle.length) swap(temple, high(middle));
+  }
+
+  // Grown in rings: the urban wards by distance, the old core first; each ring built in its age, the core of a
+  // planned city an old town, and the line between rings an old wall (still standing in a walled age) or a boulevard.
+  let rings: number[] | undefined;
+  let ringAges: EraId[] | undefined;
+  const oldLines: number[][] = [];
+  if (params.growth && params.era !== "stone") {
+    ringAges = GROWTH_AGES[params.era];
+    const count = ringAges.length;
+    const town = byDistance.filter((ward) => urban[ward]);
+    rings = new Array<number>(n).fill(count - 1);
+    // The core is the inner fifth; the other rings share the rest.
+    town.forEach((ward, k) => {
+      const share = k / Math.max(1, town.length);
+      rings![ward] = share < 0.2 ? 0 : Math.min(count - 1, 1 + Math.floor(((share - 0.2) / 0.8) * (count - 1)));
+    });
+    for (let ward = 0; ward < n; ward++) if (!urban[ward]) rings[ward] = count;
+    for (const ward of town) {
+      const age = ringAges[rings[ward]];
+      if (rings[ward] === 0) wealth[ward] = Math.min(1, wealth[ward] + 0.15);
+      // The old core of a planned city is an old town of lanes and narrow houses.
+      if (!organic && organicEra(age) && !["port", "campus", "spaceport", "park", "settlement", "arcology"].includes(kinds[ward])) kinds[ward] = "old-town";
+    }
+    for (let k = 0; k < count - 1; k++) {
+      const line = ringsAround(diagram, (ward) => !water[ward] && rings![ward] <= k && urban[ward], n)[0];
+      if (line && line.length > 4) oldLines.push(line);
+    }
+  }
   // Walls around the town proper (walled eras only), with a citadel ring of its own.
   const walls: Wall[] = [];
   const gates: number[] = [];
@@ -246,8 +368,11 @@ export function layoutCity(params: CityParams, rng: Rng): Layout {
         return !isSeaAt(sea, out) && !(river && distanceToPolyline(p, river.points) < river.width * 1.5);
       });
       const start = rng.float(0, Math.PI * 2);
-      for (let k = 0; k < count && usable.length; k++) {
-        const target = start + (k * Math.PI * 2) / count;
+      // Asked for, the gates stand where the world's roads come in.
+      const headings = params.roadGates && params.roads?.length ? params.roads.slice(0, 6).map((road) => road.angle) : null;
+      const total = headings ? Math.max(2, headings.length) : count;
+      for (let k = 0; k < total && usable.length; k++) {
+        const target = headings ? headings[k] ?? headings[0] + Math.PI : start + (k * Math.PI * 2) / count;
         let best = usable[0];
         let gap = Infinity;
         for (const corner of usable) {
@@ -271,5 +396,17 @@ export function layoutCity(params: CityParams, rng: Rng): Layout {
   const castle = kinds.indexOf("castle");
   if (castle >= 0) walls.push({ ring: diagram.cells[castle], towers: diagram.cells[castle], gates: [], bastions: params.era === "renaissance", citadel: true });
 
-  return { center, radius, scale, diagram, sea, river, water, urban, kinds, wealth, angles, walls, gates };
+  // The old wall lines of a grown town: still standing inside the new wall in the walled ages, pulled down for
+  // boulevards from the age of steam on.
+  const boulevards: Point[][] = [];
+  if (rings && ringAges) {
+    const walled = organic && params.walls;
+    oldLines.forEach((line) => {
+      const points = line.map((corner) => diagram.corners[corner]);
+      if (walled) walls.push({ ring: points.slice(0, -1), towers: points.filter((_, index) => index % 3 === 0), gates: [], bastions: false, citadel: false, old: true });
+      else boulevards.push(points);
+    });
+  }
+
+  return { center, radius, scale, diagram, sea, river, water, urban, kinds, wealth, angles, walls, gates, ...(height ? { height, slope } : {}), ...(lake ? { lake } : {}), ...(rings ? { rings, ringAges, boulevards, oldLines } : {}) };
 }

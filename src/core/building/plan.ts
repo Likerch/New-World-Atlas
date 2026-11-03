@@ -8,6 +8,8 @@
 import type { Era } from "../city/model";
 import type { Point } from "../geometry";
 import { createRng, type Rng } from "../random";
+import { dress } from "./dress";
+import { courtFeatures, roundFloors, wingedFloors, wingsOf } from "./shapes";
 
 export type BuildingType =
   | "house"
@@ -41,24 +43,43 @@ export type BuildingType =
   | "hydroponics"
   | "shelter"
   | "trading-post"
-  | "bunker";
-export const BUILDING_TYPES: BuildingType[] = ["house", "manor", "tavern", "shop", "smithy", "temple", "keep", "warehouse", "apartment", "office", "clinic", "club", "hut", "longhouse", "domus", "insula", "bathhouse", "guildhall", "bank", "tenement", "factory", "station", "school", "police", "store", "capsule-hotel", "hab", "lab", "hydroponics", "shelter", "trading-post", "bunker"];
+  | "bunker"
+  // Landmarks that are buildings of their own, and the game master's own kind.
+  | "lighthouse"
+  | "mill"
+  | "theatre"
+  | "arena"
+  | "prison"
+  | "barracks"
+  | "palace"
+  | "mage-tower"
+  | "custom";
+/** The first types; a random building is still drawn from these, so a seed keeps the building it always made. */
+const FIRST_TYPES: BuildingType[] = ["house", "manor", "tavern", "shop", "smithy", "temple", "keep", "warehouse", "apartment", "office", "clinic", "club", "hut", "longhouse", "domus", "insula", "bathhouse", "guildhall", "bank", "tenement", "factory", "station", "school", "police", "store", "capsule-hotel", "hab", "lab", "hydroponics", "shelter", "trading-post", "bunker"];
+export const BUILDING_TYPES: BuildingType[] = [...FIRST_TYPES, "lighthouse", "mill", "theatre", "arena", "prison", "barracks", "palace", "mage-tower"];
 
 /** The buildings each age raises, its own first. */
 export const ERA_BUILDINGS: Record<Era, BuildingType[]> = {
   stone: ["hut", "longhouse"],
-  ancient: ["domus", "insula", "temple", "bathhouse", "tavern", "shop", "smithy", "warehouse", "keep"],
-  medieval: ["house", "manor", "tavern", "shop", "smithy", "temple", "keep", "warehouse"],
-  renaissance: ["house", "manor", "guildhall", "bank", "tavern", "shop", "smithy", "temple", "keep", "warehouse"],
-  industrial: ["tenement", "house", "manor", "factory", "station", "bank", "tavern", "shop", "temple", "clinic", "police", "warehouse"],
-  modern: ["house", "apartment", "office", "store", "school", "clinic", "police", "club", "station", "factory", "warehouse", "temple"],
-  cyberpunk: ["apartment", "capsule-hotel", "office", "store", "clinic", "club", "tavern", "police", "factory", "warehouse"],
-  "far-future": ["hab", "lab", "hydroponics", "office", "store", "clinic", "club", "station", "temple"],
-  "post-apocalypse": ["shelter", "trading-post", "bunker", "tavern", "clinic", "smithy", "warehouse", "temple"],
+  ancient: ["domus", "insula", "temple", "bathhouse", "tavern", "shop", "smithy", "warehouse", "keep", "theatre", "arena", "lighthouse", "barracks", "palace", "prison"],
+  medieval: ["house", "manor", "tavern", "shop", "smithy", "temple", "keep", "warehouse", "mill", "barracks", "prison", "palace", "lighthouse", "mage-tower"],
+  renaissance: ["house", "manor", "guildhall", "bank", "tavern", "shop", "smithy", "temple", "keep", "warehouse", "theatre", "mill", "barracks", "prison", "palace", "lighthouse", "mage-tower"],
+  industrial: ["tenement", "house", "manor", "factory", "station", "bank", "tavern", "shop", "temple", "clinic", "police", "warehouse", "theatre", "prison", "barracks", "mill", "lighthouse"],
+  modern: ["house", "apartment", "office", "store", "school", "clinic", "police", "club", "station", "factory", "warehouse", "temple", "theatre", "arena", "prison", "lighthouse"],
+  cyberpunk: ["apartment", "capsule-hotel", "office", "store", "clinic", "club", "tavern", "police", "factory", "warehouse", "arena", "prison"],
+  "far-future": ["hab", "lab", "hydroponics", "office", "store", "clinic", "club", "station", "temple", "arena", "prison"],
+  "post-apocalypse": ["shelter", "trading-post", "bunker", "tavern", "clinic", "smithy", "warehouse", "temple", "arena", "prison"],
 };
 
 /** The age a building type belongs to when none is asked for. */
-const TYPE_ERA: Partial<Record<BuildingType, Era>> = { apartment: "modern", office: "modern", clinic: "modern", club: "modern", hut: "stone", longhouse: "stone", domus: "ancient", insula: "ancient", bathhouse: "ancient", guildhall: "renaissance", bank: "renaissance", tenement: "industrial", factory: "industrial", station: "industrial", school: "modern", police: "modern", store: "modern", "capsule-hotel": "cyberpunk", hab: "far-future", lab: "far-future", hydroponics: "far-future", shelter: "post-apocalypse", "trading-post": "post-apocalypse", bunker: "post-apocalypse" };
+const TYPE_ERA: Partial<Record<BuildingType, Era>> = { apartment: "modern", office: "modern", clinic: "modern", club: "modern", hut: "stone", longhouse: "stone", domus: "ancient", insula: "ancient", bathhouse: "ancient", guildhall: "renaissance", bank: "renaissance", tenement: "industrial", factory: "industrial", station: "industrial", school: "modern", police: "modern", store: "modern", "capsule-hotel": "cyberpunk", hab: "far-future", lab: "far-future", hydroponics: "far-future", shelter: "post-apocalypse", "trading-post": "post-apocalypse", bunker: "post-apocalypse", theatre: "renaissance", arena: "ancient" };
+
+/** Footprints a building can have. A plain rectangle is the old plan; the others are wings round a corner, a back
+ * wing, two wings round a yard open at the back, four round a closed court, or a round tower. */
+export type BuildingShape = "rect" | "L" | "T" | "U" | "court" | "round";
+export const BUILDING_SHAPES: BuildingShape[] = ["rect", "L", "T", "U", "court", "round"];
+/** The shape a type is built in when none is asked for. */
+export const TYPE_SHAPE: Partial<Record<BuildingType, BuildingShape>> = { lighthouse: "round", "mage-tower": "round", arena: "round", theatre: "U", prison: "court", barracks: "court", palace: "court" };
 
 export type RoomKind =
   | "hall"
@@ -112,7 +133,21 @@ export type RoomKind =
   | "pool-room"
   | "furnace"
   | "generator"
-  | "garage";
+  | "garage"
+  // Entries, lofts, and the rooms of lighthouses, mills, theatres, arenas, prisons, palaces and towers.
+  | "vestibule"
+  | "attic"
+  | "passage"
+  | "lantern"
+  | "mill-room"
+  | "stage"
+  | "auditorium"
+  | "arena-floor"
+  | "stands"
+  | "guard-room"
+  | "ballroom"
+  | "gallery"
+  | "ritual-room";
 
 export type FurnitureKind =
   | "bed"
@@ -158,7 +193,23 @@ export type FurnitureKind =
   | "locker"
   | "pool"
   | "vat"
-  | "generator";
+  | "generator"
+  // Crafts, new buildings, decay, magic and the way down.
+  | "oven"
+  | "hooks"
+  | "loom"
+  | "bolts"
+  | "kiln"
+  | "still"
+  | "press"
+  | "display"
+  | "millstone"
+  | "lantern"
+  | "stands"
+  | "stage"
+  | "rubble"
+  | "circle"
+  | "hatch";
 
 export interface Rect {
   x: number;
@@ -176,7 +227,18 @@ export interface Room extends Rect {
   id: number;
   kind: RoomKind;
   furniture: Furniture[];
+  /** Fallen in: its floor is rubble (a building in deep decay). */
+  collapsed?: boolean;
 }
+
+/** What a door is made of: a hide flap or a curtain, a plain or a heavy door, iron, bars, glass, a sliding or an
+ * airlock door, an open arch, a wide gate, a hatch in the floor, or one hanging off its hinges. */
+export type DoorKind = "curtain" | "plain" | "heavy" | "iron" | "bars" | "glass" | "sliding" | "airlock" | "arch" | "gate" | "broken";
+export const DOOR_KINDS: DoorKind[] = ["curtain", "plain", "heavy", "iron", "bars", "glass", "sliding", "airlock", "arch", "gate", "broken"];
+/** How a door is held shut: not at all, a latch, a simple or a good lock, a master's lock, a bar on the inside, a
+ * keycard or a hand on a reader, or a warding spell. */
+export type LockKind = "none" | "latch" | "simple" | "good" | "master" | "bar" | "keycard" | "biometric" | "magic";
+export const LOCK_KINDS: LockKind[] = ["none", "latch", "simple", "good", "master", "bar", "keycard", "biometric", "magic"];
 
 export interface Door {
   /** Centre of the opening. */
@@ -186,11 +248,19 @@ export interface Door {
   width: number;
   /** Rooms on either side; -1 is outdoors. */
   rooms: [number, number];
+  kind?: DoorKind;
+  lock?: LockKind;
+  /** Hidden in the wall (behind a shelf, a panel): only a search finds it, and players do not see it. */
+  secret?: boolean;
+  /** Bricked up by the game master: drawn as wall, no way through. */
+  walled?: boolean;
 }
 
 export interface Opening {
   a: Point;
   b: Point;
+  /** Nailed over with boards. */
+  boarded?: boolean;
 }
 
 export interface Floor {
@@ -201,11 +271,36 @@ export interface Floor {
 }
 
 export interface YardFeature {
-  kind: "well" | "tree" | "bed" | "shed" | "stable" | "hay" | "cart" | "fountain" | "parking";
+  kind: "well" | "tree" | "bed" | "shed" | "stable" | "hay" | "cart" | "fountain" | "parking" | "wheel";
   x: number;
   y: number;
   w: number;
   h: number;
+}
+
+/** What the walls are built of. */
+export type Material = "hide" | "timber" | "adobe" | "stone" | "brick" | "concrete" | "glass" | "composite" | "scrap";
+export const MATERIALS: Material[] = ["hide", "timber", "adobe", "stone", "brick", "concrete", "glass", "composite", "scrap"];
+
+/** The game master's own kind of building: its name, what it is for, and its rooms floor by floor. */
+export interface CustomBuildingType {
+  id: string;
+  name: string;
+  description: string;
+  /** Rooms of the ground floor, of each floor above, and of the cellar. */
+  ground: RoomKind[];
+  upper: RoomKind[];
+  cellar: RoomKind[];
+  width: number;
+  depth: number;
+  floors: number;
+}
+
+/** Who holds the building: a person of the city (the same key gives the same person) and the faction they serve. */
+export interface BuildingOwner {
+  key: string;
+  role: string;
+  faction?: { id: string; name: string; kind: string };
 }
 
 export interface BuildingParams {
@@ -219,6 +314,28 @@ export interface BuildingParams {
   floors: number;
   cellar: boolean;
   yard: boolean;
+  /** The footprint's shape; unset is the plain rectangle. */
+  shape?: BuildingShape;
+  /** A loft under the roof above the top floor. */
+  attic?: boolean;
+  /** What a shop sells or a workshop makes ("baker", "chrome"…). */
+  craft?: string;
+  /** 0 poor – 1 rich: what the household owns. */
+  wealth?: number;
+  material?: Material;
+  /** 0 kept – 1 a ruin: rubble, boarded windows, broken doors, rooms fallen in. */
+  decay?: number;
+  /** 0 none – 3 the world runs on it: warded locks, circles, enchanted things. */
+  magic?: number;
+  /** A hatch in the cellar floor down to the sewers, the metro or the vaults below. */
+  hatch?: boolean;
+  /** The street the front door opens on and the house's number on it, and houses wall to wall on either side. */
+  street?: string;
+  house?: number;
+  terrace?: boolean;
+  owner?: BuildingOwner;
+  /** The game master's own type, when `type` is "custom". */
+  customType?: CustomBuildingType;
 }
 
 export interface BuildingPlan {
@@ -226,6 +343,10 @@ export interface BuildingPlan {
   floors: Floor[];
   /** The yard around the footprint, metres; the building stands at (0, 0). */
   yard: { bounds: Rect; features: YardFeature[] } | null;
+  /** The wings of a shaped building (a plain one has none); every floor is laid out in them. */
+  wings?: Rect[];
+  /** The open court inside a courtyard building, with what stands in it. */
+  court?: { rect: Rect; features: YardFeature[] };
 }
 
 const SIZES: Record<BuildingType, [number, number, number, number]> = {
@@ -262,6 +383,15 @@ const SIZES: Record<BuildingType, [number, number, number, number]> = {
   shelter: [5, 9, 4, 7],
   "trading-post": [10, 16, 8, 12],
   bunker: [14, 24, 10, 16],
+  lighthouse: [6, 8, 6, 8],
+  mill: [10, 14, 8, 11],
+  theatre: [24, 34, 18, 26],
+  arena: [30, 44, 30, 44],
+  prison: [24, 34, 20, 28],
+  barracks: [24, 34, 18, 24],
+  palace: [34, 50, 26, 36],
+  "mage-tower": [8, 11, 8, 11],
+  custom: [10, 16, 8, 12],
 };
 
 /** The most floors a plan draws: a tower of the far future. */
@@ -301,13 +431,32 @@ export const BUILDING_FLOORS: Record<BuildingType, [number, number]> = {
   shelter: [1, 1],
   "trading-post": [1, 2],
   bunker: [1, 2],
+  lighthouse: [3, 5],
+  mill: [2, 2],
+  theatre: [2, 2],
+  arena: [1, 1],
+  prison: [2, 3],
+  barracks: [2, 2],
+  palace: [2, 3],
+  "mage-tower": [3, 5],
+  custom: [1, 3],
 };
 
 /** Rooms of each floor: [kind, share of the floor]; "corridor" floors line their rooms along a central hallway. */
-type Program = { rooms: [RoomKind, number][]; corridor?: boolean };
-function program(type: BuildingType, level: number, top: number, rng: Rng, modern: boolean): Program {
+export type Program = { rooms: [RoomKind, number][]; corridor?: boolean };
+export function program(type: BuildingType, level: number, top: number, rng: Rng, modern: boolean, custom?: CustomBuildingType): Program {
   const guests = (count: number, kind: RoomKind = "guest-room"): [RoomKind, number][] => Array.from({ length: count }, () => [kind, 1] as [RoomKind, number]);
+  if (type === "custom") {
+    // The game master's own rooms, the first (the main room) twice the size of the others.
+    const list = (level < 0 ? custom?.cellar : level === 0 ? custom?.ground : custom?.upper) ?? [];
+    const rooms: RoomKind[] = list.length ? list : [level < 0 ? "cellar" : level === 0 ? "hall" : "bedroom"];
+    return { rooms: rooms.map((kind, k): [RoomKind, number] => [kind, k === 0 ? 2 : 1]), corridor: rooms.length > 4 };
+  }
   if (level < 0) {
+    if (type === "prison" || type === "barracks") return { rooms: [...guests(rng.int(4, 6), "cell"), ["guard-room", 1], ["storage", 1]], corridor: true };
+    if (type === "palace") return { rooms: [["vault", 0.3], ["cellar", 0.4], ["storage", 0.3]] };
+    if (type === "mage-tower") return { rooms: [["vault", 0.5], ["cell", 0.5]] };
+    if (type === "theatre") return { rooms: [["storage", 0.6], ["changing-room", 0.4]] };
     if (type === "keep" || type === "police") return { rooms: [...guests(rng.int(4, 6), "cell"), ["storage", 1.5]], corridor: true };
     if (type === "bank") return { rooms: [["vault", 0.7], ["storage", 0.3]] };
     if (type === "bunker") return { rooms: [["generator", 0.3], ["storage", 0.4], ["armory", 0.3]] };
@@ -381,8 +530,30 @@ function program(type: BuildingType, level: number, top: number, rng: Rng, moder
       return level === 0 ? { rooms: [["shop-floor", 0.55], ["storage", 0.3], ["bedroom", 0.15]] } : { rooms: [["bedroom", 0.5], ["storage", 0.5]] };
     case "bunker":
       return level === 0 ? { rooms: [["barracks", 1], ["armory", 0.6], ["storage", 0.7], ["generator", 0.6], ["kitchen", 0.7]], corridor: true } : { rooms: [["barracks", 0.5], ["office", 0.5]] };
+    case "lighthouse":
+      // The keeper lives at the foot; the lamp burns at the top.
+      return level === 0 ? { rooms: [["living-room", 0.5], ["kitchen", 0.25], ["storage", 0.25]] } : level === top ? { rooms: [["lantern", 1]] } : { rooms: [["storage", 0.5], ["bedroom", 0.5]] };
+    case "mill":
+      return level === 0 ? { rooms: [["mill-room", 0.62], ["storage", 0.38]] } : { rooms: [["storage", 0.55], ["bedroom", 0.25], ["kitchen", 0.2]] };
+    case "theatre":
+      return level === 0 ? { rooms: [["auditorium", 0.5], ["stage", 0.22], ["lobby", 0.14], ["changing-room", 0.14]] } : { rooms: [["gallery", 0.6], ["office", 0.2], ["storage", 0.2]] };
+    case "arena":
+      return { rooms: [["arena-floor", 1.4], ["stands", 1], ["stands", 1], ["cell", 0.5], ["armory", 0.5]] };
+    case "prison":
+      return level === 0 ? { rooms: [["guard-room", 1], ["office", 0.7], ["canteen", 1], ...guests(rng.int(4, 6), "cell")], corridor: true } : { rooms: [...guests(rng.int(6, 8), "cell"), ["guard-room", 1]], corridor: true };
+    case "barracks":
+      return level === 0 ? { rooms: [["canteen", 1.2], ["armory", 0.8], ["kitchen", 0.6], ["office", 0.5], ["storage", 0.6], ["guard-room", 0.6]] } : { rooms: [...guests(rng.int(3, 5), "barracks"), ["bath", 0.6]], corridor: true };
+    case "palace":
+      if (level === 0) return { rooms: [["ballroom", 1.4], ["gallery", 1], ["dining", 0.8], ["kitchen", 0.6], ["chapel", 0.5], ["guard-room", 0.5], ["pantry", 0.4]] };
+      if (level === 1) return { rooms: [["throne-room", 1.4], ["study", 0.6], ["bedroom", 0.8], ["bedroom", 0.8], ["bath", 0.5], ["gallery", 0.8]] };
+      return { rooms: [...guests(rng.int(4, 6)), ["bath", 0.6]], corridor: true };
+    case "mage-tower":
+      return level === 0 ? { rooms: [["hall", 0.6], ["storage", 0.4]] } : level === top ? { rooms: [["ritual-room", 1]] } : level === 1 ? { rooms: [["study", 0.6], ["lab", 0.4]] } : { rooms: [["bedroom", 0.5], ["study", 0.5]] };
   }
 }
+
+/** The loft under the roof: lumber and a servant's bed. */
+export const ATTIC: Program = { rooms: [["attic", 0.7], ["bedroom", 0.3]] };
 
 /** What each age has in place of the middle ages' furniture; null where it has nothing. */
 const AGE_FURNITURE: Partial<Record<Era, Partial<Record<FurnitureKind, FurnitureKind | null>>>> = {
@@ -392,7 +563,7 @@ const AGE_FURNITURE: Partial<Record<Era, Partial<Record<FurnitureKind, Furniture
 };
 
 /** Slices a rectangle into rooms with areas in proportion to their shares, keeping them as square as it can. */
-function slice(rect: Rect, rooms: [RoomKind, number][], out: { rect: Rect; kind: RoomKind }[], along?: "x" | "y"): void {
+export function slice(rect: Rect, rooms: [RoomKind, number][], out: { rect: Rect; kind: RoomKind }[], along?: "x" | "y"): void {
   if (rooms.length === 1) {
     out.push({ rect, kind: rooms[0][0] });
     return;
@@ -411,11 +582,11 @@ function slice(rect: Rect, rooms: [RoomKind, number][], out: { rect: Rect; kind:
 }
 
 /** Rooms a guest should not walk into from the street. */
-const BACK_ROOMS = new Set<RoomKind>(["storage", "pantry", "cellar", "stairs"]);
-const CIRCULATION = new Set<RoomKind>(["corridor", "hall", "common-room", "lobby", "shop-floor", "nave", "stairs", "dance-floor", "living-room", "waiting-room", "workshop", "storage", "cellar", "throne-room", "atrium", "garden", "ticket-hall", "platform", "machine-hall", "canteen", "gym", "changing-room", "airlock", "grow-room"]);
+export const BACK_ROOMS = new Set<RoomKind>(["storage", "pantry", "cellar", "stairs", "attic"]);
+export const CIRCULATION = new Set<RoomKind>(["corridor", "hall", "common-room", "lobby", "shop-floor", "nave", "stairs", "dance-floor", "living-room", "waiting-room", "workshop", "storage", "cellar", "throne-room", "atrium", "garden", "ticket-hall", "platform", "machine-hall", "canteen", "gym", "changing-room", "airlock", "grow-room", "vestibule", "passage", "ballroom", "gallery", "auditorium", "arena-floor", "stands", "guard-room", "mill-room", "attic"]);
 
 /** The wall two rooms share, if they touch along at least a door's width. */
-function sharedWall(a: Rect, b: Rect): { from: Point; to: Point; horizontal: boolean } | null {
+export function sharedWall(a: Rect, b: Rect): { from: Point; to: Point; horizontal: boolean } | null {
   const eps = 0.01;
   const overlap = (a0: number, a1: number, b0: number, b1: number) => [Math.max(a0, b0), Math.min(a1, b1)];
   if (Math.abs(a.x + a.w - b.x) < eps || Math.abs(b.x + b.w - a.x) < eps) {
@@ -431,14 +602,15 @@ function sharedWall(a: Rect, b: Rect): { from: Point; to: Point; horizontal: boo
   return null;
 }
 
-function furnish(room: Room, doors: Door[], type: BuildingType, modern: boolean, rng: Rng): Furniture[] {
+export function furnish(room: Room, doors: Door[], type: BuildingType, modern: boolean, rng: Rng): Furniture[] {
   const out: Furniture[] = [];
   const m = 0.35;
   const { x, y, w, h } = room;
   const clear = (f: Rect) => doors.every((door) => door.at[0] < f.x - 1 || door.at[0] > f.x + f.w + 1 || door.at[1] < f.y - 1 || door.at[1] > f.y + f.h + 1);
   const add = (kind: FurnitureKind, fx: number, fy: number, fw: number, fh: number, round = false) => {
     const f = { kind, x: fx, y: fy, w: fw, h: fh, round };
-    if (fx >= x && fy >= y && fx + fw <= x + w && fy + fh <= y + h && clear(f) && out.every((o) => fx >= o.x + o.w || o.x >= fx + fw || fy >= o.y + o.h || o.y >= fy + fh)) out.push(f);
+    // A circle is chalked on the floor: it may run up to a door.
+    if (fx >= x && fy >= y && fx + fw <= x + w && fy + fh <= y + h && (kind === "circle" || clear(f)) && out.every((o) => fx >= o.x + o.w || o.x >= fx + fw || fy >= o.y + o.h || o.y >= fy + fh)) out.push(f);
   };
   const grid = (kind: FurnitureKind, fw: number, fh: number, gx: number, gy: number, round = false, margin = 0.8) => {
     for (let px = x + margin; px + fw <= x + w - margin; px += gx) for (let py = y + margin; py + fh <= y + h - margin; py += gy) add(kind, px, py, fw, fh, round);
@@ -682,6 +854,56 @@ function furnish(room: Room, doors: Door[], type: BuildingType, modern: boolean,
       add("rack", x + w - m - 0.5, y + h - m - 2, 0.5, 2);
       grid("crate", 0.9, 0.9, 2.2, 2.2, false, 1.6);
       break;
+    case "vestibule":
+      // Somewhere to sit and pull off boots, pegs for coats.
+      add("bench", x + m, y + m, Math.min(1.6, w - 2 * m), 0.45);
+      add("rack", x + w - m - 0.4, y + m, 0.4, Math.min(1.4, h - 2 * m));
+      break;
+    case "attic":
+      grid(rng.chance(0.5) ? "chest" : "crate", 0.9, 0.7, 1.8, 1.6, false, 0.7);
+      break;
+    case "lantern":
+      add("lantern", x + w / 2 - 0.9, y + h / 2 - 0.9, 1.8, 1.8, true);
+      break;
+    case "mill-room":
+      add("millstone", x + m + 0.4, y + m + 0.4, 2.2, 2.2, true);
+      if (w > 7) add("millstone", x + m + 3.2, y + m + 0.4, 2.2, 2.2, true);
+      grid("crate", 0.8, 0.8, 1.2, 1.2, false, 1.6);
+      break;
+    case "stage":
+      add("stage", x + m, y + m, w - 2 * m, h - 2 * m);
+      break;
+    case "auditorium":
+    case "stands":
+      for (let py = y + 0.8; py + 0.8 <= y + h - 0.8; py += 1.1) add(room.kind === "stands" ? "stands" : "bench", x + 1, py, w - 2, 0.6);
+      break;
+    case "arena-floor":
+      add("pillar", x + w / 2 - 0.4, y + h / 2 - 0.4, 0.8, 0.8, true);
+      break;
+    case "guard-room":
+      add("table", x + w / 2 - 0.9, y + h / 2 - 0.5, 1.8, 1);
+      for (const [dx, dy] of [[0.3, -0.55], [0.9, -0.55], [0.3, 1.05], [0.9, 1.05]]) add("chair", x + w / 2 - 0.9 + dx, y + h / 2 - 0.5 + dy, 0.45, 0.45);
+      alongTop("rack", 1.4, 0.45, 1.8);
+      break;
+    case "ballroom":
+      add("carpet", x + 1.2, y + 1.2, w - 2.4, h - 2.4);
+      for (let px = x + 1; px < x + w - 1.4; px += 3.6) {
+        add("pillar", px, y + 0.4, 0.6, 0.6, true);
+        add("pillar", px, y + h - 1, 0.6, 0.6, true);
+      }
+      add("plant", x + m, y + h / 2 - 0.35, 0.7, 0.7, true);
+      break;
+    case "gallery":
+      alongTop("shelf", 1.6, 0.35, 2.4);
+      for (let px = x + 1.2; px + 1.8 <= x + w - 1.2; px += 3.6) add("bench", px, y + h / 2 - 0.25, 1.8, 0.45);
+      break;
+    case "ritual-room": {
+      const r = Math.min(w, h) * 0.3;
+      add("circle", x + w / 2 - r, y + h / 2 - r, r * 2, r * 2, true);
+      add("altar", x + m, y + m, 1, 0.6);
+      add("shelf", x + w - m - 1.2, y + m, 1.2, 0.4);
+      break;
+    }
     default:
       break;
   }
@@ -691,9 +913,11 @@ function furnish(room: Room, doors: Door[], type: BuildingType, modern: boolean,
 export function buildingParams(input: Partial<BuildingParams> = {}): BuildingParams {
   const seed = input.seed || Math.floor(Math.random() * 1e9).toString(36);
   const rng = createRng(seed).fork("building-params");
-  const type = input.type ?? rng.pick(BUILDING_TYPES);
-  const [w0, w1, d0, d1] = SIZES[type];
-  const [f0, f1] = BUILDING_FLOORS[type];
+  const type = input.type ?? rng.pick(FIRST_TYPES);
+  // The game master's own type brings its size, floors and cellar.
+  const own = type === "custom" ? input.customType : undefined;
+  const [w0, w1, d0, d1] = own ? [own.width, own.width, own.depth, own.depth] : SIZES[type];
+  const [f0, f1] = own ? [own.floors, own.floors] : BUILDING_FLOORS[type];
   return {
     seed,
     type,
@@ -702,22 +926,39 @@ export function buildingParams(input: Partial<BuildingParams> = {}): BuildingPar
     width: Math.round(rng.float(w0, w1)),
     depth: Math.round(rng.float(d0, d1)),
     floors: rng.int(f0, f1),
-    cellar: !["temple", "hut", "longhouse", "shelter", "bathhouse", "station", "store", "hab", "hydroponics", "domus"].includes(type) && rng.chance(type === "bunker" ? 1 : 0.6),
-    yard: ["house", "manor", "tavern", "smithy", "shop", "clinic", "hut", "longhouse", "shelter", "trading-post"].includes(type),
+    cellar: own ? own.cellar.length > 0 : !["temple", "hut", "longhouse", "shelter", "bathhouse", "station", "store", "hab", "hydroponics", "domus", "arena", "lighthouse"].includes(type) && rng.chance(type === "bunker" ? 1 : 0.6),
+    yard: ["house", "manor", "tavern", "smithy", "shop", "clinic", "hut", "longhouse", "shelter", "trading-post", "mill"].includes(type),
+    ...(TYPE_SHAPE[type] ? { shape: TYPE_SHAPE[type] } : {}),
     ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)),
   };
 }
 
+/** What each age has in place of a piece, applied to a whole room. */
+export function forAge(furniture: Furniture[], era: Era): Furniture[] {
+  return furniture.flatMap((item) => {
+    const swap = AGE_FURNITURE[era]?.[item.kind];
+    return swap === null ? [] : swap ? [{ ...item, kind: swap, round: swap === "pot" || item.round }] : [item];
+  });
+}
+
+/** The ages of machines, which furnish with sofas and screens. */
+export const machineAge = (era: Era) => era === "modern" || era === "cyberpunk" || era === "industrial" || era === "far-future" || era === "post-apocalypse";
+
 export function generateBuilding(input: Partial<BuildingParams> = {}): BuildingPlan {
   const params = buildingParams(input);
   const rng = createRng(params.seed).fork("building");
-  const modern = params.era === "modern" || params.era === "cyberpunk" || params.era === "industrial" || params.era === "far-future" || params.era === "post-apocalypse";
+  const modern = machineAge(params.era);
+  // A one-storey kind (a nave, a hut) never stacks itself; anything else rises as high as asked.
+  const storeys = BUILDING_FLOORS[params.type][1] === 1 ? 1 : Math.max(1, Math.min(params.floors, MAX_FLOORS));
+  // A loft goes on top; it is no storey of its own.
+  const levels = [...(params.cellar ? [-1] : []), ...Array.from({ length: storeys }, (_, k) => k), ...(params.attic ? [storeys] : [])];
+  if (params.shape && params.shape !== "rect") {
+    const shaped = shapedPlan(params, levels, storeys, rng, modern);
+    if (shaped) return dress(shaped);
+  }
   // The long side runs along x; the street (and the front door) is on the bottom side, y = depth.
   const W = Math.max(params.width, params.depth, 5);
   const D = Math.max(4, Math.min(params.width, params.depth));
-  // A one-storey kind (a nave, a hut) never stacks itself; anything else rises as high as asked.
-  const storeys = BUILDING_FLOORS[params.type][1] === 1 ? 1 : Math.max(1, Math.min(params.floors, MAX_FLOORS));
-  const levels = [...(params.cellar ? [-1] : []), ...Array.from({ length: storeys }, (_, k) => k)];
   const multi = levels.length > 1;
   const stairsW = multi ? Math.min(2.8, W * 0.25) : 0;
   const stairsH = Math.min(4.2, D * 0.5);
@@ -725,7 +966,7 @@ export function generateBuilding(input: Partial<BuildingParams> = {}): BuildingP
 
   for (const level of levels) {
     const own = rng.fork(`floor-${level}`);
-    const plan = program(params.type, level, levels[levels.length - 1], own, modern);
+    const plan = params.attic && level === storeys ? ATTIC : program(params.type, level, storeys - 1, own, modern, params.customType);
     const rects: { rect: Rect; kind: RoomKind }[] = [];
     const main: Rect = { x: 0, y: 0, w: W - stairsW, h: D };
     if (multi) {
@@ -804,15 +1045,15 @@ export function generateBuilding(input: Partial<BuildingParams> = {}): BuildingP
         }
       }
     }
-    for (const room of rooms) room.furniture = furnish(room, doors.filter((door) => door.rooms.includes(room.id)), params.type, modern, own).flatMap((item) => {
-   const swap = AGE_FURNITURE[params.era]?.[item.kind];
-   return swap === null ? [] : swap ? [{ ...item, kind: swap, round: swap === "pot" || item.round }] : [item];
- });
+    for (const room of rooms) room.furniture = forAge(furnish(room, doors.filter((door) => door.rooms.includes(room.id)), params.type, modern, own), params.era);
     floors.push({ level, rooms, doors, windows });
   }
   params.floors = storeys;
+  return dress({ params: { ...params, width: W, depth: D }, floors, yard: yardOf(params, W, D, rng, modern) });
+}
 
-  // The yard: a fenced plot round the house with what a household keeps outside.
+/** The yard: a fenced plot round the house with what a household keeps outside. */
+function yardOf(params: BuildingParams, W: number, D: number, rng: Rng, modern: boolean): BuildingPlan["yard"] {
   let yard: BuildingPlan["yard"] = null;
   if (params.yard) {
     const own = rng.fork("yard");
@@ -832,7 +1073,31 @@ export function generateBuilding(input: Partial<BuildingParams> = {}): BuildingP
       if (!modern && side.w > 2.5) features.push({ kind: own.chance(0.5) ? "hay" : "cart", x: side.x, y: D - 3, w: Math.min(2.4, side.w), h: 1.8 });
       if (side.w > 3 && own.chance(0.6)) features.push({ kind: "shed", x: side.x, y: side.y, w: Math.min(3.5, side.w), h: 3 });
     }
+    // A watermill's wheel turns against its side wall.
+    if (params.type === "mill") features.push({ kind: "wheel", x: W + 0.2, y: D / 2 - 1.6, w: 1.2, h: 3.2 });
     yard = { bounds, features };
   }
-  return { params: { ...params, width: W, depth: D }, floors, yard };
+  return yard;
+}
+
+/** A winged or round building, or null when its footprint is too small for the shape (it is then built plain). */
+function shapedPlan(params: BuildingParams, levels: number[], storeys: number, rng: Rng, modern: boolean): BuildingPlan | null {
+  const multi = levels.length > 1;
+  if (params.shape === "round") {
+    const R = Math.max(6, Math.min(params.width, params.depth));
+    const floors = roundFloors(params, R, levels, storeys - 1, rng, modern).map((floor) => ({ ...floor, rooms: floor.rooms.map((room) => ({ ...room, furniture: forAge(room.furniture, params.era) })) }));
+    return { params: { ...params, floors: storeys, width: R, depth: R }, floors, yard: yardOf(params, R, R, rng, modern) };
+  }
+  const W = Math.max(params.width, params.depth, 5);
+  const D = Math.max(4, Math.min(params.width, params.depth));
+  const layout = wingsOf(params.shape, W, D, params.seed, multi, W * D >= 380);
+  if (!layout) return null;
+  const floors = wingedFloors(params, W, D, levels, storeys - 1, rng, modern, layout).map((floor) => ({ ...floor, rooms: floor.rooms.map((room) => ({ ...room, furniture: forAge(room.furniture, params.era) })) }));
+  return {
+    params: { ...params, floors: storeys, width: W, depth: D },
+    floors,
+    yard: yardOf(params, W, D, rng, modern),
+    wings: layout.wings,
+    ...(layout.court ? { court: { rect: layout.court, features: courtFeatures(layout.court, modern) } } : {}),
+  };
 }

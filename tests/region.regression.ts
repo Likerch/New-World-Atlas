@@ -31,12 +31,12 @@ test("a region is reproducible and draws cleanly", () => {
   assert.doesNotMatch(renderPlanet(region, { theme: "political", layers: { provinces: true } }), /NaN|undefined|Infinity/u);
 });
 
-test("a village of a region opens as a small town", () => {
+test("a village of a region opens as a village, not a town", () => {
   const village = region.burgs.slice(1).find((burg) => burg.population < 1)!;
   const { params, language } = cityFromBurg(region, village.id, "medieval");
   const city = generateCity(params, language);
   assert.equal(city.name, village.name);
-  assert.ok(city.wards.filter((ward) => ward.urban).length <= 12);
+  assert.ok(city.wards.some((ward) => ward.kind === "farmstead") && !city.walls?.length, "a walled town of quarters");
 });
 
 test("a whole country opens up close with all its towns", () => {
@@ -169,6 +169,15 @@ test("a region's edits keep the planet's roads; words alone move no road", () =>
   const razed = editPlanet(region, { ...emptyEdits(), removed: [hamlet.id] });
   assert.ok(razed.burgs[hamlet.id].removed);
   assert.equal(razed.routes.filter((route) => route.given).length, given, "the planet's roads were lost");
+});
+
+test("a region's village and hamlet open as a village and a hamlet", () => {
+  for (const tier of ["village", "hamlet"] as const) {
+    const place = region.burgs.find((burg) => burg.tier === tier)!;
+    const link = cityFromBurg(region, place.id, "medieval");
+    assert.equal(link.params.settlement, tier);
+    assert.ok(generateCity(link.params, link.language).name, "it opens");
+  }
 });
 
 console.log(`region: ${passed} regressions passed`);
