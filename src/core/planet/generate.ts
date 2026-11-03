@@ -11,9 +11,9 @@ import { placeBurgs } from "./burgs";
 import { heightsFromImage, sculpt, type PlanetEdits } from "./edit";
 import { settleCultures, suitability } from "./cultures";
 import { markFeatures } from "./features";
-import { generateHeights, TEMPLATES } from "./heightmap";
+import { generateHeights, RANDOM_TEMPLATES, setLandShare } from "./heightmap";
 import { placeMarkers } from "./markers";
-import { SEA_LEVEL, type Ground, type Planet, type PlanetParams } from "./model";
+import { evaporationOf, SEA_LEVEL, type Ground, type Planet, type PlanetParams } from "./model";
 import { spreadReligions } from "./religions";
 import { hydrology } from "./rivers";
 import { buildRoutes } from "./routes";
@@ -33,7 +33,7 @@ export function planetParams(input: Partial<PlanetParams> = {}): PlanetParams {
     width: 1600,
     height: 1000,
     cells: 10_000,
-    template: rng.pick(TEMPLATES.filter((template) => template !== "fractal")),
+    template: rng.pick(RANDOM_TEMPLATES),
     latitudeNorth: north,
     latitudeSouth: Math.max(-90, north - span),
     temperatureEquator: 27,
@@ -67,8 +67,9 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   const anchors = terrain?.length ? anchorsOf(params, plain) : undefined;
   const rng = createRng(params.seed);
   const mesh = buildMesh(params.width, params.height, params.cells, rng.fork("mesh"));
-  const height = generateHeights(mesh, params.template, rng.fork("relief"));
+  const height = generateHeights(mesh, params.template, rng.fork("relief"), params.recipe);
   if (image) heightsFromImage(mesh, height, image);
+  if (params.land !== undefined) setLandShare(height, params.land);
   if (terrain?.length) sculpt(mesh, height, terrain);
   if (wrapsRound(params)) sewSeam(mesh, height, params.width);
   const scale = ((params.latitudeNorth - params.latitudeSouth) * 111) / params.height;
@@ -77,10 +78,11 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   const ocean = (cell: number) => height[cell] < SEA_LEVEL && sea.features[sea.feature[cell]].kind === "ocean";
   const temperature = temperatures(mesh, params, height, rng.fork("temperature"));
   const rain = precipitation(mesh, params, height, ocean, temperature, rng.fork("rain"));
-  const hydro = hydrology(mesh, height, ocean, rain, scale);
+  const hydro = hydrology(mesh, height, ocean, rain, scale, undefined, evaporationOf(temperature));
   const water = new Uint8Array(mesh.cells);
   for (let cell = 0; cell < mesh.cells; cell++) water[cell] = ocean(cell) || hydro.lake[cell] ? 1 : 0;
   const { feature, features, coast } = markFeatures(mesh, (cell) => water[cell] === 1);
+  for (let cell = 0; cell < mesh.cells; cell++) if (hydro.salt[cell]) features[feature[cell]].salt = true;
 
   const biome = new Uint8Array(mesh.cells);
   for (let cell = 0; cell < mesh.cells; cell++) {

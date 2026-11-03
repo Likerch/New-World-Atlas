@@ -1,7 +1,10 @@
 // Relief. A template is a recipe of blob, ridge and channel operations on cell heights (0–100, sea at 20), the way a
-// cartographer would sketch continents; fractal noise then roughens coasts and slopes.
+// cartographer would sketch continents; fractal noise then roughens coasts and slopes. One template grows the land
+// from tectonic plates instead: mountains where plates collide, trenches and island arcs where one dives under
+// another, rifts where they part. A GM may write a recipe of their own, and ask for a share of land.
 import { fbm, noise2, ridged } from "../noise";
 import type { Mesh } from "../mesh";
+import { PriorityQueue } from "../queue";
 import type { Rng } from "../random";
 
 export type TemplateId =
@@ -14,9 +17,14 @@ export type TemplateId =
   | "isthmus"
   | "inland-sea"
   | "shattered"
-  | "fractal";
+  | "fractal"
+  | "plates"
+  | "twins"
+  | "rift";
 
-export const TEMPLATES: TemplateId[] = ["continents", "archipelago", "pangea", "high-island", "low-island", "peninsula", "isthmus", "inland-sea", "shattered", "fractal"];
+export const TEMPLATES: TemplateId[] = ["continents", "archipelago", "pangea", "high-island", "low-island", "peninsula", "isthmus", "inland-sea", "shattered", "fractal", "plates", "twins", "rift"];
+/** The templates a world without one is given at random: the older ones, so a seed still gives the world it gave. */
+export const RANDOM_TEMPLATES: TemplateId[] = ["continents", "archipelago", "pangea", "high-island", "low-island", "peninsula", "isthmus", "inland-sea", "shattered"];
 
 type Range = [number, number];
 type Step =
@@ -27,7 +35,8 @@ type Step =
   | { op: "add"; value: number; min: number; max: number }
   | { op: "multiply"; factor: number; min: number; max: number }
   | { op: "invert"; axis: "x" | "y" | "both"; chance: number }
-  | { op: "fractal"; scale: number; amplitude: number; base: number };
+  | { op: "fractal"; scale: number; amplitude: number; base: number }
+  | { op: "plates"; count: Range };
 
 const hill = (count: Range, height: Range, x: Range, y: Range): Step => ({ op: "hill", count, height, x, y });
 const pit = (count: Range, height: Range, x: Range, y: Range): Step => ({ op: "pit", count, height, x, y });
@@ -150,7 +159,109 @@ const RECIPES: Record<TemplateId, Step[]> = {
     { op: "mask", power: 3 },
   ],
   fractal: [{ op: "fractal", scale: 2.2, amplitude: 70, base: 12 }, { op: "mask", power: 2 }],
+  plates: [{ op: "plates", count: [8, 13] }, { op: "smooth", factor: 2 }],
+  twins: [
+    hill([1, 1], [70, 80], [18, 32], [30, 70]),
+    hill([1, 1], [70, 80], [68, 82], [30, 70]),
+    hill([4, 6], [15, 25], [10, 90], [15, 85]),
+    { op: "multiply", factor: 0.6, min: 20, max: 100 },
+    range([1, 2], [30, 50], [10, 40], [20, 80]),
+    range([1, 2], [30, 50], [60, 90], [20, 80]),
+    { op: "strait", width: [2, 3], direction: "vertical" },
+    { op: "smooth", factor: 3 },
+    pit([2, 3], [10, 18], [15, 85], [20, 80]),
+    { op: "mask", power: 3 },
+  ],
+  rift: [
+    hill([1, 1], [85, 95], [40, 60], [40, 60]),
+    hill([5, 7], [20, 30], [15, 85], [15, 85]),
+    { op: "multiply", factor: 0.65, min: 20, max: 100 },
+    range([2, 3], [30, 50], [10, 90], [20, 80]),
+    trough([2, 3], [40, 50], [44, 56], [15, 85]),
+    { op: "smooth", factor: 2 },
+    { op: "mask", power: 4 },
+  ],
 };
+
+const OPS = ["hill", "pit", "range", "trough", "strait", "mask", "smooth", "add", "multiply", "invert", "fractal", "plates"] as const;
+
+/** A template's recipe as text, one step a line, to start a recipe of one's own from. */
+export function recipeText(template: TemplateId): string {
+  const r = (range: Range) => (range[0] === range[1] ? `${range[0]}` : `${range[0]}-${range[1]}`);
+  return RECIPES[template]
+    .map((step) => {
+      switch (step.op) {
+        case "hill":
+        case "pit":
+        case "range":
+        case "trough":
+          return `${step.op} ${r(step.count)} ${r(step.height)} ${r(step.x)} ${r(step.y)}`;
+        case "strait":
+          return `strait ${r(step.width)} ${step.direction}`;
+        case "mask":
+          return `mask ${step.power}`;
+        case "smooth":
+          return `smooth ${step.factor}`;
+        case "add":
+          return `add ${step.value} ${step.min}-${step.max}`;
+        case "multiply":
+          return `multiply ${step.factor} ${step.min}-${step.max}`;
+        case "invert":
+          return `invert ${step.axis} ${step.chance}`;
+        case "fractal":
+          return `fractal ${step.scale} ${step.amplitude} ${step.base}`;
+        case "plates":
+          return `plates ${r(step.count)}`;
+      }
+    })
+    .join("\n");
+}
+
+/**
+ * A recipe written as text: "hill 1 80-85 60-80 40-60" (how many, how high, where across and down in per cent), the
+ * same for range, pit and trough; "strait 2 vertical", "mask 4", "smooth 3", "add 10 0-100", "multiply 0.6 20-100",
+ * "invert both 0.3", "fractal 2.2 70 12", "plates 8-13". Lines it cannot read are listed (from 1) and skipped.
+ */
+export function parseRecipe(text: string): { steps: Step[]; errors: number[] } {
+  const steps: Step[] = [];
+  const errors: number[] = [];
+  const range = (word: string | undefined): Range | null => {
+    const match = /^(-?\d*\.?\d+)(?:-(-?\d*\.?\d+))?$/u.exec(word ?? "");
+    if (!match) return null;
+    const a = Number(match[1]);
+    const b = match[2] === undefined ? a : Number(match[2]);
+    return [Math.min(a, b), Math.max(a, b)];
+  };
+  text.split(/\r?\n/u).forEach((line, index) => {
+    const words = line.replace(/#.*$/u, "").trim().toLowerCase().split(/\s+/u).filter(Boolean);
+    if (!words.length) return;
+    const [op, ...rest] = words;
+    const ranges = rest.map(range);
+    const n = (k: number) => ranges[k]?.[0];
+    let step: Step | null = null;
+    if ((op === "hill" || op === "pit" || op === "range" || op === "trough") && ranges.length === 4 && ranges.every(Boolean)) {
+      const [count, height, x, y] = ranges as Range[];
+      step = { op, count: [Math.min(count[0], 60), Math.min(count[1], 60)], height, x, y };
+    } else if (op === "strait" && ranges[0] && (rest[1] === "vertical" || rest[1] === "horizontal")) step = { op, width: ranges[0], direction: rest[1] };
+    else if (op === "mask" && n(0) !== undefined) step = { op, power: n(0)! || 1 };
+    else if (op === "smooth" && n(0) !== undefined) step = { op, factor: Math.max(1, n(0)!) };
+    else if ((op === "add" || op === "multiply") && n(0) !== undefined && ranges[1]) step = op === "add" ? { op, value: n(0)!, min: ranges[1][0], max: ranges[1][1] } : { op, factor: n(0)!, min: ranges[1][0], max: ranges[1][1] };
+    else if (op === "invert" && (rest[0] === "x" || rest[0] === "y" || rest[0] === "both") && n(1) !== undefined) step = { op, axis: rest[0], chance: n(1)! };
+    else if (op === "fractal" && [0, 1, 2].every((k) => n(k) !== undefined)) step = { op, scale: n(0)!, amplitude: n(1)!, base: n(2)! };
+    else if (op === "plates" && ranges[0]) step = { op, count: [Math.max(2, Math.min(40, ranges[0][0])), Math.max(2, Math.min(40, ranges[0][1]))] };
+    if (step && (OPS as readonly string[]).includes(step.op)) steps.push(step);
+    else errors.push(index + 1);
+  });
+  return { steps, errors };
+}
+
+/** Raises or lowers the relief, keeping its shape, so that the given share of the map stands above the sea. */
+export function setLandShare(h: Float32Array, share: number): void {
+  const sorted = Float32Array.from(h).sort();
+  const level = sorted[Math.max(0, Math.min(sorted.length - 1, Math.floor(sorted.length * (1 - Math.max(0.01, Math.min(0.99, share))))))];
+  const top = Math.max(sorted[sorted.length - 1], level + 1);
+  for (let cell = 0; cell < h.length; cell++) h[cell] = h[cell] < level ? (h[cell] / Math.max(level, 1e-3)) * 19.9 : 20 + ((h[cell] - level) / (top - level)) * (top - 20);
+}
 
 /** How fast blobs and ridges fade per step, tuned so shapes keep their size at any cell count. */
 function fadeFor(cells: number, table: [number, number][]): number {
@@ -167,7 +278,7 @@ function fadeFor(cells: number, table: [number, number][]): number {
 const BLOB_FADE: [number, number][] = [[1_000, 0.93], [2_000, 0.95], [5_000, 0.97], [10_000, 0.98], [20_000, 0.99], [30_000, 0.991], [50_000, 0.993], [100_000, 0.994]];
 const RIDGE_FADE: [number, number][] = [[1_000, 0.75], [2_000, 0.77], [5_000, 0.79], [10_000, 0.81], [20_000, 0.82], [30_000, 0.83], [50_000, 0.86], [100_000, 0.88]];
 
-export function generateHeights(mesh: Mesh, template: TemplateId, rng: Rng): Float32Array {
+export function generateHeights(mesh: Mesh, template: TemplateId, rng: Rng, recipe?: string): Float32Array {
   const h = new Float32Array(mesh.cells);
   const blobFade = fadeFor(mesh.cells, BLOB_FADE);
   const ridgeFade = fadeFor(mesh.cells, RIDGE_FADE);
@@ -280,9 +391,91 @@ export function generateHeights(mesh: Mesh, template: TemplateId, rng: Rng): Flo
     }
   };
 
+  /**
+   * Tectonic plates: continental ones stand high and oceanic ones low; where they collide mountains rise (on the
+   * continent, over a trench, where an ocean plate dives under it), where two ocean plates meet an arc of islands, and
+   * where plates part a rift valley on land and a ridge on the sea floor. The effect fades a few cells from the seam.
+   */
+  const plates = (count: number) => {
+    const plate = new Int16Array(mesh.cells).fill(-1);
+    const queue = new PriorityQueue<number>();
+    const pace: number[] = [];
+    for (let k = 0; k < count; k++) {
+      const seed = mesh.find(rng.float(0.04, 0.96) * W, rng.float(0.06, 0.94) * H);
+      if (plate[seed] >= 0) continue;
+      plate[seed] = pace.length;
+      pace.push(rng.float(0.6, 1.4));
+      queue.push(seed, 0);
+    }
+    // Plates grow at their own pace with a ragged edge, so their seams wander.
+    for (let entry = queue.pop(); entry; entry = queue.pop()) {
+      const [cell, cost] = entry;
+      for (const next of mesh.neighbors[cell]) {
+        if (plate[next] >= 0) continue;
+        plate[next] = plate[cell];
+        queue.push(next, cost + pace[plate[cell]] * rng.float(0.5, 1.5));
+      }
+    }
+    const kinds = pace.map(() => rng.chance(0.42));
+    if (!kinds.some(Boolean)) kinds[0] = true;
+    const motion = pace.map(() => {
+      const angle = rng.float(0, Math.PI * 2);
+      const speed = rng.float(0.3, 1);
+      return [Math.cos(angle) * speed, Math.sin(angle) * speed];
+    });
+    const base = kinds.map((land) => (land ? rng.float(30, 38) : rng.float(6, 12)));
+    const lift = new Float32Array(mesh.cells);
+    const set = new Uint8Array(mesh.cells);
+    let ring: number[] = [];
+    for (let cell = 0; cell < mesh.cells; cell++) {
+      const a = plate[cell];
+      let sum = 0,
+        seams = 0;
+      for (const next of mesh.neighbors[cell]) {
+        const b = plate[next];
+        if (b === a) continue;
+        const dx = mesh.x[next] - mesh.x[cell],
+          dy = mesh.y[next] - mesh.y[cell];
+        const length = Math.hypot(dx, dy) || 1;
+        const closing = ((motion[a][0] - motion[b][0]) * dx + (motion[a][1] - motion[b][1]) * dy) / length;
+        const landA = kinds[a],
+          landB = kinds[b];
+        if (closing > 0) sum += closing * (landA && landB ? 62 : landA ? 46 : landB ? -14 : 18);
+        else sum += -closing * (landA ? -16 : 7);
+        seams++;
+      }
+      if (!seams) continue;
+      lift[cell] = sum / seams;
+      set[cell] = 1;
+      ring.push(cell);
+    }
+    for (let step = 0; step < 6 && ring.length; step++) {
+      const next: number[] = [];
+      for (const cell of ring) {
+        for (const m of mesh.neighbors[cell]) {
+          if (set[m] || plate[m] !== plate[cell]) continue;
+          set[m] = 2;
+          next.push(m);
+        }
+      }
+      for (const cell of next) {
+        let sum = 0,
+          from = 0;
+        for (const m of mesh.neighbors[cell]) if (set[m] === 1) (sum += lift[m]), from++;
+        lift[cell] = from ? (sum / from) * 0.68 : 0;
+      }
+      for (const cell of next) set[cell] = 1;
+      ring = next;
+    }
+    const wobble = noise2(rng.fork("plates"));
+    const s = 4 / Math.max(W, H);
+    for (let cell = 0; cell < mesh.cells; cell++) h[cell] = Math.max(0, Math.min(100, base[plate[cell]] + lift[cell] + fbm(wobble, mesh.x[cell] * s, mesh.y[cell] * s, 4) * 14));
+  };
+
   const inRange = (value: number, min: number, max: number) => value >= min && value <= max;
 
-  for (const step of RECIPES[template]) {
+  const own = recipe ? parseRecipe(recipe).steps : [];
+  for (const step of own.length ? own : RECIPES[template]) {
     switch (step.op) {
       case "hill":
       case "pit": {
@@ -339,6 +532,9 @@ export function generateHeights(mesh: Mesh, template: TemplateId, rng: Rng): Flo
         }
         break;
       }
+      case "plates":
+        plates(count(step.count));
+        break;
       case "fractal": {
         const base = noise2(rng.fork("fractal"));
         const crest = noise2(rng.fork("fractal-crest"));

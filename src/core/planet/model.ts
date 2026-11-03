@@ -45,6 +45,10 @@ export interface PlanetParams {
   history?: number;
   /** How far realms reach (1 the usual; more for great empires, less for many small lands). */
   growth?: number;
+  /** The GM's own relief recipe (see parseRecipe), used instead of the template's. */
+  recipe?: string;
+  /** The share of the map that is land (0–1); none keeps what the relief gives. */
+  land?: number;
 }
 
 export type FeatureKind = "ocean" | "lake" | "continent" | "island" | "isle";
@@ -57,7 +61,15 @@ export interface WaterOrLand {
   /** Touches the map's edge (oceans always do). */
   border: boolean;
   name: string;
+  /** A lake with no outlet: its water is salt. */
+  salt?: boolean;
 }
+
+/** The dictionary word for a sea, a lake (a salt one) or a landmass. */
+export const featureWord = (feature: Pick<WaterOrLand, "kind" | "salt">): string => (feature.salt ? "salt-lake" : feature.kind);
+
+/** What open water loses to the sun in a year, mm: little in the cold, a metre and more in the hot lands. */
+export const evaporationOf = (temperature: Float32Array): Float32Array => temperature.map((t) => Math.max(0, 50 * (t + 2)));
 
 export interface River {
   id: number;

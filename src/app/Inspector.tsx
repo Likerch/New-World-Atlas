@@ -1,7 +1,7 @@
 // The GM's side panel: what is at the clicked place, and every state, people, town, river and point of interest with
 // its facts. Picking an entry highlights it and moves the map to it.
 import { useMemo, useState } from "react";
-import { cellKm2, ageOf, altitude, BIOMES, emblemOf, latitudeOf, localFromMarker, raiseArmies, renderEmblem, SEA_LEVEL, settingOf, techEra, type Emblem, type Marker, type PastEvent, type Planet, type RouteKind } from "../core/index";
+import { featureWord, cellKm2, ageOf, altitude, BIOMES, emblemOf, latitudeOf, localFromMarker, raiseArmies, renderEmblem, SEA_LEVEL, settingOf, techEra, type Emblem, type Marker, type PastEvent, type Planet, type RouteKind } from "../core/index";
 import { Chronicle, eventText, RealmStory, TownStory } from "./Chronicle";
 import { area, km, people } from "./format";
 import type { T } from "./i18n";
@@ -88,7 +88,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
   const pick = (kind: SelectionKind, id: number, at?: [number, number]) => onSelect({ kind, id }, at);
   const faithName = (id: number) => (id ? `${nm(planet.religions[id].name)} (${t(`religion.form.${planet.religions[id].form}`)})` : "—");
   const faithAt = (id: number) => <Link label={faithName(id)} onClick={() => pick("religion", id)} />;
-  const featureName = (id: number) => `${t(`feature.${planet.features[id].kind}`)}${planet.features[id].name ? ` ${nm(planet.features[id].name)}` : ""}`;
+  const featureName = (id: number) => `${t(`feature.${featureWord(planet.features[id])}`)}${planet.features[id].name ? ` ${nm(planet.features[id].name)}` : ""}`;
   /** The heart of a sea or a landmass: the cell farthest from its shore. */
   const heartOf = (id: number): [number, number] => {
     let best = -1;
@@ -108,7 +108,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
       const river = planet.river[cell];
       return (
         <div className="card">
-          <h3>{isWater ? `${t(`feature.${feature.kind}`)}${feature.name ? ` ${nm(feature.name)}` : ""}` : t(`biome.${BIOMES[planet.biome[cell]].key}`)}</h3>
+          <h3>{isWater ? `${t(`feature.${featureWord(feature)}`)}${feature.name ? ` ${nm(feature.name)}` : ""}` : t(`biome.${BIOMES[planet.biome[cell]].key}`)}</h3>
           {isWater ? (
             <Row label={t("place.depth")} value={`${Math.round(((SEA_LEVEL - Math.min(SEA_LEVEL, planet.height[cell])) / SEA_LEVEL) * 6000)} ${t("unit.m")}`} />
           ) : (

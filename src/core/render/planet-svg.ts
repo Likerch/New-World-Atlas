@@ -280,6 +280,8 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
   // Lakes and the coastline over the land fills.
   const lakePath = rings(outline(mesh, (cell) => water[cell] === 1 && planet.features[planet.feature[cell]].kind === "lake"), 2);
   if (lakePath) out.push(`<path d="${lakePath}" fill="${theme.lake}" stroke="${theme.coast}" stroke-width="${theme.coastWidth * 0.7}" fill-rule="evenodd"/>`);
+  const saltPath = rings(outline(mesh, (cell) => water[cell] === 1 && planet.features[planet.feature[cell]].salt === true), 2);
+  if (saltPath) out.push(`<path d="${saltPath}" fill="#f4f1e4" fill-opacity="0.45" stroke="#e9e2c6" stroke-width="${theme.coastWidth * 1.4}" stroke-dasharray="1 1.2" fill-rule="evenodd"/>`);
   out.push(`<path d="${landPath}" fill="none" stroke="${theme.coast}" stroke-width="${theme.coastWidth}" stroke-linejoin="round"/>`);
 
   // Relief and vegetation icons, back to front.
@@ -764,6 +766,7 @@ export function planetLegend(planet: Planet, options: RenderOptions = {}): Legen
   const water: LegendEntry[] = [{ key: "legend.ocean", swatch: { fill: theme.ocean[0] } }];
   if (layers.depth) water.push({ key: "legend.shallows", swatch: { fill: theme.ocean[4] } });
   if (planet.features.some((f) => f.kind === "lake")) water.push({ key: "feature.lake", swatch: { fill: theme.lake } });
+  if (planet.features.some((f) => f.salt)) water.push({ key: "feature.salt-lake", swatch: { fill: "#e4e6da", stroke: "#d8cfa9" } });
   if (layers.rivers && planet.rivers.length > 1) water.push({ key: "legend.river", swatch: { line: theme.river, width: 2.2 } });
   const arrow = (color: string) => `<path d="M3,8H20M15,4L20,8L15,12" fill="none" stroke="${color}" stroke-width="1.2" stroke-linecap="round"/>`;
   if (layers.currents) water.push({ key: "layer.currents", swatch: { svg: arrow(theme.sea) } });

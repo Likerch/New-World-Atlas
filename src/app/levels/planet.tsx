@@ -1,6 +1,6 @@
 // The planet level: world settings, the world map and its inspector.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { generateUnderworld, underworldGhostSvg, sheetBox, editPlanet, mapKeyOf, pastPlanet, planetGeoJSON, eraTheme, emptyEdits, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
+import { parseRecipe, recipeText, generateUnderworld, underworldGhostSvg, sheetBox, editPlanet, mapKeyOf, pastPlanet, planetGeoJSON, eraTheme, emptyEdits, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { SettingPanel } from "../SettingPanel";
 import { WorldForm, type ZoomRange } from "../WorldForm";
@@ -461,6 +461,32 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
             <NumberInput min={min} max={max} step={step} value={params[key] as number} onChange={(value) => set(key, value as never)} />
           </label>
         ))}
+        <details className="recipe">
+          <summary>{t("relief.title")}</summary>
+          <label className="check">
+            <input type="checkbox" checked={params.land !== undefined} onChange={(event) => set("land", event.target.checked ? 0.35 : undefined)} />
+            {t("field.land")}
+          </label>
+          {params.land !== undefined ? (
+            <label>
+              {Math.round(params.land * 100)}%
+              <input type="range" min={5} max={95} value={Math.round(params.land * 100)} onChange={(event) => set("land", Number(event.target.value) / 100)} />
+            </label>
+          ) : null}
+          <label>
+            {t("relief.recipe")}
+            <textarea rows={8} spellCheck={false} placeholder={t("relief.hint")} value={params.recipe ?? ""} onChange={(event) => set("recipe", event.target.value || undefined)} />
+          </label>
+          {params.recipe && parseRecipe(params.recipe).errors.length ? <p className="muted">{t("relief.errors", { lines: parseRecipe(params.recipe).errors.join(", ") })}</p> : null}
+          <div className="row-buttons">
+            <button type="button" onClick={() => set("recipe", recipeText(params.template))}>
+              {t("relief.fromTemplate")}
+            </button>
+            <button type="button" className="primary" onClick={() => load({})}>
+              {t("relief.grow")}
+            </button>
+          </div>
+        </details>
         <h2>{t("panel.layers")}</h2>
         <div className="row-buttons">
           {Object.keys(PRESETS).map((name) => (

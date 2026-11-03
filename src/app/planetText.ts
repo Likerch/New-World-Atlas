@@ -1,6 +1,6 @@
 // A planet's (or a region's) things in words for the GM: found by name for the search, and described in Markdown to
 // copy into notes, a handbook page or a chat.
-import { BIOMES, settingOf, ageOf, type Planet } from "../core/index";
+import { featureWord, BIOMES, settingOf, ageOf, type Planet } from "../core/index";
 import { area, km, people } from "./format";
 import type { T } from "./i18n";
 import { legendOf, type Selection } from "./Inspector";
@@ -20,7 +20,7 @@ export function searchPlanet(planet: Planet, query: string, t: T, nm: (name: str
   for (const marker of planet.markers.slice(1)) if (has(marker.name) || t(`marker.${marker.kind}`).toLowerCase().includes(word)) hits.push({ label: `${t(`marker.${marker.kind}`)} ${nm(marker.name)}`.trim(), detail: nm(planet.states[planet.state[marker.cell]]?.name ?? ""), select: () => pick({ kind: "marker", id: marker.id }, [marker.x, marker.y]) });
   for (const feature of planet.features.slice(1)) if (has(feature.name)) {
     const cell = Array.from({ length: planet.mesh.cells }, (_, c) => c).find((c) => planet.feature[c] === feature.id) ?? 0;
-    hits.push({ label: `${t(`feature.${feature.kind}`)} ${nm(feature.name)}`, detail: "", select: () => pick({ kind: "feature", id: feature.id }, [planet.mesh.x[cell], planet.mesh.y[cell]]) });
+    hits.push({ label: `${t(`feature.${featureWord(feature)}`)} ${nm(feature.name)}`, detail: "", select: () => pick({ kind: "feature", id: feature.id }, [planet.mesh.x[cell], planet.mesh.y[cell]]) });
   }
   for (const culture of planet.cultures.slice(1)) if (has(culture.name)) hits.push({ label: nm(culture.name), detail: t("place.culture"), select: () => pick({ kind: "culture", id: culture.id }, [planet.mesh.x[culture.center], planet.mesh.y[culture.center]]) });
   for (const faith of planet.religions.slice(1)) if (has(faith.name)) hits.push({ label: nm(faith.name), detail: t("place.religion"), select: () => pick({ kind: "religion", id: faith.id }, [planet.mesh.x[faith.center] ?? 0, planet.mesh.y[faith.center] ?? 0]) });
@@ -68,9 +68,9 @@ export function describePlanet(planet: Planet, selection: Selection | null, t: T
   }
   if (kind === "culture") return lines(nm(planet.cultures[id].name), [[t("stat.kind"), t(`culture.${planet.cultures[id].kind}`)], [t("stat.population"), people(planet.cultures[id].population, t)]]);
   if (kind === "religion") return lines(nm(planet.religions[id].name), [[t("stat.kind"), t(`religion.kind.${planet.religions[id].kind}`)], [t("religion.deity"), nm(planet.religions[id].deity)]]);
-  if (kind === "feature") return lines(`${t(`feature.${planet.features[id].kind}`)} ${nm(planet.features[id].name)}`.trim(), []);
+  if (kind === "feature") return lines(`${t(`feature.${featureWord(planet.features[id])}`)} ${nm(planet.features[id].name)}`.trim(), []);
   const cell = id;
-  return lines(planet.water[cell] ? t(`feature.${planet.features[planet.feature[cell]].kind}`) : t(`biome.${BIOMES[planet.biome[cell]].key}`), [
+  return lines(planet.water[cell] ? t(`feature.${featureWord(planet.features[planet.feature[cell]])}`) : t(`biome.${BIOMES[planet.biome[cell]].key}`), [
     [t("place.state"), planet.water[cell] ? "" : realm(planet.state[cell])],
     [t("place.temperature"), `${planet.temperature[cell].toFixed(1)} °C`],
   ]);

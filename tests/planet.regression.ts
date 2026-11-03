@@ -1,6 +1,6 @@
 // Planet-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { generateArea, koppenOf, KOPPEN, planetGeoJSON, sculpt, zonesOf, cellKm2, pastPlanet, shiftLanguage, createLanguage, createRng, armsOf, emblemOf, MIXES, SETTINGS, settingFromText, settingToText, coatOfArms, editPlanet, emptyEdits, foundedSize, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
+import { parseRecipe, recipeText, generateArea, koppenOf, KOPPEN, planetGeoJSON, sculpt, zonesOf, cellKm2, pastPlanet, shiftLanguage, createLanguage, createRng, armsOf, emblemOf, MIXES, SETTINGS, settingFromText, settingToText, coatOfArms, editPlanet, emptyEdits, foundedSize, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -363,6 +363,26 @@ test("the world's age reshapes towns, realms, roads, places, armies and banners,
   assert.equal(settingFromText("{broken"), undefined);
   const units = (world: typeof planet) => raiseArmies(world).reduce((sum, regiment) => sum + regiment.units.cavalry, 0);
   assert.equal(units(stone), 0, "no riders in the stone age");
+});
+
+test("a recipe, a share of land, plates and salt lakes", () => {
+  const plain = generatePlanet({ seed: "recipe", template: "continents", cells: 3000 });
+  const written = generatePlanet({ seed: "recipe", template: "continents", cells: 3000, recipe: recipeText("continents") });
+  assert.deepEqual([...written.height], [...plain.height], "the template's recipe as text grows the same world");
+  assert.deepEqual(parseRecipe(["hill 2 50 40-60 40-60", "nonsense", "mask -3"].join("\n")).errors, [2]);
+  const wide = generatePlanet({ seed: "recipe", template: "continents", cells: 3000, land: 0.6 });
+  const share = [...wide.height].filter((h) => h >= SEA_LEVEL).length / wide.mesh.cells;
+  assert.ok(Math.abs(share - 0.6) < 0.02, `land share ${share}`);
+  const plates = generatePlanet({ seed: "plates", template: "plates", cells: 4000 });
+  const land = [...plates.water].filter((w) => !w).length / plates.mesh.cells;
+  assert.ok(land > 0.1 && land < 0.8, `plates give ${land} land`);
+  for (const seed of ["s2", "s5", "dry1"]) {
+    const world = generatePlanet({ seed, cells: 6000, precipitation: seed === "dry1" ? 0.4 : 1 });
+    for (const lake of world.features.filter((f) => f.salt)) {
+      const cells = [...Array(world.mesh.cells).keys()].filter((cell) => world.feature[cell] === lake.id);
+      assert.ok(cells.reduce((sum, cell) => sum + world.precipitation[cell], 0) / cells.length < 350, "a salt lake where it rains well");
+    }
+  }
 });
 
 console.log(`planet: ${passed} regressions passed`);

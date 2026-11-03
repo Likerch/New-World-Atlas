@@ -979,3 +979,11 @@ table.figures td span:not(.bar) {
 .list.deep-peoples li {
   align-items: flex-start;
 }
+
+/* A relief recipe of the GM's own. */
+.recipe textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+}

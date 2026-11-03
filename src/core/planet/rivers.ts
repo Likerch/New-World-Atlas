@@ -1,5 +1,6 @@
 // Water on land: pits fill into lakes, every cell drains to its lowest neighbour, rain gathers downstream, and the
-// strongest channels become rivers with tributaries, discharge and length.
+// strongest channels become rivers with tributaries, discharge and length. In dry, hot lands a lake may lose more to
+// the sun than it gathers: it has no outlet, turns salt, and no river leaves it.
 import type { Point } from "../geometry";
 import type { Mesh } from "../mesh";
 import { PriorityQueue } from "../queue";
@@ -13,14 +14,17 @@ export interface Hydrology {
   rivers: River[];
   /** Where each cell drains to; -1 for the sea. */
   down: Int32Array;
+  /** Lake cells of lakes with no outlet (salt lakes). */
+  salt: Uint8Array;
 }
 
 /**
  * @param ocean cells of water bodies that reach the map's edge
  * @param scale km per map unit
  * @param brought water arriving from beyond the map (m³/s), by the cell it enters at
+ * @param evaporation what open water loses to the sun, mm a year by cell; none keeps every lake open
  */
-export function hydrology(mesh: Mesh, height: Float32Array, ocean: (cell: number) => boolean, rain: Float32Array, scale: number, brought?: Float32Array): Hydrology {
+export function hydrology(mesh: Mesh, height: Float32Array, ocean: (cell: number) => boolean, rain: Float32Array, scale: number, brought?: Float32Array, evaporation?: Float32Array): Hydrology {
   const n = mesh.cells;
   // Priority flood from the sea and the map's edge: every depression fills up to its spill point.
   const filled = new Float32Array(n);
@@ -90,10 +94,44 @@ export function hydrology(mesh: Mesh, height: Float32Array, ocean: (cell: number
     landCells++;
   }
   if (brought) for (let cell = 0; cell < n; cell++) if (!ocean(cell)) flux[cell] += brought[cell];
+  const own = flux.slice();
   // Highest first, so a cell has all its inflow before passing it on.
-  for (let k = order.length - 1; k >= 0; k--) {
-    const cell = order[k];
-    if (down[cell] >= 0) flux[down[cell]] += flux[cell] * (lake[cell] ? 0.9 : 1);
+  const gather = (closed: Uint8Array | null) => {
+    for (let k = order.length - 1; k >= 0; k--) {
+      const cell = order[k];
+      if (down[cell] >= 0 && !closed?.[cell]) flux[down[cell]] += flux[cell] * (lake[cell] ? 0.9 : 1);
+    }
+  };
+  gather(null);
+  // A lake that the sun drinks faster than its rivers and its rain fill keeps all its water: it spills nowhere.
+  const salt = new Uint8Array(n);
+  if (evaporation) {
+    const group = new Int32Array(n).fill(-1);
+    const groups: number[][] = [];
+    for (let start = 0; start < n; start++) {
+      if (!lake[start] || group[start] >= 0) continue;
+      const cells = [start];
+      group[start] = groups.length;
+      for (let head = 0; head < cells.length; head++) for (const next of mesh.neighbors[cells[head]]) if (lake[next] && group[next] < 0) (group[next] = groups.length), cells.push(next);
+      groups.push(cells);
+    }
+    groups.forEach((cells, id) => {
+      let gained = 0,
+        lost = 0,
+        wet = 0;
+      for (const cell of cells) {
+        wet += rain[cell] / cells.length;
+        gained += rain[cell] * mesh.area[cell] * km2 * 0.0317 * 1e-3;
+        lost += evaporation[cell] * mesh.area[cell] * km2 * 0.0317 * 1e-3;
+        for (const next of mesh.neighbors[cell]) if (group[next] !== id && down[next] === cell) gained += flux[next];
+      }
+      // Only in dry lands: where it rains well, a lake fills until it spills.
+      if (wet < 350 && lost >= gained) for (const cell of cells) salt[cell] = 1;
+    });
+    if (salt.some(Boolean)) {
+      flux.set(own);
+      gather(salt);
+    }
   }
 
   const threshold = (landRunoff / Math.max(1, landCells)) * 7;
@@ -150,5 +188,5 @@ export function hydrology(mesh: Mesh, height: Float32Array, ocean: (cell: number
     item.parent = item.parent && end >= 0 ? renumber[river[end]] : 0;
   }
   for (let cell = 0; cell < n; cell++) river[cell] = renumber[river[cell]];
-  return { lake, flux, river, rivers, down };
+  return { lake, flux, river, rivers, down, salt };
 }

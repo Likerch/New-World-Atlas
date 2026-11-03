@@ -14,7 +14,7 @@ import { biomeOf } from "./biomes";
 import { suitability } from "./cultures";
 import { markFeatures } from "./features";
 import { placeMarkers } from "./markers";
-import { SEA_LEVEL, type Burg, type Ground, type Planet } from "./model";
+import { evaporationOf, SEA_LEVEL, type Burg, type Ground, type Planet } from "./model";
 import { hydrology } from "./rivers";
 import { buildRoutes } from "./routes";
 import { carveRivers, fiefsOf, landformsOf, landUseOf, planetRoads, rankVillages } from "./countryside";
@@ -117,10 +117,11 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
   const gathered = hydrology(mesh, height, ocean, rain, scale).flux;
   const brought = new Float32Array(n);
   for (const [cell, flux] of sources) brought[cell] += Math.max(0, flux - gathered[cell]);
-  const hydro = hydrology(mesh, height, ocean, rain, scale, brought);
+  const hydro = hydrology(mesh, height, ocean, rain, scale, brought, evaporationOf(temperature));
   const water = new Uint8Array(n);
   for (let cell = 0; cell < n; cell++) water[cell] = ocean(cell) || hydro.lake[cell] ? 1 : 0;
   const { feature, features, coast } = markFeatures(mesh, (cell) => water[cell] === 1);
+  for (let cell = 0; cell < n; cell++) if (hydro.salt[cell]) features[feature[cell]].salt = true;
   const biome = new Uint8Array(n);
   for (let cell = 0; cell < n; cell++) {
     if (water[cell]) continue;
