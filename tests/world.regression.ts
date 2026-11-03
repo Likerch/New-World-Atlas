@@ -229,4 +229,23 @@ test("review fixes: a dungeon's next floor keeps the world, a bad file is mended
   assert.ok(moved.maps["city:pages/burg-3"], "a city's key (made from the seed alone) was moved");
 });
 
+test("a cavern's map keeps its key when a neighbour is renamed or the world's magic changes; old keys move", () => {
+  const exits = (to: string) => [{ dir: 2, kind: "passage", to }, { dir: 5, kind: "river", to: "Deepwater" }];
+  const base = { seed: "p/underworld/cavern-4", kind: "cave", theme: "lair", levels: 1, origin: { kind: "cavern", facts: {} } };
+  const key = mapKeyOf("local", { ...base, exits: exits("Old Hall") });
+  assert.equal(mapKeyOf("local", { ...base, exits: exits("New Hall") }), key, "a neighbour's new name made another map");
+  assert.equal(mapKeyOf("local", { ...base, exits: exits("Old Hall"), magic: 2 }), key, "the world's magic made another map");
+  assert.notEqual(mapKeyOf("local", { ...base, exits: [{ dir: 3, kind: "passage", to: "Old Hall" }] }), key, "a tunnel the other way is another map");
+  // A world saved with the old prints: the map opened last takes the new key with its notes; the other keeps its own.
+  let world = emptyWorld({ id: "w10", name: "Deep", top: "local", now: 1 });
+  world = visit(world, "local:p/underworld/cavern-4~old1", { level: "local", parent: null, step: null, title: "Hall", base: null, params: { ...base, exits: exits("Old Hall") } }, 2);
+  world = { ...world, maps: { ...world.maps, "local:p/underworld/cavern-4~old2": { ...world.maps["local:p/underworld/cavern-4~old1"], params: { ...base, exits: exits("New Hall"), magic: 2 }, opened: 3 } } };
+  world = { ...world, patches: { "local:p/underworld/cavern-4~old1": { ...emptyPatch(), notes: { "keyed:1": "first" } }, "local:p/underworld/cavern-4~old2": { ...emptyPatch(), notes: { "keyed:1": "second" } }, "local:p/underworld/cavern-4~old2/room-1": { ...emptyPatch(), notes: { x: "scene" } } } };
+  const moved = rekey(world);
+  assert.equal(moved.patches[key]?.notes["keyed:1"], "second", "the map opened last lost its notes");
+  assert.equal(moved.patches["local:p/underworld/cavern-4~old1"]?.notes["keyed:1"], "first", "the other map's notes were dropped");
+  assert.equal(moved.patches[`${key}/room-1`]?.notes.x, "scene", "a room's scene stayed behind");
+  assert.ok(moved.maps[key] && moved.maps["local:p/underworld/cavern-4~old1"]);
+});
+
 console.log(`world: ${passed} regressions passed`);

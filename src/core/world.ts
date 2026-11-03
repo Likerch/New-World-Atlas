@@ -165,17 +165,18 @@ export function resolve(world: WorldDoc, key: string, derived: Record<string, un
 }
 
 /** What each kind of map grows from besides its seed. Settings that do not reshape it stay out of its key: its name,
- * the world it is part of, the age the whole world shares, the GM's own kinds of thing, a dungeon's danger. */
+ * the world it is part of, the age and magic the whole world shares, the GM's own kinds of thing, a dungeon's danger. */
 const SHAPED: Partial<Record<MapLevel, [(seed: string) => object, string[]]>> = {
   planet: [(seed) => planetParams({ seed }), ["setting"]],
-  local: [(seed) => localParams({ seed }), ["danger", "boss", "levels", "age"]],
+  local: [(seed) => localParams({ seed }), ["danger", "boss", "levels", "age", "magic"]],
   galaxy: [(seed) => galaxyParams({ seed }), ["custom"]],
   universe: [(seed) => universeParams({ seed }), ["custom"]],
 };
 
-/** What a key leaves out of the parameters it prints: names handed down (a gate's far galaxy, a far power), which the
- * GM may rename without the map becoming another. */
+/** What a key leaves out of the parameters it prints: names handed down (a gate's far galaxy, a far power, the
+ * caverns a cavern's tunnels lead to), which the GM may rename without the map becoming another. */
 const unnamed = (level: MapLevel, field: string, value: unknown): unknown => {
+  if (level === "local" && field === "exits" && Array.isArray(value)) return value.map((exit: { dir?: unknown; kind?: unknown }) => ({ dir: exit?.dir, kind: exit?.kind }));
   if (level !== "galaxy" || field !== "origin" || !value || typeof value !== "object") return value;
   const origin = value as { gate?: unknown; power?: Record<string, unknown> };
   return { ...origin, ...(origin.gate !== undefined ? { gate: true } : {}), ...(origin.power ? { power: { ...origin.power, name: undefined } } : {}) };
@@ -211,12 +212,18 @@ export function mapKeyOf(level: MapLevel, params: Record<string, unknown>): stri
 /** A world saved before map keys carried their print: each map, its patch and the links to it move to its key now. */
 export function rekey(world: WorldDoc): WorldDoc {
   const moves = new Map<string, string>();
-  for (const [key, map] of Object.entries(world.maps)) {
+  const taken = new Set<string>();
+  // The map opened last first: when two old keys now key alike (a cavern's map before and after a neighbour was
+  // renamed), it takes the new key and the other stays where it was, its notes kept.
+  for (const [key, map] of Object.entries(world.maps).sort(([, p], [, q]) => q.opened - p.opened)) {
     // A map of a kind whose key carries a print, keyed otherwise than its parameters key it now.
     const plain = `${map.level}:${String(map.params.seed)}`;
     if (!SHAPED[map.level] || (key !== plain && !key.startsWith(`${plain}~`))) continue;
     const next = mapKeyOf(map.level, map.params);
-    if (next !== key && !world.maps[next]) moves.set(key, next);
+    if (next !== key && !world.maps[next] && !taken.has(next)) {
+      moves.set(key, next);
+      taken.add(next);
+    }
   }
   // The local map of a star's place once hung by the star's own entity, so renaming the place renamed the star.
   let sites = false;
