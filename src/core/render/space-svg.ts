@@ -10,6 +10,7 @@ import type { BodyKind, StarSystem } from "../space/system";
 import type { Anomaly, AnomalyKind, Universe } from "../space/universe";
 import { voronoi } from "../voronoi";
 import { present, type LegendEntry, type LegendSection, type Swatch } from "./legend";
+import { anomalyPoint } from "../space/universe";
 
 const esc = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
 const r1 = (value: number) => Math.round(value * 10) / 10;
@@ -114,6 +115,8 @@ export interface SpaceRenderOptions {
   highlight?: number | null;
   /** A region (galaxy) or an anomaly (universe) to ring. */
   highlightZone?: number | null;
+  /** A star picked on a galaxy map. */
+  highlightStar?: number | null;
   highlightAnomaly?: number | null;
   territories?: boolean;
   lanes?: boolean;
@@ -167,6 +170,8 @@ export function renderGalaxy(galaxy: Galaxy, options: SpaceRenderOptions = {}): 
     const own = star.custom ? custom.get(star.custom) : undefined;
     if (own) out.push(`<text x="${r1(star.x - 4)}" y="${r1(star.y - 4)}" text-anchor="end" font-size="9" fill="${own.color}" font-family="'Segoe UI Symbol', 'Segoe UI Emoji', sans-serif">${esc(own.glyph)}</text>`);
   }
+  const chosen = options.highlightStar !== null && options.highlightStar !== undefined ? galaxy.stars[options.highlightStar] : null;
+  if (chosen) out.push(`<circle cx="${r1(chosen.x)}" cy="${r1(chosen.y)}" r="7" fill="none" stroke="#ffd34d" stroke-width="1.5"/>`);
   // Dark nebulae swallow the starlight behind them.
   for (const zone of zones) if (zone.kind === "dark-nebula") drawZone(zone, custom, out);
   const picked = zones.find((zone) => zone.id === options.highlightZone);
@@ -208,6 +213,18 @@ const WORLD_COLORS: Record<BodyKind, [string, string]> = {
   belt: ["#8a8070", "#5a5246"],
 };
 
+/** A whole number in groups of three, the same on every machine (the map is not in the reader's locale). */
+const group = (value: number) => String(Math.round(value)).replace(/\B(?=(\d{3})+(?!\d))/gu, "\u2009");
+
+/** A system map's size, and where a world is drawn on it: shared by the drawing and the clicks. */
+export const SYSTEM_SIZE = { width: 1600, height: 1000 };
+export function bodyPoint(system: StarSystem, body: StarSystem["bodies"][number]): { x: number; y: number; r: number; centre: [number, number] } {
+  const maxOrbit = Math.max(system.frost * 1.2, ...system.bodies.map((b) => b.orbit), 1);
+  const r = 90 + Math.sqrt(body.orbit / maxOrbit) * (SYSTEM_SIZE.width - 260);
+  const centre: [number, number] = [110, SYSTEM_SIZE.height / 2];
+  return { x: centre[0] + Math.cos(body.angle) * r, y: centre[1] + Math.sin(body.angle) * r, r, centre };
+}
+
 export function renderSystem(system: StarSystem, options: SpaceRenderOptions = {}): string {
   const W = 1600,
     H = 1000;
@@ -226,7 +243,9 @@ export function renderSystem(system: StarSystem, options: SpaceRenderOptions = {
   const [zi, zo] = system.zone;
   out.push(`<circle cx="${sx}" cy="${sy}" r="${r1((rOf(zi) + rOf(zo)) / 2)}" fill="none" stroke="#36e0a0" stroke-opacity="0.12" stroke-width="${r1(Math.max(4, rOf(zo) - rOf(zi)))}"/>`);
   out.push(`<circle cx="${sx}" cy="${sy}" r="${r1(rOf(system.frost))}" fill="none" stroke="#9cc9e6" stroke-opacity="0.5" stroke-dasharray="6 6"/>`);
-  out.push(`<circle cx="${sx}" cy="${sy}" r="${spec.size * 40}" fill="url(#sun)"/>`);
+  // The star: a black hole is a dark disc in its glowing ring of infalling matter, not a light.
+  if (system.spectral === "BH") out.push(`<ellipse cx="${sx}" cy="${sy}" rx="${spec.size * 34}" ry="${spec.size * 9}" fill="none" stroke="#ffb35c" stroke-width="5" opacity="0.75" transform="rotate(-14 ${sx} ${sy})"/><circle cx="${sx}" cy="${sy}" r="${spec.size * 14}" fill="#000" stroke="#ffb35c" stroke-width="2"/>`);
+  else out.push(`<circle cx="${sx}" cy="${sy}" r="${spec.size * (system.spectral === "WD" || system.spectral === "NS" ? 20 : 40)}" fill="url(#sun)"/>`);
   if (system.companion) out.push(`<circle cx="${sx - 40}" cy="${sy + 60}" r="14" fill="${SPECTRA[system.companion].color}"/>`);
   for (const body of system.bodies) {
     const r = rOf(body.orbit);
@@ -250,7 +269,7 @@ export function renderSystem(system: StarSystem, options: SpaceRenderOptions = {
     });
     if (body.station) out.push(`<rect x="${r1(x + size + 4)}" y="${r1(y - size - 8)}" width="6" height="6" fill="none" stroke="#ffd27a" stroke-width="1.2" transform="rotate(45 ${r1(x + size + 7)} ${r1(y - size - 5)})"/>`);
     out.push(`<text x="${r1(x)}" y="${r1(y + size + 18)}" text-anchor="middle" font-size="12" fill="#dfe7ff">${text(body.name)}</text>`);
-    if (body.population) out.push(`<text x="${r1(x)}" y="${r1(y + size + 31)}" text-anchor="middle" font-size="9" fill="#36e0a0">◉ ${body.population.toLocaleString()} M</text>`);
+    if (body.population) out.push(`<text x="${r1(x)}" y="${r1(y + size + 31)}" text-anchor="middle" font-size="9" fill="#36e0a0">◉ ${group(body.population)} M</text>`);
   }
   out.push(`<text x="20" y="34" font-size="20" letter-spacing="3" fill="#e6ecff" font-weight="600">${text(system.name.toUpperCase())}</text><text x="20" y="54" font-size="12" fill="#9fb0d8">${system.spectral}${system.companion ? ` + ${system.companion}` : ""}</text>`);
   out.push(`</svg>`);
@@ -286,7 +305,7 @@ export function renderUniverse(universe: Universe, options: SpaceRenderOptions =
   }
   const custom = new Map((universe.params.custom ?? []).map((kind) => [kind.id, kind]));
   for (const anomaly of universe.anomalies ?? []) out.push(drawAnomaly(anomaly, custom, options.highlightAnomaly === anomaly.id));
-  out.push(`<g text-anchor="middle" font-size="8" font-style="italic" fill="#c9b8ff" opacity="0.75">${(universe.anomalies ?? []).map((a) => `<text x="${r1(a.x)}" y="${r1(a.y + (a.kind === "cosmic-string" || a.kind === "bubble-wall" ? 0 : Math.max(a.size, 10) + 9))}">${text(a.name)}</text>`).join("")}</g>`);
+  out.push(`<g text-anchor="middle" font-size="8" font-style="italic" fill="#c9b8ff" opacity="0.75">${(universe.anomalies ?? []).map((a) => `<text x="${r1(anomalyPoint(a)[0])}" y="${r1(anomalyPoint(a)[1] + (a.kind === "cosmic-string" ? 0 : a.kind === "bubble-wall" ? -8 : Math.max(a.size, 10) + 9))}">${text(a.name)}</text>`).join("")}</g>`);
   out.push(`<g text-anchor="middle" font-size="9" fill="#5a5f8a" font-style="italic">${universe.voids.map((v) => `<text x="${r1(v.x)}" y="${r1(v.y)}">${text(v.name)}</text>`).join("")}</g>`);
   out.push(`<g text-anchor="middle" font-size="15" letter-spacing="4" font-weight="600">`);
   universe.clusters.forEach((cluster) => {
@@ -314,7 +333,8 @@ export const ANOMALY_COLOR: Record<AnomalyKind, string> = {
 function drawAnomaly(a: Anomaly, custom: Map<string, CustomKind>, picked: boolean): string {
   const x = r1(a.x),
     y = r1(a.y);
-  const ring = picked ? `<circle cx="${x}" cy="${y}" r="${r1(Math.min(a.size, 40) + 6)}" fill="none" stroke="#ffd34d" stroke-width="1.5"/>` : "";
+  const [px, py] = anomalyPoint(a);
+  const ring = !picked ? "" : a.kind === "bubble-wall" ? `<path d="M${r1(a.x + Math.cos(a.angle - 0.9) * a.size)},${r1(a.y + Math.sin(a.angle - 0.9) * a.size)}A${r1(a.size)},${r1(a.size)} 0 0 1 ${r1(a.x + Math.cos(a.angle + 0.9) * a.size)},${r1(a.y + Math.sin(a.angle + 0.9) * a.size)}" fill="none" stroke="#ffd34d" stroke-width="3" opacity="0.8"/>` : `<circle cx="${r1(px)}" cy="${r1(py)}" r="${r1(Math.min(a.size, 40) + 6)}" fill="none" stroke="#ffd34d" stroke-width="1.5"/>`;
   if (a.kind === "custom") {
     const kind = custom.get(a.custom ?? "");
     const color = kind?.color ?? "#ffd27a";
@@ -381,6 +401,11 @@ export function galaxyLegend(galaxy: Galaxy): LegendSection[] {
 }
 
 export function systemLegend(system: StarSystem): LegendSection[] {
+  const suns: LegendEntry[] = [system.spectral, ...(system.companion ? [system.companion] : [])].map((spectral, k) => ({
+    key: k ? "legend.companion" : `spectral.${spectral}`,
+    vars: k ? { kind: spectral } : undefined,
+    swatch: spectral === "BH" ? { svg: `<circle cx="12" cy="8" r="5" fill="#000" stroke="#ffb35c" stroke-width="1.6"/>` } : { fill: SPECTRA[spectral].color, round: true },
+  }));
   const worlds: LegendEntry[] = present(system.bodies.map((b) => b.kind)).map((kind) => ({
     key: `body.${kind}`,
     swatch: kind === "belt" ? { line: "#a69a86", width: 5, dash: "1.5 3.5" } : { svg: `<circle cx="12" cy="8" r="6" fill="${WORLD_COLORS[kind][0]}" stroke="${WORLD_COLORS[kind][1]}" stroke-width="1.6"/>` },
@@ -394,6 +419,7 @@ export function systemLegend(system: StarSystem): LegendSection[] {
     ...(system.bodies.some((b) => b.population) ? [{ key: "legend.population", swatch: { glyph: "◉", color: "#36e0a0" } }] : []),
   ];
   return [
+    { key: "legend.stars", entries: suns },
     { key: "legend.worlds", entries: worlds },
     { key: "legend.orbits", entries: orbits },
   ].filter((section) => section.entries.length);

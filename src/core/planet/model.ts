@@ -38,6 +38,8 @@ export interface PlanetParams {
   towns: number;
   /** Share of towns that head a province (0–1). */
   provinceShare: number;
+  /** A world nobody lives on: no peoples, towns, realms or faiths, only the land, its waters and their names. */
+  lifeless?: boolean;
 }
 
 export type FeatureKind = "ocean" | "lake" | "continent" | "island" | "isle";

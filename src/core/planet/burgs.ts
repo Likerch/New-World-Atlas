@@ -33,7 +33,8 @@ export function placeBurgs(g: Ground, culture: Uint16Array, cultures: Culture[],
     others = at.filter(([, capital]) => !capital).map(([cell]) => cell);
   } else {
     capitals = spacedPicks(g, scores, capitalCount, Math.sqrt((landCells * cellArea) / Math.max(1, capitalCount)) * 0.75, rng.fork("capitals"));
-    const towns = townCount > 0 ? townCount : Math.round(landCells / 18);
+    // A count below zero asks for no towns at all (a lifeless world); zero, for as many as the land holds.
+    const towns = townCount > 0 ? townCount : townCount < 0 ? 0 : Math.round(landCells / 18);
     others = spacedPicks(g, scores, towns, Math.sqrt((landCells * cellArea) / Math.max(1, towns)) * 0.55, rng.fork("towns"), capitals);
   }
 

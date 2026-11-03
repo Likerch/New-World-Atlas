@@ -38,6 +38,8 @@ export interface Body {
   population: number;
   station: boolean;
   habitable: boolean;
+  /** The world a power's people came from (made home even when it lies outside the habitable zone). */
+  homeworld?: boolean;
 }
 
 export interface StarSystem {
@@ -121,7 +123,8 @@ function buildSystem(seed: string, star: Star, empire: string, language: Languag
       temperature: Math.round(temperature * greenhouse),
       atmosphere,
       water,
-      year: Math.round(365.25 * Math.sqrt(orbit ** 3 / Math.max(0.05, Math.pow(Math.max(luminosity, 1e-4), 0.25)))),
+      // Kepler: the star's mass, not its light, sets the year (a black hole is dark but heavy).
+      year: Math.round(365.25 * Math.sqrt(orbit ** 3 / spectrum.mass)),
       moons,
       rings: kind === "gas-giant" ? rng.chance(0.45) : kind === "ice-giant" && rng.chance(0.3),
       population: settled ? Math.round(habitable ? rng.float(200, 9000) : rng.float(0.5, 80)) : 0,
@@ -129,6 +132,24 @@ function buildSystem(seed: string, star: Star, empire: string, language: Languag
       habitable,
     });
     orbit *= rng.float(1.45, 2.1);
+  }
+  // A power's capital has a world its people came from: the rocky world nearest the middle of the habitable zone.
+  if (star.capital && !bodies.some((b) => b.habitable)) {
+    const home = rng.fork("homeworld");
+    const middle = (zone[0] + zone[1]) / 2;
+    const rocky = bodies.filter((b) => !["gas-giant", "ice-giant", "belt"].includes(b.kind));
+    const world = rocky.reduce<Body | null>((pick, b) => (!pick || Math.abs(Math.log(b.orbit / middle)) < Math.abs(Math.log(pick.orbit / middle)) ? b : pick), null);
+    if (world)
+      Object.assign(world, {
+        kind: home.pick<BodyKind>(["terran", "terran", "ocean", "jungle"]),
+        atmosphere: "breathable",
+        water: home.float(0.45, 0.8),
+        temperature: Math.round(home.float(278, 298)),
+        habitable: true,
+        homeworld: true,
+        population: Math.round(home.float(2000, 9000)),
+        name: language ? name(language, home, "plain") : world.name,
+      });
   }
   return { seed, name: star.name, spectral: star.spectral, luminosity, companion, zone, frost, bodies, empire, settled: star.settled, language };
 }
@@ -138,7 +159,10 @@ export function planetFromBody(system: StarSystem, bodyId: number): Partial<Plan
   const body = system.bodies[bodyId];
   const celsius = body.temperature - 273;
   const template = body.kind === "ocean" ? "archipelago" : body.kind === "desert" ? "pangea" : body.kind === "jungle" ? "isthmus" : body.water < 0.35 ? "pangea" : "continents";
+  // A world nobody lives on (scorched, frozen or airless, and unsettled) has no peoples, towns or realms.
+  const lifeless = !body.population && !body.habitable;
   return {
+    ...(lifeless ? { lifeless: true } : {}),
     seed: `${system.seed}/body-${bodyId}`,
     name: body.name,
     template,
@@ -146,7 +170,7 @@ export function planetFromBody(system: StarSystem, bodyId: number): Partial<Plan
     latitudeSouth: -75,
     temperatureEquator: Math.round(celsius + 14),
     temperaturePole: Math.round(celsius - 40),
-    precipitation: Math.round((0.25 + body.water * 1.8) * 10) / 10,
+    precipitation: Math.max(0.1, Math.round((body.water < 0.05 ? 0.05 : 0.25 + body.water * 1.8) * 10) / 10),
     cultures: body.population ? Math.max(3, Math.min(20, Math.round(Math.log10(body.population + 1) * 4))) : 3,
     states: body.population ? Math.max(3, Math.min(30, Math.round(Math.log10(body.population + 1) * 5))) : 3,
   };

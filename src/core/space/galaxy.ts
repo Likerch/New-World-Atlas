@@ -16,17 +16,18 @@ export const GALAXY_SHAPES: GalaxyShape[] = ["spiral", "barred", "elliptical", "
 
 export type SpectralClass = "O" | "B" | "A" | "F" | "G" | "K" | "M" | "WD" | "NS" | "BH";
 
-export const SPECTRA: Record<SpectralClass, { weight: number; color: string; luminosity: number; size: number }> = {
-  O: { weight: 0.004, color: "#9bb0ff", luminosity: 30000, size: 2.6 },
-  B: { weight: 0.02, color: "#aabfff", luminosity: 1000, size: 2.2 },
-  A: { weight: 0.04, color: "#cad7ff", luminosity: 20, size: 1.9 },
-  F: { weight: 0.07, color: "#f8f7ff", luminosity: 3, size: 1.7 },
-  G: { weight: 0.1, color: "#fff1c9", luminosity: 1, size: 1.6 },
-  K: { weight: 0.15, color: "#ffc98a", luminosity: 0.4, size: 1.45 },
-  M: { weight: 0.58, color: "#ff9a5c", luminosity: 0.04, size: 1.2 },
-  WD: { weight: 0.025, color: "#e6f0ff", luminosity: 0.01, size: 1 },
-  NS: { weight: 0.004, color: "#b4f5ff", luminosity: 0.001, size: 1 },
-  BH: { weight: 0.002, color: "#111111", luminosity: 0, size: 1.8 },
+/** Each class: how common, its colour, its light (suns), its mass (suns, for the length of a year) and drawn size. */
+export const SPECTRA: Record<SpectralClass, { weight: number; color: string; luminosity: number; mass: number; size: number }> = {
+  O: { weight: 0.004, color: "#9bb0ff", luminosity: 30000, mass: 30, size: 2.6 },
+  B: { weight: 0.02, color: "#aabfff", luminosity: 1000, mass: 8, size: 2.2 },
+  A: { weight: 0.04, color: "#cad7ff", luminosity: 20, mass: 2, size: 1.9 },
+  F: { weight: 0.07, color: "#f8f7ff", luminosity: 3, mass: 1.3, size: 1.7 },
+  G: { weight: 0.1, color: "#fff1c9", luminosity: 1, mass: 1, size: 1.6 },
+  K: { weight: 0.15, color: "#ffc98a", luminosity: 0.4, mass: 0.7, size: 1.45 },
+  M: { weight: 0.58, color: "#ff9a5c", luminosity: 0.04, mass: 0.3, size: 1.2 },
+  WD: { weight: 0.025, color: "#e6f0ff", luminosity: 0.01, mass: 0.6, size: 1 },
+  NS: { weight: 0.004, color: "#b4f5ff", luminosity: 0.001, mass: 1.4, size: 1 },
+  BH: { weight: 0.002, color: "#111111", luminosity: 0, mass: 10, size: 1.8 },
 };
 
 export type EmpireForm = "empire" | "republic" | "hegemony" | "collective" | "union" | "dominion" | "consortium" | "federation" | "theocracy";
@@ -99,6 +100,7 @@ export interface Empire {
 }
 
 export interface Nebula {
+  id: number;
   x: number;
   y: number;
   r: number;
@@ -108,6 +110,8 @@ export interface Nebula {
 
 export interface GalaxyParams {
   seed: string;
+  /** Its name, when the universe map already gives it one. */
+  name?: string;
   shape: GalaxyShape;
   stars: number;
   arms: number;
@@ -176,7 +180,8 @@ function place(params: GalaxyParams, rng: Rng): Point[] {
     cy = H / 2;
   const R = Math.min(W, H) * 0.46;
   const points: Point[] = [];
-  const minGap = Math.sqrt((W * H) / params.stars) * 0.42;
+  // The gap between stars narrows if a shape (a thin ring, a few clusters) cannot hold the stars asked for.
+  let minGap = Math.sqrt((W * H) / params.stars) * 0.42;
   const tryAdd = (x: number, y: number) => {
     if (x < 12 || y < 12 || x > W - 12 || y > H - 12) return;
     if (points.some(([px, py]) => (px - x) ** 2 + (py - y) ** 2 < minGap * minGap)) return;
@@ -191,7 +196,11 @@ function place(params: GalaxyParams, rng: Rng): Point[] {
     return [cx + sx * Math.cos(tilt) - sy * Math.sin(tilt), cy + sx * Math.sin(tilt) + sy * Math.cos(tilt)];
   };
   const clumps = Array.from({ length: rng.int(4, 7) }, () => [rng.float(-0.8, 0.8) * R, rng.float(-0.8, 0.8) * R, rng.float(0.12, 0.25) * R]);
-  for (let attempt = 0; attempt < params.stars * 12 && points.length < params.stars; attempt++) {
+  for (let attempt = 0, pass = 1; points.length < params.stars && minGap > 1; attempt++) {
+    if (attempt >= params.stars * 12 * pass) {
+      pass++;
+      minGap *= 0.8;
+    }
     let x = 0,
       y = 0;
     const roll = rng.next();
@@ -272,12 +281,18 @@ export function generateGalaxy(input: Partial<GalaxyParams> = {}): Galaxy {
   const sunlike = stars.filter((star) => ["F", "G", "K"].includes(star.spectral)).map((star) => star.id);
   const gap = Math.min(params.width, params.height) / Math.sqrt(params.empires) / 1.6;
   const hue = rng.next();
-  for (const id of rng.fork("capitals").shuffle([...sunlike])) {
+  // Capitals well apart at sunlike stars; if too few fit, closer together, then at any star that is no dead one.
+  const capitals = rng.fork("capitals");
+  const others = stars.filter((star) => !["F", "G", "K", "BH", "NS"].includes(star.spectral)).map((star) => star.id);
+  for (const [pool, spread] of [[sunlike, gap], [sunlike, gap / 2], [others, gap / 2]] as const) {
+    for (const id of capitals.shuffle([...pool])) {
+      if (empires.length > params.empires) break;
+      if (empires.slice(1).some((empire) => empire.capital === id || Math.hypot(stars[empire.capital].x - stars[id].x, stars[empire.capital].y - stars[id].y) < spread)) continue;
+      const own = rng.fork(`empire-${empires.length}`);
+      const language = tongues[(empires.length - 1) % tongues.length];
+      empires.push({ id: empires.length, name: name(language, own, "land"), form: own.pick(FORMS), color: paletteColor(empires.length, hue, 0.7, 0.58), capital: id, stars: 0, species: name(language, own, "people"), language });
+    }
     if (empires.length > params.empires) break;
-    if (empires.slice(1).some((empire) => Math.hypot(stars[empire.capital].x - stars[id].x, stars[empire.capital].y - stars[id].y) < gap)) continue;
-    const own = rng.fork(`empire-${empires.length}`);
-    const language = tongues[(empires.length - 1) % tongues.length];
-    empires.push({ id: empires.length, name: name(language, own, "land"), form: own.pick(FORMS), color: paletteColor(empires.length, hue, 0.7, 0.58), capital: id, stars: 0, species: name(language, own, "people"), language });
   }
   const best = new Float64Array(n).fill(Infinity);
   const queue = new PriorityQueue<[number, number]>();
@@ -301,11 +316,19 @@ export function generateGalaxy(input: Partial<GalaxyParams> = {}): Galaxy {
       queue.push([to, owner], total);
     }
   }
+  // Names: no two stars share one (a tongue may come up with another's word; a catalogue number may repeat).
+  const given = new Set<string>();
   for (const star of stars) {
     empires[star.empire].stars++;
     if (star.empire) star.settled = star.capital || (["F", "G", "K", "M"].includes(star.spectral) && names.chance(best[star.id] < typical * 3 ? 0.55 : 0.2));
     const tongue = star.empire ? empires[star.empire].language : tongues[star.id % tongues.length];
-    star.name = star.empire || names.chance(0.35) ? name(tongue, names, "plain") : `${names.pick(["HD", "GJ", "KIC", "TYC", "LHS", "WISE"])} ${names.int(100, 9999)}`;
+    const make = (spoken: boolean) => (spoken ? name(tongue, names, "plain") : `${names.pick(["HD", "GJ", "KIC", "TYC", "LHS", "WISE"])} ${names.int(100, 9999)}`);
+    const spoken = star.empire > 0 || names.chance(0.35);
+    let called = make(spoken);
+    for (let k = 0; given.has(called) && k < 6; k++) called = make(spoken);
+    for (let k = 2; given.has(called); k++) called = `${called.replace(/ [IVX]+$/u, "")} ${["", "", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"][k] ?? k}`;
+    given.add(called);
+    star.name = called;
   }
 
   // Points of interest, wormholes and nebulae.
@@ -313,18 +336,20 @@ export function generateGalaxy(input: Partial<GalaxyParams> = {}): Galaxy {
   const strange = Math.max(0, Math.min(3, params.anomalies));
   for (const star of stars) if (!star.capital && features.chance(0.08 * strange)) star.feature = features.weighted(FEATURES);
   const wormholes: [number, number][] = [];
-  for (let k = features.int(1, 3); k > 0; k--) {
-    const a = features.int(0, n - 1);
-    const far = stars.filter((star) => Math.hypot(star.x - stars[a].x, star.y - stars[a].y) > Math.min(params.width, params.height) * 0.5);
+  // Wormholes only where the galaxy is strange at all, and only between stars with nothing else there.
+  for (let k = features.int(1, 3), open = strange > 0; k > 0 && open; k--) {
+    let a = features.int(0, n - 1);
+    for (let step = 0; step < n && (stars[a].feature || stars[a].capital); step++) a = (a + 1) % n;
+    const far = stars.filter((star) => !star.feature && !star.capital && Math.hypot(star.x - stars[a].x, star.y - stars[a].y) > Math.min(params.width, params.height) * 0.5);
     if (!far.length) continue;
     const b = features.pick(far).id;
     wormholes.push([a, b]);
     stars[a].feature = "wormhole";
     stars[b].feature = "wormhole";
   }
-  const nebulae: Nebula[] = Array.from({ length: features.int(4, 9) }, () => {
+  const nebulae: Nebula[] = Array.from({ length: features.int(4, 9) }, (_, id) => {
     const star = features.pick(stars);
-    return { x: star.x + features.float(-40, 40), y: star.y + features.float(-40, 40), r: features.float(40, 130), color: features.pick(["#ff4fa3", "#3fd6ff", "#7a5cff", "#ff8a3d", "#36e0a0"]), name: name(features.pick(tongues), features, "plain") };
+    return { id, x: star.x + features.float(-40, 40), y: star.y + features.float(-40, 40), r: features.float(40, 130), color: features.pick(["#ff4fa3", "#3fd6ff", "#7a5cff", "#ff8a3d", "#36e0a0"]), name: name(features.pick(tongues), features, "plain") };
   });
   // Wonders and regions of trouble, each from a stream of its own, so the older features stay where they were.
   const wonders = rng.fork("wonders");
@@ -355,5 +380,5 @@ export function generateGalaxy(input: Partial<GalaxyParams> = {}): Galaxy {
       else star.custom = kind.id;
     }
   });
-  return { params, name: name(tongues[0], rng.fork("galaxy-name"), "land"), stars, lanes, wormholes, empires, nebulae, zones, scale: 100_000 / Math.min(params.width, params.height) };
+  return { params, name: params.name || name(tongues[0], rng.fork("galaxy-name"), "land"), stars, lanes, wormholes, empires, nebulae, zones, scale: 100_000 / Math.min(params.width, params.height) };
 }

@@ -1,6 +1,6 @@
 // Galaxy and star-system regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { generateUniverse, renderUniverse, shapeOf, GALAXY_SHAPES, generateGalaxy, generateLoneSystem, generatePlanet, generateSystem, planetFromBody, renderGalaxy, renderSystem } from "../src/core/index";
+import { anomalyDistance, anomalyPoint, renameGalaxy, generateUniverse, renderUniverse, shapeOf, GALAXY_SHAPES, generateGalaxy, generateLoneSystem, generatePlanet, generateSystem, planetFromBody, renderGalaxy, renderSystem } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -34,7 +34,8 @@ test("systems are reproducible, orbits widen outwards, living worlds sit in the 
     const system = generateSystem(galaxy, star.id);
     assert.equal(JSON.stringify({ ...generateSystem(galaxy, star.id), language: null }), JSON.stringify({ ...system, language: null }));
     for (let k = 1; k < system.bodies.length; k++) assert.ok(system.bodies[k].orbit > system.bodies[k - 1].orbit);
-    for (const body of system.bodies.filter((b) => b.habitable)) {
+    // A power's homeworld is made home wherever it lies; other living worlds keep to the zone.
+    for (const body of system.bodies.filter((b) => b.habitable && !b.homeworld)) {
       living++;
       assert.ok(body.orbit >= system.zone[0] - 1e-9 && body.orbit <= system.zone[1] + 1e-9, `${body.name} lives outside the zone`);
     }
@@ -92,6 +93,58 @@ test("the universe strings its galaxies along void walls, and each galaxy opens 
   const barred = universe.galaxies.find((g) => g.kind === "barred")!;
   const galaxy = generateGalaxy({ seed: `web/galaxy-${barred.id}`, shape: shapeOf(barred.kind), stars: barred.stars });
   assert.equal(galaxy.params.shape, "barred");
+});
+
+test("more galaxies leave the first ones as they were; a galaxy opens as the universe shows it", () => {
+  const few = generateUniverse({ seed: "growth", galaxies: 200 });
+  const many = generateUniverse({ seed: "growth", galaxies: 300 });
+  for (const g of few.galaxies) {
+    const same = many.galaxies[g.id];
+    assert.equal(same.name, g.name, `galaxy ${g.id} was renamed`);
+    assert.equal(same.kind, g.kind, `galaxy ${g.id} changed its kind`);
+  }
+  const node = few.galaxies.find((g) => g.civilisations > 0)!;
+  const empty = few.galaxies.find((g) => g.civilisations === 0)!;
+  const galaxy = generateGalaxy({ seed: `growth/galaxy-${node.id}`, shape: shapeOf(node.kind), stars: node.stars, name: node.name, empires: node.civilisations });
+  assert.equal(galaxy.name, node.name);
+  assert.equal(galaxy.empires.length - 1, node.civilisations);
+  assert.equal(generateGalaxy({ seed: `growth/galaxy-${empty.id}`, empires: 0 }).empires.length, 1, "a galaxy without civilisations has no powers");
+  const wall = { id: 0, kind: "bubble-wall" as const, x: 500, y: 500, angle: 0.4, size: 200, name: "" };
+  const [ax, ay] = anomalyPoint(wall);
+  assert.ok(anomalyDistance(wall, ax + 2, ay) < 3, "a bubble's wall is picked on its arc");
+  assert.ok(anomalyDistance(wall, 500, 500) > 50, "not at its empty middle");
+});
+
+test("a galaxy holds the stars and powers asked, names each star once, keeps its wonders out of wormholes", () => {
+  for (const shape of GALAXY_SHAPES) {
+    const galaxy = generateGalaxy({ seed: `count-${shape}`, shape, stars: 1500, empires: 12 });
+    assert.ok(galaxy.stars.length >= 1450, `${shape}: ${galaxy.stars.length} of 1500 stars`);
+    assert.equal(galaxy.empires.length - 1, 12, `${shape}: ${galaxy.empires.length - 1} of 12 powers`);
+    assert.equal(new Set(galaxy.stars.map((star) => star.name)).size, galaxy.stars.length, `${shape}: a star name repeats`);
+    for (const empire of galaxy.empires.slice(1)) assert.ok(generateSystem(galaxy, empire.capital).bodies.some((b) => b.habitable), `${shape}: ${empire.name} has no home`);
+  }
+  assert.equal(generateGalaxy({ seed: "calm", anomalies: 0 }).wormholes.length, 0, "wormholes in a galaxy with no strangeness");
+  const named = renameGalaxy(generateGalaxy({ seed: "calm" }), { "nebula:0": "Veil" });
+  assert.equal(named.nebulae[0].name, "Veil");
+});
+
+test("a black hole is drawn dark and its worlds keep a heavy star's year; a dead world opens with nobody on it", () => {
+  const hole = generateLoneSystem({ seed: "dark", spectral: "BH" });
+  assert.match(renderSystem(hole), /fill="#000" stroke="#ffb35c"/u);
+  for (const body of hole.bodies) assert.equal(body.year, Math.round(365.25 * Math.sqrt(body.orbit ** 3 / 10)));
+  for (let k = 0; k < 40; k++) {
+    const system = generateLoneSystem({ seed: `dead-${k}`, settled: false });
+    const lava = system.bodies.find((b) => !b.habitable && !b.population && !["gas-giant", "ice-giant", "belt"].includes(b.kind));
+    if (!lava) continue;
+    const params = planetFromBody(system, lava.id);
+    assert.equal(params.lifeless, true);
+    const world = generatePlanet({ ...params, cells: 3000 });
+    assert.equal(world.burgs.length, 1, "towns on a dead world");
+    assert.equal(world.states.length, 1, "realms on a dead world");
+    assert.ok(world.culture.every((c) => c === 0), "peoples on a dead world");
+    assert.doesNotMatch(renderSystem(system), /NaN|undefined/u);
+    return;
+  }
 });
 
 console.log(`space: ${passed} regressions passed`);

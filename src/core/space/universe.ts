@@ -48,6 +48,7 @@ export interface Supercluster {
 }
 
 export interface Void {
+  id: number;
   x: number;
   y: number;
   r: number;
@@ -92,7 +93,7 @@ export function generateUniverse(input: Partial<UniverseParams> = {}): Universe 
   // Voids: great empty bubbles; galaxies gather on their walls.
   const voids: Void[] = [];
   for (let attempt = 0; attempt < 300 && voids.length < 12; attempt++) {
-    const v = { x: rng.float(0, W), y: rng.float(0, H), r: rng.float(90, 220), name: "" };
+    const v = { id: voids.length, x: rng.float(0, W), y: rng.float(0, H), r: rng.float(90, 220), name: "" };
     if (voids.some((o) => Math.hypot(o.x - v.x, o.y - v.y) < (o.r + v.r) * 0.85)) continue;
     v.name = name(tongue, rng, "plain");
     voids.push(v);
@@ -112,14 +113,19 @@ export function generateUniverse(input: Partial<UniverseParams> = {}): Universe 
     points.push([x, y]);
   }
   // Superclusters: the nearest of a few far-apart seeds.
-  const seeds = rng.shuffle(points.map((_, k) => k)).reduce<number[]>((list, k) => (list.length < 7 && list.every((s) => Math.hypot(points[s][0] - points[k][0], points[s][1] - points[k][1]) > Math.min(W, H) / 3.2) ? [...list, k] : list), []);
-  const hue = rng.next();
-  const clusters: Supercluster[] = seeds.map((_, k) => ({ id: k, name: name(tongue, rng, "land"), color: paletteColor(k, hue, 0.6, 0.62) }));
+  const gather = rng.fork("clusters");
+  const seeds = gather.shuffle(points.map((_, k) => k)).reduce<number[]>((list, k) => (list.length < 7 && list.every((s) => Math.hypot(points[s][0] - points[k][0], points[s][1] - points[k][1]) > Math.min(W, H) / 3.2) ? [...list, k] : list), []);
+  const hue = gather.next();
+  const clusters: Supercluster[] = seeds.map((_, k) => ({ id: k, name: name(tongue, gather, "land"), color: paletteColor(k, hue, 0.6, 0.62) }));
+  // Each galaxy draws its kind, size and peoples from a stream of its own, and its name from a tongue of its own, so
+  // asking for more galaxies leaves the first ones as they were.
+  const galaxyTongue = { ...tongue };
   const galaxies: GalaxyNode[] = points.map(([x, y], id) => {
+    const own = rng.fork(`galaxy-${id}`);
     const cluster = seeds.reduce((best, s, k) => (Math.hypot(points[s][0] - x, points[s][1] - y) < Math.hypot(points[seeds[best]][0] - x, points[seeds[best]][1] - y) ? k : best), 0);
-    const kind = rng.weighted<GalaxyKind>([["spiral", 40], ["barred", 18], ["elliptical", 22], ["ring", 3], ["irregular", 8], ["dwarf", 8], ["quasar", 1]]);
-    const stars = kind === "dwarf" ? rng.int(150, 300) : kind === "quasar" ? rng.int(300, 500) : rng.int(450, 900);
-    return { id, x, y, name: name(tongue, rng, "plain"), kind, stars, cluster, civilisations: rng.chance(0.3) ? rng.int(1, 6) : 0 };
+    const kind = own.weighted<GalaxyKind>([["spiral", 40], ["barred", 18], ["elliptical", 22], ["ring", 3], ["irregular", 8], ["dwarf", 8], ["quasar", 1]]);
+    const stars = kind === "dwarf" ? own.int(150, 300) : kind === "quasar" ? own.int(300, 500) : own.int(450, 900);
+    return { id, x, y, name: name(galaxyTongue, own, "plain"), kind, stars, cluster, civilisations: own.chance(0.3) ? own.int(1, 6) : 0 };
   });
   // Filaments: short links of the Delaunay web that do not cut across a void.
   const filaments: [number, number][] = [];
@@ -186,4 +192,22 @@ export function generateUniverse(input: Partial<UniverseParams> = {}): Universe 
     }
   });
   return { params, name: name(tongue, rng.fork("name"), "land"), galaxies, filaments, clusters, voids, anomalies };
+}
+
+/** Where an anomaly is seen: its centre, or for a bubble's wall the middle of its arc. */
+export function anomalyPoint(a: Anomaly): [number, number] {
+  return a.kind === "bubble-wall" ? [a.x + Math.cos(a.angle) * a.size, a.y + Math.sin(a.angle) * a.size] : [a.x, a.y];
+}
+
+/** How far a point is from what is drawn of an anomaly: along a cosmic string, round a bubble's arc, from a centre. */
+export function anomalyDistance(a: Anomaly, x: number, y: number): number {
+  if (a.kind === "cosmic-string") {
+    const along = Math.max(-a.size, Math.min(a.size, (x - a.x) * Math.cos(a.angle) + (y - a.y) * Math.sin(a.angle)));
+    return Math.hypot(x - (a.x + Math.cos(a.angle) * along), y - (a.y + Math.sin(a.angle) * along));
+  }
+  if (a.kind === "bubble-wall") {
+    const turn = Math.atan2(Math.sin(Math.atan2(y - a.y, x - a.x) - a.angle), Math.cos(Math.atan2(y - a.y, x - a.x) - a.angle));
+    return Math.abs(turn) <= 0.95 ? Math.abs(Math.hypot(x - a.x, y - a.y) - a.size) : Infinity;
+  }
+  return Math.hypot(x - a.x, y - a.y);
 }

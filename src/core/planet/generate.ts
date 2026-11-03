@@ -80,7 +80,8 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
 
   const ground: Ground = { params, mesh, height, water, feature, features, coast, temperature, precipitation: rain, flux: hydro.flux, river: hydro.river, rivers: hydro.rivers, biome, scale };
   const { culture, cultures } = settleCultures(ground, params.cultures, rng.fork("cultures"), anchors?.cultures);
-  const { burg, burgs } = placeBurgs(ground, culture, cultures, params.states, params.towns, rng.fork("burgs"), anchors?.burgs);
+  const lifeless = params.lifeless === true;
+  const { burg, burgs } = placeBurgs(ground, culture, cultures, lifeless ? 0 : params.states, lifeless ? -1 : params.towns, rng.fork("burgs"), anchors?.burgs);
   // The age decides how big towns grow and what guards them; the classic world keeps its towns as they were.
   const setting = settingOf(params.setting);
   settleAge(burgs, setting, rng.fork("age"));
@@ -92,7 +93,7 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   const unit = mesh.spacing * mesh.spacing;
   for (let cell = 0; cell < mesh.cells; cell++) {
     if (water[cell]) continue;
-    population[cell] = (suitability(ground, cell) * 0.3 * mesh.area[cell] * rural) / unit;
+    population[cell] = lifeless ? 0 : (suitability(ground, cell) * 0.3 * mesh.area[cell] * rural) / unit;
     states[state[cell]].rural += population[cell];
     cultures[culture[cell]].population += population[cell];
   }
@@ -124,7 +125,15 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   }
 
   const routes = buildRoutes(ground, burgs, states);
-  const markers = placeMarkers(ground, culture, cultures, state, states, burgs, burg, routes, rng.fork("markers"));
+  let markers = placeMarkers(ground, culture, cultures, state, states, burgs, burg, routes, rng.fork("markers"));
+  if (lifeless) {
+    // Nobody lives there: no peoples on the map and no faiths; of the places, only what the ground itself makes.
+    markers = markers.filter((m, k) => k === 0 || m.kind === "volcano" || m.kind === "crater").map((m, k) => ({ ...m, id: k }));
+    culture.fill(0);
+    religion.fill(0);
+    religions.length = 1;
+    for (const item of cultures) item.population = 0;
+  }
   const worldName = params.name || name((cultures[1] ?? cultures[0]).language, names, "land");
   return { ...ground, ...(terrain?.length ? { relief: hashString(JSON.stringify(terrain)).toString(36) } : {}), name: worldName, population, culture, cultures, religion, religions, ...(secular ? { secular } : {}), burg, burgs, state, states, province, provinces, routes, markers };
 }

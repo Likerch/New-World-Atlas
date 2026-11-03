@@ -3,7 +3,7 @@
 // own kinds of thing can be added to the galaxy and the universe.
 import { useMemo, useRef, useState } from "react";
 import { CustomKinds, loadKinds, saveKinds } from "../CustomKinds";
-import { FEATURE_GLYPH, mapKeyOf, renameUniverse, galaxyLegend, systemLegend, universeLegend, GALAXY_PLACEMENTS, UNIVERSE_PLACEMENTS, type CustomKind, type Zone, generateUniverse, renderUniverse, shapeOf, universeParams, type Universe, type UniverseParams, GALAXY_SHAPES, localFromStar, galaxyParams, generateGalaxy, generateLoneSystem, generateSystem, planetFromBody, randomSeed, type SpectralClass, type SystemParams, renameGalaxy, renameSystem, renderGalaxy, renderSystem, SPECTRA, type Galaxy, type GalaxyParams, type PlanetParams, type StarSystem } from "../../core/index";
+import { FEATURE_GLYPH, anomalyDistance, anomalyPoint, bodyPoint, mapKeyOf, renameUniverse, galaxyLegend, systemLegend, universeLegend, GALAXY_PLACEMENTS, UNIVERSE_PLACEMENTS, type CustomKind, type Zone, generateUniverse, renderUniverse, shapeOf, universeParams, type Universe, type UniverseParams, GALAXY_SHAPES, localFromStar, galaxyParams, generateGalaxy, generateLoneSystem, generateSystem, planetFromBody, randomSeed, type SpectralClass, type SystemParams, renameGalaxy, renameSystem, renderGalaxy, renderSystem, SPECTRA, type Galaxy, type GalaxyParams, type PlanetParams, type StarSystem } from "../../core/index";
 import type { Level, LevelContext } from "./types";
 
 const STRANGENESS = [0, 0.5, 1, 2, 3];
@@ -52,6 +52,7 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
   const [star, setStar] = useState<number | null>(null);
   const [empire, setEmpire] = useState<number | null>(null);
   const [zone, setZone] = useState<number | null>(null);
+  const [nebula, setNebula] = useState<number | null>(null);
   const [tab, setTab] = useState<"empires" | "stars" | "zones">("empires");
   const [version, setVersion] = useState(0);
   const pending = useRef(false);
@@ -64,10 +65,11 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
       setStar(null);
       setEmpire(null);
       setZone(null);
+      setNebula(null);
       setVersion((v) => v + 1);
     });
   const set = <K extends keyof GalaxyParams>(key: K, value: GalaxyParams[K]) => setInput((current) => ({ ...current, [key]: value }));
-  const svg = useMemo(() => (galaxy ? renderGalaxy(galaxy, { script: ctx.script, highlight: empire, highlightZone: zone }) : ""), [galaxy, ctx.script, empire, zone]);
+  const svg = useMemo(() => (galaxy ? renderGalaxy(galaxy, { script: ctx.script, highlight: empire, highlightZone: zone, highlightStar: star }) : ""), [galaxy, ctx.script, empire, zone, star]);
   const kinds = new Map((galaxy?.params.custom ?? []).map((kind) => [kind.id, kind]));
   const legend = useMemo(() => (galaxy ? galaxyLegend(galaxy) : undefined), [galaxy]);
   const zoneName = (z: Zone) => (z.kind === "custom" ? kinds.get(z.custom ?? "")?.name || t("custom.unnamed") : t(`zone.${z.kind}`));
@@ -93,7 +95,17 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
     mapKey,
     params: raw ? (raw.params as unknown as Record<string, unknown>) : null,
     restore: (saved) => build(galaxyParams(saved as Partial<GalaxyParams>)),
-    selected: !galaxy ? null : star !== null ? { key: `star:${star}`, label: galaxy.stars[star].name } : zone !== null ? { key: `zone:${zone}`, label: galaxy.zones[zone].name } : empire !== null ? { key: `empire:${empire}`, label: galaxy.empires[empire].name } : { key: "world", label: galaxy.name },
+    selected: !galaxy
+      ? null
+      : star !== null
+        ? { key: `star:${star}`, label: nm(galaxy.stars[star].name) }
+        : zone !== null
+          ? { key: `zone:${zone}`, label: `${zoneName(galaxy.zones[zone])} ${nm(galaxy.zones[zone].name)}` }
+          : nebula !== null
+            ? { key: `nebula:${nebula}`, label: `${t("legend.nebula")} ${nm(galaxy.nebulae[nebula].name)}` }
+            : empire !== null
+              ? { key: `empire:${empire}`, label: empireName(empire) }
+              : { key: "world", label: nm(galaxy.name) },
     map: galaxy
       ? {
           svg,
@@ -101,8 +113,9 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
           height: galaxy.params.height,
           key: `galaxy-${version}`,
           onPick: (x, y) => {
+            // A star under the click; else a region; else the power whose space it is; else a nebula; else nothing.
             let best = -1;
-            let distance = 12;
+            let distance = Infinity;
             for (const s of galaxy.stars) {
               const d = Math.hypot(s.x - x, s.y - y);
               if (d < distance) {
@@ -110,11 +123,15 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
                 best = s.id;
               }
             }
-            setStar(best >= 0 ? best : null);
-            if (best >= 0) setEmpire(galaxy.stars[best].empire || null);
-            // Off the stars, a click finds the region it falls in.
-            const region = best >= 0 ? undefined : galaxy.zones.find((z) => inZone(z, x, y));
+            const onStar = best >= 0 && distance < 12;
+            const region = onStar ? undefined : galaxy.zones.find((z) => inZone(z, x, y));
+            const reach = Math.sqrt((galaxy.params.width * galaxy.params.height) / galaxy.stars.length) * 1.4;
+            const realm = !onStar && !region && best >= 0 && distance < reach ? galaxy.stars[best].empire : 0;
+            const cloud = !onStar && !region && !realm ? galaxy.nebulae.find((n) => Math.hypot(n.x - x, n.y - y) < n.r * 0.7) : undefined;
+            setStar(onStar ? best : null);
             setZone(region ? region.id : null);
+            setNebula(cloud ? cloud.id : null);
+            setEmpire(onStar ? galaxy.stars[best].empire || null : realm || null);
           },
         }
       : null,
@@ -136,7 +153,7 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
             ))}
           </select>
         </label>
-        {(["stars", "arms", "empires"] as const).map((key) => (
+        {(["stars", "arms", "empires"] as const).filter((key) => key !== "arms" || input.shape === "spiral" || input.shape === "barred").map((key) => (
           <label key={key}>
             {t(`field.g${key}`)}
             <input type="number" min={key === "stars" ? 100 : 1} max={key === "stars" ? 2000 : 20} value={input[key]} onChange={(event) => set(key, Number(event.target.value))} />
@@ -252,7 +269,15 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
         </ul>
       </aside>
     ) : null,
-    status: galaxy ? `${t("galaxy.summary", { stars: galaxy.stars.length, empires: galaxy.empires.length - 1, lanes: galaxy.lanes.length })} · ${t("galaxy.zones", { zones: galaxy.zones.length })}` : "",
+    // Fewer stars or powers than asked are said so, not silently given.
+    status: galaxy
+      ? [
+          t("galaxy.summary", { stars: galaxy.stars.length, empires: galaxy.empires.length - 1, lanes: galaxy.lanes.length }),
+          t("galaxy.zones", { zones: galaxy.zones.length }),
+          ...(galaxy.stars.length < galaxy.params.stars ? [t("galaxy.fewerStars", { asked: galaxy.params.stars })] : []),
+          ...(galaxy.empires.length - 1 < galaxy.params.empires ? [t("galaxy.fewerEmpires", { asked: galaxy.params.empires })] : []),
+        ].join(" · ")
+      : "",
     data: () => (galaxy ? { format: "new-world-atlas/galaxy", version: 1, ...galaxy, empires: galaxy.empires.map(({ language: _l, ...e }) => e) } : null),
   };
 }
@@ -260,11 +285,12 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
 export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<PlanetParams>, body: number) => void, back: (() => void) | null): Level & { open: (galaxy: Galaxy, star: number) => void } {
   const { t, nm } = ctx;
   const [rawSystem, setSystem] = useState<StarSystem | null>(null);
-  const mapKey = rawSystem ? `system:${rawSystem.seed}` : null;
+  // A lone system is keyed apart from a galaxy's star of the same seed: their worlds are not the same.
+  const [source, setSource] = useState<{ galaxy: Galaxy; star: number } | null>(null);
+  const mapKey = rawSystem ? (source ? `system:${rawSystem.seed}` : `system:lone/${rawSystem.seed}`) : null;
   const names = ctx.names(mapKey);
   const system = useMemo(() => (rawSystem ? renameSystem(rawSystem, names) : null), [rawSystem, names]);
   // A system opened from a galaxy star regenerates from it; otherwise the level makes a lone star of its own seed.
-  const [source, setSource] = useState<{ galaxy: Galaxy; star: number } | null>(null);
   const [input, setInput] = useState<SystemParams>(() => ({ seed: randomSeed() }));
   const [body, setBody] = useState<number | null>(null);
   const svg = useMemo(() => (system ? renderSystem(system, { script: ctx.script, highlight: body }) : ""), [system, ctx.script, body]);
@@ -274,7 +300,8 @@ export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<P
       const made = generateSystem(galaxy, star);
       setSource({ galaxy, star });
       setSystem(made);
-      setInput((current) => ({ ...current, seed: made.seed }));
+      // The star decides its class and its people: nothing of a lone system made before stays in the form.
+      setInput({ seed: made.seed });
       setBody(null);
     });
   const lone = (next: SystemParams) =>
@@ -316,11 +343,13 @@ export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<P
           height: 1000,
           key: `system-${system.seed}`,
           onPick: (x, y) => {
-            const maxOrbit = Math.max(system.frost * 1.2, ...system.bodies.map((b) => b.orbit), 1);
-            const hit = system.bodies.find((b) => {
-              const r = 90 + Math.sqrt(b.orbit / maxOrbit) * (1600 - 260);
-              return Math.hypot(110 + Math.cos(b.angle) * r - x, 500 + Math.sin(b.angle) * r - y) < 26;
-            });
+            // A world under the click, or a belt anywhere along its ring.
+            const hit =
+              system.bodies.find((b) => b.kind !== "belt" && Math.hypot(bodyPoint(system, b).x - x, bodyPoint(system, b).y - y) < 26) ??
+              system.bodies.find((b) => {
+                const at = bodyPoint(system, b);
+                return b.kind === "belt" && Math.abs(Math.hypot(x - at.centre[0], y - at.centre[1]) - at.r) < 10;
+              });
             setBody(hit ? hit.id : null);
           },
         }
@@ -362,8 +391,9 @@ export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<P
           <div className="card">
             <h3>{nm(selected.name)}</h3>
             <Row label={t("stat.kind2")} value={t(`body.${selected.kind}`)} />
+            {selected.homeworld ? <Row label={t("space.homeworld")} value={system.empire ? nm(system.empire) : "—"} /> : null}
             <Row label={t("space.orbit")} value={`${selected.orbit.toFixed(2)} AU`} />
-            <Row label={t("space.year")} value={`${selected.year.toLocaleString()} ${t("space.days")}`} />
+            <Row label={t("space.year")} value={`${selected.year.toLocaleString(ctx.locale)} ${t("space.days")}`} />
             {selected.kind !== "belt" ? (
               <>
                 <Row label={t("space.radius")} value={`${selected.radius.toFixed(1)} R⊕`} />
@@ -373,7 +403,7 @@ export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<P
                 <Row label={t("space.moons")} value={selected.moons.length} />
               </>
             ) : null}
-            {selected.population ? <Row label={t("stat.population")} value={`${selected.population.toLocaleString()} ${t("unit.million")}`} /> : null}
+            {selected.population ? <Row label={t("stat.population")} value={`${selected.population.toLocaleString(ctx.locale)} ${t("unit.million")}`} /> : null}
             {!["gas-giant", "ice-giant", "belt"].includes(selected.kind) ? (
               <button type="button" className="primary wide" onClick={() => openPlanet(planetFromBody(system, selected.id), selected.id)}>
                 🌍 {t("action.openPlanet")}
@@ -384,13 +414,22 @@ export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<P
           <div className="card">
             <h3>{nm(system.name)}</h3>
             <Row label={t("space.class")} value={t(`spectral.${system.spectral}`)} />
+            {system.companion ? <Row label={t("space.companion")} value={t(`spectral.${system.companion}`)} /> : null}
             <Row label={t("space.owner")} value={system.empire ? nm(system.empire) : t("space.unclaimed")} />
             <Row label={t("space.zone")} value={`${system.zone[0].toFixed(2)}–${system.zone[1].toFixed(2)} AU`} />
           </div>
         )}
         <ul className="list">
           {system.bodies.map((b) => (
-            <li key={b.id} aria-selected={b.id === body} onClick={() => setBody(b.id)}>
+            <li
+              key={b.id}
+              aria-selected={b.id === body}
+              onClick={() => {
+                setBody(b.id);
+                const at = bodyPoint(system, b);
+                ctx.focus(at.x, at.y);
+              }}
+            >
               <span className="grow">
                 {b.habitable ? "🌱 " : ""}
                 {nm(b.name)}
@@ -415,6 +454,8 @@ export function useUniverseLevel(ctx: LevelContext, openGalaxy: (params: Partial
   const universe = useMemo(() => (raw ? renameUniverse(raw, names) : null), [raw, names]);
   const [picked, setPicked] = useState<number | null>(null);
   const [anomaly, setAnomaly] = useState<number | null>(null);
+  const [bubble, setBubble] = useState<number | null>(null);
+  const [cluster, setCluster] = useState<number | null>(null);
   const [version, setVersion] = useState(0);
   const build = (next: UniverseParams) =>
     ctx.run(() => {
@@ -431,7 +472,18 @@ export function useUniverseLevel(ctx: LevelContext, openGalaxy: (params: Partial
   const legend = useMemo(() => (universe ? universeLegend(universe) : undefined), [universe]);
   const ukinds = new Map((universe?.params.custom ?? []).map((kind): [string, CustomKind] => [kind.id, kind]));
   const anomalyName = (kind: string, custom?: string) => (kind === "custom" ? ukinds.get(custom ?? "")?.name || t("custom.unnamed") : t(`anomaly.${kind}`));
-  const open = (id: number) => universe && openGalaxy({ seed: `${universe.params.seed}/galaxy-${id}`, shape: shapeOf(universe.galaxies[id].kind), stars: universe.galaxies[id].stars }, id);
+  // A galaxy opens as the universe shows it: its name, its stars, its civilisations as powers, the same strangeness.
+  const open = (id: number) => {
+    if (!universe) return;
+    const node = universe.galaxies[id];
+    openGalaxy({ seed: `${universe.params.seed}/galaxy-${id}`, shape: shapeOf(node.kind), stars: node.stars, name: node.name, empires: node.civilisations, anomalies: universe.params.anomalies }, id);
+  };
+  const pickOnly = (kind: "galaxy" | "anomaly" | "void" | "cluster", id: number | null) => {
+    setPicked(kind === "galaxy" ? id : null);
+    setAnomaly(kind === "anomaly" ? id : null);
+    setBubble(kind === "void" ? id : null);
+    setCluster(kind === "cluster" ? id : null);
+  };
   return {
     id: "universe",
     legend,
@@ -446,7 +498,17 @@ export function useUniverseLevel(ctx: LevelContext, openGalaxy: (params: Partial
     mapKey: universeKey,
     params: universe ? (universe.params as unknown as Record<string, unknown>) : null,
     restore: (saved) => build(universeParams(saved as Partial<UniverseParams>)),
-    selected: !universe ? null : selected ? { key: `galaxy:${selected.id}`, label: selected.name } : { key: "world", label: universe.name },
+    selected: !universe
+      ? null
+      : selected
+        ? { key: `galaxy:${selected.id}`, label: nm(selected.name) }
+        : strange
+          ? { key: `anomaly:${strange.id}`, label: `${anomalyName(strange.kind, strange.custom)} ${nm(strange.name)}` }
+          : bubble !== null
+            ? { key: `void:${bubble}`, label: `${t("universe.void")} ${nm(universe.voids[bubble].name)}` }
+            : cluster !== null
+              ? { key: `cluster:${cluster}`, label: `${t("universe.cluster")} ${nm(universe.clusters[cluster].name)}` }
+              : { key: "world", label: nm(universe.name) },
     map: universe
       ? {
           svg,
@@ -463,21 +525,22 @@ export function useUniverseLevel(ctx: LevelContext, openGalaxy: (params: Partial
                 best = g.id;
               }
             }
-            setPicked(best >= 0 ? best : null);
-            // Off the galaxies, a click finds the strange thing nearest it: along a cosmic string, inside a region.
+            if (best >= 0) return pickOnly("galaxy", best);
+            // Off the galaxies, the strange thing drawn nearest the click (along a string, round a bubble's arc,
+            // inside a region); else the void it falls in; else nothing.
             let near: number | null = null;
             let gap = Infinity;
-            if (best < 0)
-              for (const a of universe.anomalies) {
-                const along = a.kind === "cosmic-string" ? Math.max(-a.size, Math.min(a.size, (x - a.x) * Math.cos(a.angle) + (y - a.y) * Math.sin(a.angle))) : 0;
-                const d = Math.hypot(x - (a.x + Math.cos(a.angle) * along), y - (a.y + Math.sin(a.angle) * along));
-                const reach = a.kind === "cosmic-string" ? 8 : Math.max(12, a.kind === "great-attractor" || a.kind === "dark-flow" || a.kind === "custom" ? a.size : 12);
-                if (d < reach && d < gap) {
-                  gap = d;
-                  near = a.id;
-                }
+            for (const a of universe.anomalies) {
+              const d = anomalyDistance(a, x, y);
+              const reach = a.kind === "cosmic-string" || a.kind === "bubble-wall" ? 10 : Math.max(12, a.kind === "great-attractor" || a.kind === "dark-flow" || a.kind === "custom" ? a.size : 12);
+              if (d < reach && d < gap) {
+                gap = d;
+                near = a.id;
               }
-            setAnomaly(near);
+            }
+            if (near !== null) return pickOnly("anomaly", near);
+            const hollow = universe.voids.find((v) => Math.hypot(v.x - x, v.y - y) < v.r * 0.8);
+            pickOnly("void", hollow ? hollow.id : null);
           },
         }
       : null,
@@ -507,7 +570,18 @@ export function useUniverseLevel(ctx: LevelContext, openGalaxy: (params: Partial
           <div className="card">
             <h3>{nm(selected.name)}</h3>
             <Row label={t("stat.kind2")} value={t(`gkind.${selected.kind}`)} />
-            <Row label={t("universe.cluster")} value={nm(universe.clusters[selected.cluster]?.name ?? "—")} />
+            <Row
+              label={t("universe.cluster")}
+              value={
+                universe.clusters[selected.cluster] ? (
+                  <button type="button" className="link" onClick={() => pickOnly("cluster", selected.cluster)}>
+                    {nm(universe.clusters[selected.cluster].name)}
+                  </button>
+                ) : (
+                  "—"
+                )
+              }
+            />
             <Row label={t("universe.civilisations")} value={selected.civilisations} />
             <button type="button" className="primary wide" onClick={() => open(selected.id)}>
               🌌 {t("action.openGalaxy")}
@@ -518,6 +592,17 @@ export function useUniverseLevel(ctx: LevelContext, openGalaxy: (params: Partial
             <h3>{nm(strange.name)}</h3>
             <Row label={t("stat.kind2")} value={anomalyName(strange.kind, strange.custom)} />
             <p className="muted">{strange.kind === "custom" ? t(`place2.${ukinds.get(strange.custom ?? "")?.where ?? "anywhere"}`) : t(`anomaly.${strange.kind}.about`)}</p>
+          </div>
+        ) : bubble !== null ? (
+          <div className="card">
+            <h3>{nm(universe.voids[bubble].name)}</h3>
+            <Row label={t("stat.kind2")} value={t("universe.void")} />
+          </div>
+        ) : cluster !== null ? (
+          <div className="card">
+            <h3>{nm(universe.clusters[cluster].name)}</h3>
+            <Row label={t("stat.kind2")} value={t("universe.cluster")} />
+            <Row label={t("universe.galaxies")} value={universe.galaxies.filter((g) => g.cluster === cluster).length} />
           </div>
         ) : (
           <p className="muted">{t("universe.hint")}</p>
@@ -530,7 +615,7 @@ export function useUniverseLevel(ctx: LevelContext, openGalaxy: (params: Partial
                 key={g.id}
                 aria-selected={picked === g.id}
                 onClick={() => {
-                  setPicked(g.id);
+                  pickOnly("galaxy", g.id);
                   ctx.focus(g.x, g.y);
                 }}
               >
@@ -546,9 +631,9 @@ export function useUniverseLevel(ctx: LevelContext, openGalaxy: (params: Partial
               key={a.id}
               aria-selected={anomaly === a.id}
               onClick={() => {
-                setAnomaly(a.id);
-                setPicked(null);
-                ctx.focus(a.x, a.y);
+                pickOnly("anomaly", a.id);
+                const [fx, fy] = anomalyPoint(a);
+                ctx.focus(fx, fy);
               }}
             >
               <span className="grow">{nm(a.name)}</span>

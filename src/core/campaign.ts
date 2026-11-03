@@ -91,7 +91,7 @@ export function renameCity(city: City, names: Record<string, string>): City {
 
 export function renameGalaxy(galaxy: Galaxy, names: Record<string, string>): Galaxy {
   if (!Object.keys(names).length) return galaxy;
-  return { ...galaxy, name: names.world ?? galaxy.name, stars: rename(galaxy.stars, "star", names), empires: rename(galaxy.empires, "empire", names) };
+  return { ...galaxy, name: names.world ?? galaxy.name, stars: rename(galaxy.stars, "star", names), empires: rename(galaxy.empires, "empire", names), zones: rename(galaxy.zones, "zone", names), nebulae: rename(galaxy.nebulae, "nebula", names) };
 }
 
 export function renameSystem(system: StarSystem, names: Record<string, string>): StarSystem {
@@ -106,7 +106,7 @@ export function renameLocal(map: LocalMap, names: Record<string, string>): Local
 
 export function renameUniverse(universe: Universe, names: Record<string, string>): Universe {
   if (!Object.keys(names).length) return universe;
-  return { ...universe, name: names.world ?? universe.name, galaxies: rename(universe.galaxies, "galaxy", names) };
+  return { ...universe, name: names.world ?? universe.name, galaxies: rename(universe.galaxies, "galaxy", names), anomalies: rename(universe.anomalies, "anomaly", names), voids: rename(universe.voids, "void", names), clusters: rename(universe.clusters, "cluster", names) };
 }
 
 export function renameUnderworld(world: Underworld, names: Record<string, string>): Underworld {
