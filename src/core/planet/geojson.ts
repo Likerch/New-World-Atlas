@@ -6,6 +6,26 @@ import type { Planet } from "./model";
 
 type Position = [number, number];
 
+const signedArea = (ring: Position[]) => ring.reduce((sum, [x, y], k) => sum + (k ? ring[k - 1][0] * y - x * ring[k - 1][1] : 0), 0) / 2;
+const inside = ([x, y]: Position, ring: Position[]) => {
+  let hit = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) if (ring[i][1] > y !== ring[j][1] > y && x < ((ring[j][0] - ring[i][0]) * (y - ring[i][1])) / (ring[j][1] - ring[i][1] || 1e-12) + ring[i][0]) hit = !hit;
+  return hit;
+};
+
+/** Outlines as GeoJSON polygons: each outer ring with the holes (lakes, enclaves) inside it, not filled in as land. The
+ * outer rings turn the way the largest one does; the holes, the other way. */
+function nest(loops: Position[][]): Position[][][] {
+  if (!loops.length) return [];
+  const turn = Math.sign(signedArea(loops.reduce((big, loop) => (Math.abs(signedArea(loop)) > Math.abs(signedArea(big)) ? loop : big), loops[0])));
+  const outers = loops.filter((loop) => Math.sign(signedArea(loop)) === turn).map((loop) => [loop]);
+  for (const hole of loops.filter((loop) => Math.sign(signedArea(loop)) !== turn)) {
+    const home = outers.filter((polygon) => inside(hole[0], polygon[0])).sort((a, b) => Math.abs(signedArea(a[0])) - Math.abs(signedArea(b[0])))[0];
+    if (home) home.push(hole);
+  }
+  return outers;
+}
+
 export function planetGeoJSON(planet: Planet): { type: "FeatureCollection"; features: unknown[] } {
   const { width, height, latitudeNorth: north, latitudeSouth: south } = planet.params;
   const middle = (north + south) / 2;
@@ -19,7 +39,7 @@ export function planetGeoJSON(planet: Planet): { type: "FeatureCollection"; feat
       const ring = loop.map(([x, y]) => at(x, y));
       return [...ring, ring[0]];
     });
-    features.push({ type: "Feature", properties: { kind: "realm", id: state.id, name: state.name, form: state.formKey, color: state.color, capital: planet.burgs[state.capital]?.name }, geometry: { type: "MultiPolygon", coordinates: loops.map((ring) => [ring]) } });
+    features.push({ type: "Feature", properties: { kind: "realm", id: state.id, name: state.name, form: state.formKey, color: state.color, capital: planet.burgs[state.capital]?.name }, geometry: { type: "MultiPolygon", coordinates: nest(loops) } });
   }
   for (const burg of planet.burgs.slice(1)) if (!burg.removed) features.push({ type: "Feature", properties: { kind: "town", id: burg.id, name: burg.name, population: Math.round(burg.population * 1000), capital: burg.capital, port: burg.port, realm: planet.states[burg.state]?.name }, geometry: { type: "Point", coordinates: at(burg.x, burg.y) } });
   for (const river of planet.rivers.slice(1)) if (river.cells.length > 1) features.push({ type: "Feature", properties: { kind: "river", id: river.id, name: river.name, length: Math.round(river.length) }, geometry: { type: "LineString", coordinates: river.cells.map(cellAt) } });

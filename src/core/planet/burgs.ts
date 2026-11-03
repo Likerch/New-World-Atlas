@@ -83,7 +83,8 @@ export function placeBurgs(g: Ground, culture: Uint16Array, cultures: Culture[],
       shanty: population > 30 && own.chance(0.6),
       kind: port ? "naval" : owner.kind,
     });
-    burg[cell] = id;
+    if (g.water[cell] && !capital) burgs[id].removed = true;
+    else burg[cell] = id;
   }
   return { burg, burgs };
 }

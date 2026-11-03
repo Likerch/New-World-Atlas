@@ -66,7 +66,8 @@ function network(points: number[][], extraRatio: number): [number, number][] {
     for (let e = 0; e < delaunay.triangles.length; e++) {
       const a = delaunay.triangles[e];
       const b = delaunay.triangles[e % 3 === 2 ? e - 2 : e + 1];
-      if (a < b) edges.push([a, b, Math.hypot(points[a][0] - points[b][0], points[a][1] - points[b][1])]);
+      // Each inner edge once (from its lower end); an edge of the hull has no twin and is kept as it comes.
+      if (a < b || delaunay.halfedges[e] === -1) edges.push([a, b, Math.hypot(points[a][0] - points[b][0], points[a][1] - points[b][1])]);
     }
   } catch {
     // Collinear points: chain them in order.

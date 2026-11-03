@@ -1,6 +1,7 @@
 // The GM's world editor. Strokes of the relief brush are replayed before a world grows, so rivers, climate, peoples
 // and realms all follow the new ground; then land is handed to other realms and towns are moved, founded or razed on
 // the grown world. Towns keep their ids (a razed town is only marked), so the GM's names and notes stay put.
+import type { TroubleKind } from "./nature";
 import type { Mesh } from "../mesh";
 import type { Burg, Planet } from "./model";
 import { buildRoutes } from "./routes";
@@ -102,31 +103,40 @@ export function editPlanet(planet: Planet, edits: PlanetEdits | null | undefined
   const burgs: Burg[] = planet.burgs.map((town) => ({ ...town }));
 
   const given: number[] = [];
+  const realmsAfter = planet.states.length + (edits.raised?.length ?? 0);
   for (const [key, owner] of owners) {
     const cell = Number(key);
-    // A capital's ground stays its realm's.
-    if (water[cell] || !planet.states[owner] || burgs[burg[cell]]?.capital) continue;
+    // A capital's ground stays its realm's; a realm the GM raises counts from the world's last.
+    if (water[cell] || !Number.isInteger(owner) || owner <= 0 || owner >= realmsAfter || burgs[burg[cell]]?.capital) continue;
     state[cell] = owner;
     if (planet.provinces[province[cell]]?.state !== owner) given.push(cell);
   }
-  // Land handed over joins the new realm's nearest province, so no land is left outside every province.
-  for (const cell of given) {
-    const owner = state[cell];
-    let found = 0;
-    const seen = new Set([cell]);
-    for (let ring = [cell]; ring.length && !found; ) {
+  // Land handed over joins the new realm's nearest province, so no land is left outside every province: one spread out
+  // from each realm's own provinces reaches all the land handed to it (not one search per cell).
+  const handed = new Map<number, number[]>();
+  for (const cell of given) (handed.get(state[cell]) ?? handed.set(state[cell], []).get(state[cell])!).push(cell);
+  for (const [owner, cells] of handed) {
+    const label = new Int32Array(mesh.cells).fill(-1);
+    let ring: number[] = [];
+    for (let cell = 0; cell < mesh.cells; cell++) {
+      if (water[cell] || state[cell] !== owner || planet.provinces[planet.province[cell]]?.state !== owner) continue;
+      label[cell] = planet.province[cell];
+      ring.push(cell);
+    }
+    let left = cells.filter((cell) => label[cell] < 0).length;
+    while (ring.length && left > 0) {
       const next: number[] = [];
       for (const c of ring) {
         for (const m of mesh.neighbors[c]) {
-          if (seen.has(m)) continue;
-          seen.add(m);
-          if (!water[m] && state[m] === owner && planet.provinces[planet.province[m]]?.state === owner) found = planet.province[m];
+          if (label[m] >= 0) continue;
+          label[m] = label[c];
           next.push(m);
         }
       }
       ring = next;
+      left = cells.filter((cell) => label[cell] < 0).length;
     }
-    province[cell] = found;
+    for (const cell of cells) province[cell] = Math.max(0, label[cell]);
   }
   const stand = (town: Burg, x: number, y: number) => {
     const cell = mesh.find(x, y);
@@ -143,14 +153,14 @@ export function editPlanet(planet: Planet, edits: PlanetEdits | null | undefined
   for (const [id, [x, y]] of moved) if (burgs[Number(id)]) stand(burgs[Number(id)], x, y);
   for (const [x, y, name, population] of edits.added) {
     const cell = mesh.find(x, y);
-    const people = planet.cultures[planet.culture[cell]] ?? planet.cultures[0];
+    const people = planet.cultures[culture[cell]] ?? planet.cultures[0];
     const town: Burg = {
       id: burgs.length,
       name,
       cell: -1,
       x,
       y,
-      culture: planet.culture[cell],
+      culture: culture[cell],
       state: state[cell],
       province: province[cell],
       capital: false,
@@ -164,12 +174,6 @@ export function editPlanet(planet: Planet, edits: PlanetEdits | null | undefined
     // A town that cannot stand there (water, another town) still takes its id, so later ones keep theirs.
     if (!stand(town, x, y)) town.removed = true;
   }
-  for (const id of edits.removed) {
-    const town = burgs[id];
-    if (!town || town.capital) continue;
-    town.removed = true;
-    if (burg[town.cell] === id) burg[town.cell] = 0;
-  }
   // Realms the GM raised round a town take its province; swallowed realms give all their land to the swallower.
   const states = planet.states.map((item) => ({ ...item, cells: 0, area: 0, rural: 0, urban: 0, burgs: 0, relations: { ...item.relations } }));
   const provinces = planet.provinces.map((item) => ({ ...item }));
@@ -178,12 +182,27 @@ export function editPlanet(planet: Planet, edits: PlanetEdits | null | undefined
     if (!town || town.removed || town.cell < 0 || town.capital) continue;
     const id = states.length;
     const from = state[town.cell];
-    states.push({ ...states[from], id, name: raised.name, color: raised.color, capital: town.id, culture: town.culture, neighbors: [], relations: {}, pole: [town.x, town.y], polity: undefined });
+    states.push({ ...states[from], id, name: raised.name, color: colour(raised.color) ?? states[from].color, capital: town.id, culture: town.culture, neighbors: [], relations: {}, pole: [town.x, town.y], polity: undefined });
     const home = province[town.cell];
-    for (let cell = 0; cell < mesh.cells; cell++) if (state[cell] === from && (home ? province[cell] === home : cell === town.cell)) state[cell] = id;
-    if (home && provinces[home]) provinces[home].state = id;
+    // Where the province also holds the old realm's seat, the new realm takes only the land nearer its own town, as a
+    // province of its own; the old capital stays its realm's.
+    const seat = burgs[states[from].capital];
+    const split = !!home && !!seat && seat.cell >= 0 && province[seat.cell] === home && state[seat.cell] === from;
+    const own = split ? provinces.length : home;
+    if (split) provinces.push({ ...provinces[home], id: own, name: town.name, state: id, burg: town.id, center: town.cell, pole: [town.x, town.y] });
+    const nearer = (cell: number) => Math.hypot(mesh.x[cell] - town.x, mesh.y[cell] - town.y) < Math.hypot(mesh.x[cell] - seat!.x, mesh.y[cell] - seat!.y);
+    for (let cell = 0; cell < mesh.cells; cell++) {
+      if (state[cell] !== from || !(home ? province[cell] === home : cell === town.cell) || (split && !nearer(cell))) continue;
+      state[cell] = id;
+      if (split) province[cell] = own;
+    }
+    if (home && provinces[home] && !split) provinces[home].state = id;
+    // Land painted to this realm before it stood joins its province.
+    for (let cell = 0; cell < mesh.cells; cell++) if (state[cell] === id && provinces[province[cell]]?.state !== id) province[cell] = own;
     town.capital = true;
   }
+  // Land painted to a realm that was never raised (its town gone) stays where it was.
+  for (let cell = 0; cell < mesh.cells; cell++) if (state[cell] >= states.length) (state[cell] = planet.state[cell]), (province[cell] = planet.province[cell]);
   for (const [gone, into] of edits.merged ?? []) {
     if (!states[gone] || !states[into] || gone === into) continue;
     for (let cell = 0; cell < mesh.cells; cell++) if (state[cell] === gone) state[cell] = into;
@@ -200,13 +219,21 @@ export function editPlanet(planet: Planet, edits: PlanetEdits | null | undefined
     if (!realm) continue;
     if (set.form) realm.form = set.form as typeof realm.form;
     if (set.formKey) realm.formKey = set.formKey;
-    if (set.color) realm.color = set.color;
+    if (colour(set.color)) realm.color = colour(set.color)!;
     const seat = set.capital !== undefined ? burgs[set.capital] : undefined;
     if (seat && !seat.removed && seat.cell >= 0 && state[seat.cell] === realm.id) {
       if (burgs[realm.capital]) burgs[realm.capital].capital = false;
       seat.capital = true;
       realm.capital = seat.id;
     }
+  }
+  for (const id of edits.removed) {
+    const town = burgs[id];
+    if (!town || town.capital) continue;
+    town.removed = true;
+    if (burg[town.cell] === id) burg[town.cell] = 0;
+    // A razed seat leaves its province without one.
+    for (const item of provinces) if (item.burg === id) item.burg = 0;
   }
   for (const [key, set] of Object.entries(edits.towns ?? {})) {
     const town = burgs[Number(key)];
@@ -259,12 +286,16 @@ export function editPlanet(planet: Planet, edits: PlanetEdits | null | undefined
     ? buildRoutes(
         planet,
         burgs.map((town) => (town.removed ? { ...town, state: -1, port: false } : town)),
-        states,
+        states.map((realm) => ({ ...realm, capital: realm.capital || (burgs.filter((town) => town.state === realm.id && town.id && !town.removed).sort((a, b) => b.population - a.population)[0]?.id ?? 0) })),
         planet.routes.filter((route) => route.given).map((route) => [route.kind, route.cells]),
       )
     : planet.routes;
-  return { ...planet, state, province, provinces, culture, religion, burg, burgs, states, routes, ...(edits.labels?.length ? { gmLabels: edits.labels } : {}), ...(edits.zones?.length ? { gmZones: edits.zones } : {}) };
+  return { ...planet, state, province, provinces, culture, religion, burg, burgs, states, routes, ...(edits.labels?.length ? { gmLabels: edits.labels } : {}), ...(edits.zones?.length ? { gmZones: edits.zones.filter((zone) => TROUBLES.includes(zone[3] as TroubleKind)) } : {}) };
 }
+
+/** A colour as a file may give it: only a #hex colour is drawn. */
+const colour = (value: unknown): string | undefined => (typeof value === "string" && /^#[0-9a-f]{3,8}$/iu.test(value) ? value : undefined);
+const TROUBLES: TroubleKind[] = ["front", "plague", "famine", "bandits", "storm", "radiation", "custom"];
 
 /** A town's walls, citadel, temple and market as the world's own towns of its size have them. */
 function guardsOf(planet: Planet, population: number): Pick<Burg, "walls" | "citadel" | "temple" | "market"> {

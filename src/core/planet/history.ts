@@ -614,11 +614,13 @@ export function standingOf(history: History, a: number, b: number): Relation {
 
 /** What the past left on the land: ruins of fallen towns (the greatest of them), fields of the bloodiest battles and
  * tombs of the most remembered rulers, as places on the map with their stories. */
-export function marksOfHistory(g: Ground, history: History, markers: Marker[]): void {
+export function marksOfHistory(g: Ground, history: History, markers: Marker[], towns?: Int32Array): void {
   const taken = new Set(markers.map((marker) => marker.cell));
+  // A tomb or a ruin whose ground holds a living town stands just outside it.
+  const free = (cell: number) => !taken.has(cell) && !towns?.[cell] && !g.water[cell];
   const place = (cell: number) => {
-    if (!taken.has(cell)) return cell;
-    return g.mesh.neighbors[cell].find((next) => !g.water[next] && !taken.has(next)) ?? -1;
+    if (free(cell)) return cell;
+    return g.mesh.neighbors[cell].find(free) ?? -1;
   };
   const add = (kind: Marker["kind"], cell: number, name: string, facts: Marker["facts"]) => {
     const at = place(cell);

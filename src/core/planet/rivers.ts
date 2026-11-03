@@ -67,6 +67,8 @@ export function hydrology(mesh: Mesh, height: Float32Array, ocean: (cell: number
     }
     if (group.length < 3 && group.every((cell) => height[cell] >= SEA_LEVEL)) for (const cell of group) lake[cell] = 0;
   }
+  // A pit too shallow (or small) to hold a lake silts up to its brim: water crosses it on the level, never uphill.
+  for (let cell = 0; cell < n; cell++) if (!ocean(cell) && !lake[cell] && filled[cell] > height[cell]) height[cell] = filled[cell];
 
   const down = new Int32Array(n).fill(-1);
   for (let cell = 0; cell < n; cell++) {

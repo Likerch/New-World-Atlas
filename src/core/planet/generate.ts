@@ -20,7 +20,7 @@ import { buildRoutes } from "./routes";
 import { formStates } from "./states";
 import { marksOfHistory, realmsOfHistory, renumberTowns, simulateHistory, standingOf, townsOfHistory } from "./history";
 import { wrapsRound } from "./geo";
-import { naturalPlaces } from "./nature";
+import { NATURAL_KINDS, naturalPlaces } from "./nature";
 
 /** Parameters for a seed: every unset value is rolled from the seed itself. */
 export function planetParams(input: Partial<PlanetParams> = {}): PlanetParams {
@@ -46,6 +46,10 @@ export function planetParams(input: Partial<PlanetParams> = {}): PlanetParams {
     provinceShare: 0.35,
     ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined && value !== "")),
   };
+  // Latitudes stay on the globe and some rain falls (none would leave the rivers without a measure).
+  params.latitudeNorth = Math.max(-90, Math.min(90, Number(params.latitudeNorth) || 0));
+  params.latitudeSouth = Math.max(-90, Math.min(90, Number(params.latitudeSouth) || 0));
+  params.precipitation = Math.max(0.05, Number(params.precipitation) || 0.05);
   // North stays north of south: a pair typed the wrong way round is turned, and a band is at least a degree wide.
   if (params.latitudeNorth < params.latitudeSouth) [params.latitudeNorth, params.latitudeSouth] = [params.latitudeSouth, params.latitudeNorth];
   if (params.latitudeNorth - params.latitudeSouth < 1) {
@@ -64,7 +68,7 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   const params = planetParams(input);
   // Relief strokes regrow the world, but its towns and peoples are anchored where they stood on the untouched world,
   // so their numbers, names and the GM's notes stay with them.
-  const anchors = terrain?.length ? anchorsOf(params, plain) : undefined;
+  const anchors = terrain?.length ? anchorsOf(params, plain, image) : undefined;
   const rng = createRng(params.seed);
   const mesh = buildMesh(params.width, params.height, params.cells, rng.fork("mesh"));
   const height = generateHeights(mesh, params.template, rng.fork("relief"), params.recipe);
@@ -139,11 +143,11 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   const shoreOf = new Map<number, number[]>();
   for (let cell = 0; cell < mesh.cells; cell++) {
     if (!water[cell] && coast[cell] === 1) {
-      for (const next of mesh.neighbors[cell]) if (water[next]) shoreOf.set(feature[next], [...(shoreOf.get(feature[next]) ?? []), cell]);
+      for (const next of mesh.neighbors[cell]) if (water[next]) (shoreOf.get(feature[next]) ?? shoreOf.set(feature[next], []).get(feature[next])!).push(cell);
     }
   }
   const landOf = new Map<number, number[]>();
-  for (let cell = 0; cell < mesh.cells; cell++) if (!water[cell]) landOf.set(feature[cell], [...(landOf.get(feature[cell]) ?? []), cell]);
+  for (let cell = 0; cell < mesh.cells; cell++) if (!water[cell]) (landOf.get(feature[cell]) ?? landOf.set(feature[cell], []).get(feature[cell])!).push(cell);
   for (const item of features.slice(1)) {
     if (item.kind === "isle" || (item.kind === "lake" && item.cells < 3)) continue;
     const people = speakerOf(item.land ? landOf.get(item.id) ?? [] : shoreOf.get(item.id) ?? []);
@@ -153,12 +157,12 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   progress?.(0.9, "roads");
   const routes = buildRoutes(ground, burgs, states);
   let markers = placeMarkers(ground, culture, cultures, state, states, burgs, burg, routes, fork("markers", "places"));
-  if (history) marksOfHistory(ground, history, markers);
-  const placed = { ...ground, routes, rivers: hydro.rivers } as Planet;
+  if (history) marksOfHistory(ground, history, markers, burg);
+  const placed = { ...ground, routes, rivers: hydro.rivers, burg } as Planet;
   naturalPlaces(placed, markers);
   if (lifeless) {
     // Nobody lives there: no peoples on the map and no faiths; of the places, only what the ground itself makes.
-    markers = markers.filter((m, k) => k === 0 || m.kind === "volcano" || m.kind === "crater").map((m, k) => ({ ...m, id: k }));
+    markers = markers.filter((m, k) => k === 0 || NATURAL_KINDS.includes(m.kind)).map((m, k) => ({ ...m, id: k }));
     culture.fill(0);
     religion.fill(0);
     religions.length = 1;
@@ -199,11 +203,11 @@ export interface Anchors {
   burgs: [number, number, boolean][];
 }
 const anchorCache = new Map<string, Anchors>();
-function anchorsOf(params: PlanetParams, untouched?: Planet): Anchors {
-  const key = JSON.stringify(params);
+function anchorsOf(params: PlanetParams, untouched?: Planet, image?: PlanetEdits["image"]): Anchors {
+  const key = `${JSON.stringify(params)}|${image ? hashString(image.heights.join(",")) : ""}`;
   const hit = anchorCache.get(key);
   if (hit) return hit;
-  const plain = untouched ?? generatePlanet(params);
+  const plain = untouched ?? generatePlanet(params, undefined, { image });
   const made: Anchors = {
     cultures: plain.cultures.slice(1).map((culture) => [plain.mesh.x[culture.center], plain.mesh.y[culture.center]]),
     burgs: plain.burgs.slice(1).map((town) => [town.x, town.y, town.capital]),

@@ -67,6 +67,8 @@ export function fromGeoJSON(data: unknown, size: { width: number; height: number
     if (cells.length) for (const cell of cells) for (const [x, y] of cell.rings[0]) grow(x, y);
     else for (const place of places) grow(place.at[0], place.at[1]);
   }
+  // A box of no size (a single place) is widened round its centre, so the place lands in the middle of the map.
+  if (box[2] - box[0] < 1e-9 && box[3] - box[1] < 1e-9) box = [box[0] - 1, box[1] - 1, box[2] + 1, box[3] + 1];
   const [x0, y0, x1, y1] = box;
   const span = Math.max(x1 - x0, 1e-9),
     rise = Math.max(y1 - y0, 1e-9);
@@ -76,9 +78,10 @@ export function fromGeoJSON(data: unknown, size: { width: number; height: number
 
   const out: GeoImport = { labels: [] };
   if (cells.length) {
-    const values = cells.map((cell) => cell.value);
-    const low = Math.min(...values),
-      high = Math.max(...values);
+    // By a loop: spreading a hundred thousand values into Math.min overflows the stack.
+    let low = Infinity,
+      high = -Infinity;
+    for (const cell of cells) (low = Math.min(low, cell.value)), (high = Math.max(high, cell.value));
     const own = low >= 0 && high <= 100 && high >= SEA_LEVEL;
     const scale = (v: number) => (own ? v : v >= 0 ? SEA_LEVEL + (v / Math.max(high, 1)) * (100 - SEA_LEVEL) : SEA_LEVEL + (v / Math.max(-low, 1)) * SEA_LEVEL);
     const W = 200,
@@ -86,11 +89,14 @@ export function fromGeoJSON(data: unknown, size: { width: number; height: number
     const heights = new Array<number>(W * H).fill(SEA_LEVEL / 2);
     for (const cell of cells) {
       const ring = cell.rings[0].map(([x, y]) => toMap(x, y)).map(([x, y]) => [(x / size.width) * W, (y / size.height) * H]);
-      const xs = ring.map((p) => p[0]),
-        ys = ring.map((p) => p[1]);
+      let minX = Infinity,
+        maxX = -Infinity,
+        minY = Infinity,
+        maxY = -Infinity;
+      for (const [px, py] of ring) (minX = Math.min(minX, px)), (maxX = Math.max(maxX, px)), (minY = Math.min(minY, py)), (maxY = Math.max(maxY, py));
       const h = Math.round(scale(cell.value));
-      for (let gy = Math.max(0, Math.floor(Math.min(...ys))); gy <= Math.min(H - 1, Math.ceil(Math.max(...ys))); gy++)
-        for (let gx = Math.max(0, Math.floor(Math.min(...xs))); gx <= Math.min(W - 1, Math.ceil(Math.max(...xs))); gx++) if (inside(gx + 0.5, gy + 0.5, ring)) heights[gy * W + gx] = h;
+      for (let gy = Math.max(0, Math.floor(minY)); gy <= Math.min(H - 1, Math.ceil(maxY)); gy++)
+        for (let gx = Math.max(0, Math.floor(minX)); gx <= Math.min(W - 1, Math.ceil(maxX)); gx++) if (inside(gx + 0.5, gy + 0.5, ring)) heights[gy * W + gx] = h;
     }
     out.image = { width: W, height: H, heights, box };
   }

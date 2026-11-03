@@ -54,7 +54,7 @@ export function spacedPicks(g: Ground, scores: Float32Array, count: number, spac
     .map(([cell]) => cell);
   const picks: number[] = [];
   const all = [...taken];
-  for (let gap = spacing; picks.length < count && gap > g.mesh.spacing * 0.8; gap *= 0.8) {
+  for (let gap = Math.max(spacing, g.mesh.spacing); picks.length < count && gap > g.mesh.spacing * 0.8; gap *= 0.8) {
     for (const cell of candidates) {
       if (picks.length >= count) break;
       const x = g.mesh.x[cell],

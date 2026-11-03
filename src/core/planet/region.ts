@@ -17,6 +17,7 @@ import { placeMarkers } from "./markers";
 import { evaporationOf, SEA_LEVEL, type Burg, type Ground, type Planet } from "./model";
 import { hydrology } from "./rivers";
 import { buildRoutes } from "./routes";
+import { NATURAL_KINDS } from "./nature";
 import { carveRivers, fiefsOf, landformsOf, landUseOf, planetRoads, rankVillages } from "./countryside";
 import { cellKm2 } from "./geo";
 
@@ -27,7 +28,11 @@ export function generateRegion(planet: Planet, provinceId: number, cells?: numbe
 /** A whole state up close: the same as a province, over all of its land. */
 /** A close-up of any stretch of the map the GM marked out: the land in a box, with whatever stands on it. */
 export function generateArea(planet: Planet, box: [number, number, number, number], title: string, cells?: number): Planet {
-  const [x0, y0, x1, y1] = [Math.min(box[0], box[2]), Math.min(box[1], box[3]), Math.max(box[0], box[2]), Math.max(box[1], box[3])];
+  let [x0, y0, x1, y1] = [Math.min(box[0], box[2]), Math.min(box[1], box[3]), Math.max(box[0], box[2]), Math.max(box[1], box[3])];
+  // A box of no size (two clicks on one spot) is at least a cell across.
+  const least = planet.mesh.spacing;
+  if (x1 - x0 < least) [x0, x1] = [(x0 + x1) / 2 - least / 2, (x0 + x1) / 2 + least / 2];
+  if (y1 - y0 < least) [y0, y1] = [(y0 + y1) / 2 - least / 2, (y0 + y1) / 2 + least / 2];
   return closeUp(planet, (cell) => planet.mesh.x[cell] >= x0 && planet.mesh.x[cell] <= x1 && planet.mesh.y[cell] >= y0 && planet.mesh.y[cell] <= y1 && !planet.water[cell], title, `area-${Math.round(x0)}-${Math.round(y0)}-${Math.round(x1)}-${Math.round(y1)}`, cells, [x0, y0, x1, y1]);
 }
 
@@ -67,6 +72,14 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
     x0 -= grow / 2;
     x1 += grow / 2;
   }
+  // Slid back onto the map where it fits: beyond the edge there is nothing but copies of the edge's own cells.
+  for (const [lo, hi, size] of [[0, 2, planet.params.width], [1, 3, planet.params.height]] as const) {
+    const frame = [x0, y0, x1, y1];
+    if (frame[hi] - frame[lo] > size) continue;
+    const shift = frame[lo] < 0 ? -frame[lo] : frame[hi] > size ? size - frame[hi] : 0;
+    if (lo === 0) (x0 += shift), (x1 += shift);
+    else (y0 += shift), (y1 += shift);
+  }
   const k = (x1 - x0) / W;
   // Detail by the frame's real size: about 30 km² a cell, so a small province is not stretched thin nor a vast one
   // blurred, within what a browser draws briskly.
@@ -77,7 +90,7 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
 
   const seed = `${planet.params.seed}/${key}`;
   const rng = createRng(seed);
-  const params = { ...planet.params, seed, world: planet.params.world ?? planet.params.seed, name: title, width: W, height: H, cells, latitudeNorth: planet.params.latitudeNorth - (y0 / planet.params.height) * (planet.params.latitudeNorth - planet.params.latitudeSouth), latitudeSouth: planet.params.latitudeNorth - (y1 / planet.params.height) * (planet.params.latitudeNorth - planet.params.latitudeSouth) };
+  const params = { ...planet.params, seed, world: planet.params.world ?? planet.params.seed, name: title, width: W, height: H, cells, latitudeNorth: Math.min(90, planet.params.latitudeNorth - (y0 / planet.params.height) * (planet.params.latitudeNorth - planet.params.latitudeSouth)), latitudeSouth: Math.max(-90, planet.params.latitudeNorth - (y1 / planet.params.height) * (planet.params.latitudeNorth - planet.params.latitudeSouth)) };
   const mesh = buildMesh(W, H, cells, rng.fork("mesh"));
   const n = mesh.cells;
   const scale = planet.scale * k;
@@ -180,7 +193,8 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
     }
     if (water[cell] || burg[cell]) continue;
     const id = burgs.length;
-    burgs.push({ ...town, id, cell, x, y, origin: town.origin ?? town.id });
+    const dry = !water[mesh.find(x, y)] && mesh.find(x, y) === cell;
+    burgs.push({ ...town, id, cell, x: dry ? x : mesh.x[cell], y: dry ? y : mesh.y[cell], origin: town.origin ?? town.id });
     burg[cell] = id;
   }
   const scores = new Float32Array(n);
@@ -191,8 +205,9 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
     .filter((cell) => scores[cell] > 0)
     .sort((a, b) => scores[b] * ((a * 7919) % 97 + 50) - scores[a] * ((b * 7919) % 97 + 50));
   const villagers = rng.fork("villages");
+  const lifeless = planet.params.lifeless === true;
   for (const cell of candidates) {
-    if (burgs.length > villages + 20) break;
+    if (lifeless || burgs.length > villages + 20) break;
     if (burgs.some((b) => b.cell >= 0 && Math.hypot(b.x - mesh.x[cell], b.y - mesh.y[cell]) < spacing)) continue;
     const people = cultures[culture[cell]] ?? cultures[0];
     const id = burgs.length;
@@ -239,17 +254,20 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
   for (const place of planet.markers.slice(1)) {
     if (place.x < x0 || place.x > x1 || place.y < y0 || place.y > y1) continue;
     const [x, y] = toRegion(place.x, place.y);
-    const cell = mesh.find(x, y);
-    if (burg[cell]) continue;
-    markers.push({ ...place, id: markers.length, cell, x, y, origin: place.id });
+    let cell = mesh.find(x, y);
+    const wet = place.kind === "shipwreck" || place.kind === "reef";
+    if (!wet && water[cell]) cell = [...mesh.neighbors[cell], ...mesh.neighbors[cell].flatMap((m) => mesh.neighbors[m])].find((m) => !water[m] && !burg[m]) ?? -1;
+    if (cell < 0 || burg[cell]) continue;
+    const moved = !wet && cell !== mesh.find(x, y);
+    markers.push({ ...place, id: markers.length, cell, x: moved ? mesh.x[cell] : x, y: moved ? mesh.y[cell] : y, origin: place.id });
   }
-  for (const place of local.slice(1)) if (!markers.some((other) => Math.hypot(other.x - place.x, other.y - place.y) < mesh.spacing * 2.5)) markers.push({ ...place, id: markers.length });
+  for (const place of local.slice(1)) if (!(lifeless && !NATURAL_KINDS.includes(place.kind)) && !markers.some((other) => Math.hypot(other.x - place.x, other.y - place.y) < mesh.spacing * 2.5)) markers.push({ ...place, id: markers.length });
   const population = new Float32Array(n);
   // Country folk per cell, scaled to the cell's real size.
   for (let cell = 0; cell < n; cell++) if (!water[cell]) population[cell] = (suitability(ground, cell) * 0.3 * mesh.area[cell] * k * k * rural) / (parent.spacing * parent.spacing);
   const provinces = planet.provinces.map((p) => ({ ...p, pole: toRegion(p.pole[0], p.pole[1]) as [number, number], burg: burgs.find((b) => b.origin === p.burg)?.id ?? 0 }));
-  const landUse = landUseOf(ground, burgs);
-  const { fief, fiefs } = fiefsOf(ground, state, burgs);
+  const landUse = lifeless ? new Uint8Array(n) : landUseOf(ground, burgs);
+  const { fief, fiefs } = lifeless ? { fief: new Uint16Array(n), fiefs: [{ id: 0, seat: 0, state: 0, cells: 0 }] } : fiefsOf(ground, state, burgs);
   const landforms = landformsOf(ground, culture, cultures, rng.fork("landforms"));
   return { ...ground, name: title, population, culture, cultures: planet.cultures, religion, religions: planet.religions, burg, burgs, state, states, province: provinceOf, provinces, routes, markers, frame: [x0, y0, x1, y1], landUse, fief, fiefs, landforms };
 }

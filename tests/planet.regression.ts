@@ -415,4 +415,41 @@ test("relief and names from GeoJSON: cells with a height, named places, north up
   assert.equal(fromGeoJSON({ type: "FeatureCollection", features: [] }, { width: 1600, height: 1000 }), null);
 });
 
+test("review fixes: edits, relief, rivers, places and GeoJSON", () => {
+  const world = generatePlanet({ seed: "review", template: "continents", cells: 3000 });
+  // Colours and zones from a file are only drawn when they are what they say.
+  const evil = '#f00"/><image href="x" onerror="alert(1)"/><g fill="';
+  const painted = editPlanet(world, { ...emptyEdits(), realms: { 1: { color: evil } }, zones: [[100, 100, 40, '"><script>', ""]] } as never);
+  const svg = renderPlanet(painted, { layers: { zones: true } as never });
+  assert.ok(!svg.includes("onerror") && !svg.includes("<script>"), "markup from a file reached the map");
+  // A former capital may be razed once its realm is merged away.
+  const [gone, into] = [2, 1];
+  const seat = world.states[gone].capital;
+  const merged = editPlanet(world, { ...emptyEdits(), merged: [[gone, into]], removed: [seat] });
+  assert.ok(merged.burgs[seat].removed, "the old seat could not be razed");
+  // Many towns asked for on a small map give many towns, not none.
+  assert.ok(generatePlanet({ seed: "crowd", cells: 3000, towns: 1000 }).burgs.length > 300);
+  // Water never climbs.
+  for (const river of world.rivers.slice(1)) for (let k = 1; k < river.cells.length; k++) assert.ok(world.height[river.cells[k]] <= world.height[river.cells[k - 1]] + 0.5, `river ${river.id} climbs`);
+  // No natural or remembered place on a town.
+  const lived = generatePlanet({ seed: "review", cells: 3000, history: 150 });
+  for (const m of lived.markers.slice(1)) assert.ok(!lived.burg[m.cell], `a ${m.kind} stands on a town`);
+  // A recipe's heights stay on the map's scale; the share of land is what is asked, whatever the relief.
+  const odd = generatePlanet({ seed: "review", cells: 2000, recipe: "hill 1 -40 50 50" });
+  assert.ok(Math.max(...odd.height) < 30, "a negative hill wrapped round into a mountain");
+  for (const recipe of ["add 5 0-100", "mask 0.5"]) {
+    const sunk = generatePlanet({ seed: "review", cells: 2000, recipe, land: 0.6 });
+    assert.ok(Math.abs([...sunk.height].filter((h) => h >= SEA_LEVEL).length / sunk.mesh.cells - 0.6) < 0.02, `${recipe}: wrong share of land`);
+  }
+  // Latitudes beyond the poles and no rain at all are brought within reason.
+  const wild = generatePlanet({ seed: "review", cells: 1500, latitudeNorth: 120, latitudeSouth: -100, precipitation: 0 });
+  assert.ok(!renderPlanet(wild).includes("NaN"));
+  // A realm's lakes are holes in its GeoJSON polygon, not land.
+  const geo = planetGeoJSON(world) as { features: { properties: { kind: string }; geometry: { coordinates: unknown[][][] } }[] };
+  for (const f of geo.features.filter((f) => f.properties.kind === "realm")) for (const polygon of f.geometry.coordinates) assert.ok(polygon.length >= 1);
+  // A lone named place lands in the middle of the map.
+  const one = fromGeoJSON({ type: "FeatureCollection", features: [{ type: "Feature", properties: { name: "Here" }, geometry: { type: "Point", coordinates: [10, 10] } }] }, { width: 1600, height: 1000 })!;
+  assert.deepEqual(one.labels[0].slice(0, 2), [800, 500]);
+});
+
 console.log(`planet: ${passed} regressions passed`);

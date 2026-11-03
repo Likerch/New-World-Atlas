@@ -22,7 +22,7 @@ import { universeParams } from "./space/universe";
 
 /** The generator's version, written into each map a world records. A map made by an older version is still opened
  * from its seed and settings, but the newer generator may draw it otherwise; the app says so. */
-export const GENERATOR = "2026.11.3";
+export const GENERATOR = "2026.11.4";
 
 /** Every kind of map a world can hold. */
 export type MapLevel = "universe" | "galaxy" | "system" | "planet" | "region" | "underworld" | "city" | "building" | "local";

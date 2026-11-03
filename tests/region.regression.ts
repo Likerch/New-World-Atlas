@@ -189,4 +189,15 @@ test("an inn, a lighthouse or a monastery opens as one building, the same from t
   if (kept) assert.equal(buildingOfMarker(region, kept.id)!.seed, buildingOfMarker(planet, kept.origin!)!.seed);
 });
 
+test("review fixes: a box of no size, a lifeless world's close-up, towns and places on dry ground", () => {
+  const started = Date.now();
+  const point = generateArea(planet, [800, 500, 800, 500], "Spot", 1500);
+  assert.ok(point.mesh.cells > 0 && Date.now() - started < 20000, "a box of no size hung");
+  const bare = generatePlanet({ seed: "regression", template: "continents", cells: 4000, lifeless: true });
+  const land = bare.provinces.length > 1 ? generateRegion(bare, 1, 3000) : generateArea(bare, [600, 300, 900, 500], "Bare", 3000);
+  assert.equal(land.burgs.filter((b) => b.id && !b.removed).length, 0, "a lifeless close-up has villages");
+  for (const town of region.burgs.slice(1)) assert.ok(!region.water[region.mesh.find(town.x, town.y)], `${town.name} is drawn in the sea`);
+  for (const place of region.markers.slice(1)) if (place.kind !== "shipwreck" && place.kind !== "reef") assert.ok(!region.water[place.cell], `a ${place.kind} stands in the sea`);
+});
+
 console.log(`region: ${passed} regressions passed`);

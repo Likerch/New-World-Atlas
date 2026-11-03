@@ -8,6 +8,9 @@ import { ageOf, settingOf } from "../setting";
 import type { Marker, MarkerKind, Planet } from "./model";
 import { SEA_LEVEL } from "./model";
 
+/** The places the ground itself makes, which a world nobody lives on keeps. */
+export const NATURAL_KINDS: MarkerKind[] = ["waterfall", "rapids", "reef", "volcano", "hot-spring", "cave", "giant-tree", "crater"];
+
 /** Natural places along rivers, roads and coasts, appended to the map's places (they move none of the others). */
 export function naturalPlaces(planet: Planet, markers: Marker[]): void {
   const { mesh, height, water } = planet;
@@ -16,7 +19,8 @@ export function naturalPlaces(planet: Planet, markers: Marker[]): void {
   const road = new Uint8Array(mesh.cells);
   for (const route of planet.routes.slice(1)) if (route.kind !== "sea" && route.kind !== "air") for (const cell of route.cells) road[cell] = 1;
   const add = (kind: MarkerKind, cell: number, facts: Marker["facts"]) => {
-    if (taken.has(cell)) return;
+    // Not on a town: a ford at a town is its bridge, a fall its weir.
+    if (taken.has(cell) || planet.burg?.[cell]) return;
     taken.add(cell);
     markers.push({ id: markers.length, kind, cell, x: mesh.x[cell], y: mesh.y[cell], name: "", facts });
   };

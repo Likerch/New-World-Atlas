@@ -241,7 +241,9 @@ export function parseRecipe(text: string): { steps: Step[]; errors: number[] } {
     let step: Step | null = null;
     if ((op === "hill" || op === "pit" || op === "range" || op === "trough") && ranges.length === 4 && ranges.every(Boolean)) {
       const [count, height, x, y] = ranges as Range[];
-      step = { op, count: [Math.min(count[0], 60), Math.min(count[1], 60)], height, x, y };
+      // Heights within the map's range (a blob's height is a byte: larger or negative ones would wrap round).
+      const clamp = (r: Range): Range => [Math.max(0, Math.min(100, r[0])), Math.max(0, Math.min(100, r[1]))];
+      step = { op, count: [Math.max(0, Math.min(count[0], 60)), Math.max(0, Math.min(count[1], 60))], height: clamp(height), x, y };
     } else if (op === "strait" && ranges[0] && (rest[1] === "vertical" || rest[1] === "horizontal")) step = { op, width: ranges[0], direction: rest[1] };
     else if (op === "mask" && n(0) !== undefined) step = { op, power: n(0)! || 1 };
     else if (op === "smooth" && n(0) !== undefined) step = { op, factor: Math.max(1, n(0)!) };
@@ -257,11 +259,23 @@ export function parseRecipe(text: string): { steps: Step[]; errors: number[] } {
 
 /** Raises or lowers the relief, keeping its shape, so that the given share of the map stands above the sea. */
 export function setLandShare(h: Float32Array, share: number): void {
-  const sorted = Float32Array.from(h).sort();
-  const level = sorted[Math.max(0, Math.min(sorted.length - 1, Math.floor(sorted.length * (1 - Math.max(0.01, Math.min(0.99, share))))))];
-  const top = Math.max(sorted[sorted.length - 1], level + 1);
-  for (let cell = 0; cell < h.length; cell++) h[cell] = h[cell] < level ? (h[cell] / Math.max(level, 1e-3)) * 19.9 : 20 + ((h[cell] - level) / (top - level)) * (top - 20);
+  // By rank, not by value: cells of equal height (a flat sea floor) are split as the share asks, the higher-ranked up.
+  const order = Array.from(h.keys()).sort((a, b) => h[a] - h[b] || a - b);
+  const sea = Math.max(0, Math.min(order.length - 1, Math.floor(order.length * (1 - Math.max(0.01, Math.min(0.99, share))))));
+  const low = h[order[0]],
+    level = h[order[sea]],
+    high = h[order[order.length - 1]];
+  // The land keeps its shape up to its highest point (and at least some height above the sea).
+  const top = Math.max(high, level + 1, SEA + 20);
+  const next = new Float32Array(h.length);
+  order.forEach((cell, rank) => {
+    if (rank < sea) next[cell] = level > low ? ((h[cell] - low) / (level - low)) * (SEA - 0.5) : (rank / Math.max(1, sea)) * (SEA - 0.5);
+    else next[cell] = SEA + 0.01 + (high > level ? ((h[cell] - level) / (high - level)) * (top - SEA - 0.01) : ((rank - sea) / Math.max(1, order.length - sea)) * (top - SEA - 0.01));
+  });
+  h.set(next);
 }
+
+const SEA = 20;
 
 /** How fast blobs and ridges fade per step, tuned so shapes keep their size at any cell count. */
 function fadeFor(cells: number, table: [number, number][]): number {
