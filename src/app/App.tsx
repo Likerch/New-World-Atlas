@@ -225,7 +225,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     local.restore!(resolve(world, `local:${base.seed}`, base), link.language);
     setView("local");
   };
-  const building = useBuildingLevel(ctx, back("building"));
+  const building = useBuildingLevel(ctx, back("building"), (link, entity) => openLocal(building, link, entity));
   const city = useCityLevel(
     ctx,
     undefined,
@@ -234,7 +234,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
       // The GM's name for the building on the city map is the plan's name.
       const base = { ...params, ...(named ? { name: named } : {}) } as unknown as Record<string, unknown>;
       linkTo("building", city, entity, base);
-      building.restore!(resolve(world, `building:${params.seed}`, base));
+      building.restore!(resolve(world, `building:${params.seed}`, base), made.language);
       setView("building");
     },
     back("city"),

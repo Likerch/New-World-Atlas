@@ -2,7 +2,7 @@
 // careful search turns up, which pieces give cover, where the light falls, and the ways out.
 import type { Point } from "../geometry";
 import { createRng } from "../random";
-import type { BuildingPlan, Furniture, FurnitureKind } from "./plan";
+import type { BuildingPlan, DoorKind, Furniture, FurnitureKind, LockKind } from "./plan";
 
 export type ItemKind = "candle" | "mug" | "plate" | "book" | "jar" | "coins" | "letter" | "key" | "weapon" | "bottle" | "lamp" | "papers" | "datapad" | "credstick" | "rug" | "bones" | "rubbish" | "relic" | "cushion" | "tools";
 
@@ -27,6 +27,10 @@ export interface Exit {
   kind: "door" | "window";
   horizontal: boolean;
   width: number;
+  /** What the door is and how it shuts; a hidden door only the game master sees. */
+  door?: DoorKind;
+  lock?: LockKind;
+  secret?: boolean;
 }
 
 export interface RoomMap {
@@ -42,6 +46,8 @@ export interface RoomMap {
   lights: [number, number, number][];
   /** For a stairwell: whether its flights lead up and down. */
   flights?: { up: boolean; down: boolean };
+  /** A room of a round tower: the wall's circle, in the room's own metres. */
+  round?: { cx: number; cy: number; r: number };
 }
 
 const ON: Partial<Record<FurnitureKind, ItemKind[]>> = {
@@ -109,12 +115,19 @@ export function generateRoom(plan: BuildingPlan, floorIndex: number, roomId: num
   const onEdge = (p: Point) => Math.abs(p[0] - room.x) < 0.01 || Math.abs(p[0] - room.x - room.w) < 0.01 || Math.abs(p[1] - room.y) < 0.01 || Math.abs(p[1] - room.y - room.h) < 0.01;
   const within = (p: Point) => p[0] >= room.x - 0.01 && p[0] <= room.x + room.w + 0.01 && p[1] >= room.y - 0.01 && p[1] <= room.y + room.h + 0.01;
   const exits: Exit[] = [
-    ...floor.doors.filter((door) => door.rooms.includes(room.id)).map((door): Exit => ({ at: local(door.at[0], door.at[1]), kind: "door", horizontal: door.horizontal, width: door.width })),
+    ...floor.doors.filter((door) => door.rooms.includes(room.id) && !door.walled).map((door): Exit => ({ at: local(door.at[0], door.at[1]), kind: "door", horizontal: door.horizontal, width: door.width, ...(door.kind ? { door: door.kind } : {}), ...(door.lock && door.lock !== "none" ? { lock: door.lock } : {}), ...(door.secret ? { secret: true } : {}) })),
     ...floor.windows.filter((win) => within(win.a) && within(win.b) && onEdge(win.a) && onEdge(win.b)).map((win): Exit => {
       const horizontal = Math.abs(win.a[1] - win.b[1]) < 0.01;
       return { at: local((win.a[0] + win.b[0]) / 2, (win.a[1] + win.b[1]) / 2), kind: "window", horizontal, width: Math.hypot(win.b[0] - win.a[0], win.b[1] - win.a[1]) };
     }),
   ];
   const flights = room.kind === "stairs" ? { up: floorIndex < plan.floors.length - 1, down: floorIndex > 0 } : undefined;
+  if (plan.params.shape === "round") {
+    // Inside a round wall: nothing lies beyond it.
+    const R = plan.params.width / 2;
+    const round = { cx: R - room.x, cy: R - room.y, r: R };
+    const kept = items.filter((item) => Math.hypot(item.x - round.cx, item.y - round.cy) < R - 0.3);
+    return { seed, kind: room.kind, w: room.w, h: room.h, furniture, items: kept, cover, exits, lights, flights, round };
+  }
   return { seed, kind: room.kind, w: room.w, h: room.h, furniture, items, cover, exits, lights, flights };
 }

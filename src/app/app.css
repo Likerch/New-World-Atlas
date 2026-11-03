@@ -801,3 +801,29 @@ button.back {
   margin: 4px 0;
   font-style: italic;
 }
+
+/* Buildings: ways out of a room, the door editor, room lists of the GM's own building types. */
+.ways {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin: 4px 0 8px;
+}
+.door-edit {
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  padding: 4px 0;
+}
+.room-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 2px 0 6px;
+}
+.room-list .chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.room-list .chip select {
+  max-width: 120px;
+}
