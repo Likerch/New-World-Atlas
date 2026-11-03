@@ -1,6 +1,6 @@
 // The city level: a city of its own or one opened from a planet town.
 import { useMemo, useRef, useState } from "react";
-import { buildingAt, cityTiers, generateDistrict, renderTier, type Tier, cityFromBurg, PROPS, cityParams, CITY_LAYERS, createLanguage, createRng, defaultCityTheme, generateCity, pointInPolygon, renameCity, renderCity, type City, type CityLayerId, type CityParams, type CityThemeId, type Language, type Planet } from "../../core/index";
+import { buildingAt, cityTiers, generateDistrict, renderTier, type Tier, cityFromBurg, PROPS, cityParams, CITY_LAYERS, createLanguage, createRng, defaultCityTheme, generateCity, pointInPolygon, renameCity, renderCity, type City, type CityLayerId, type CityParams, type CityThemeId, type Language, type Planet, cityLegend } from "../../core/index";
 import { CityControls, CityInspector, type CitySelection } from "../CityPanels";
 import type { Level, LevelContext } from "./types";
 
@@ -37,11 +37,13 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
   };
   const set = <K extends keyof CityParams>(key: K, value: CityParams[K]) => setInput((current) => ({ ...current, [key]: value }));
   const tiers = useMemo(() => (city && tier !== "street" ? cityTiers(city) : null), [city, tier]);
+  const legend = useMemo(() => (city ? cityLegend(city, { theme, layers }) : undefined), [city, theme, layers]);
   const svg = useMemo(() => (city ? (tiers ? renderTier(city, tiers, tier, { theme, layers, script: ctx.script }) : renderCity(city, { theme, layers, script: ctx.script, highlight: selection?.kind === "ward" ? selection.id : null })) : ""), [city, tiers, tier, theme, layers, ctx.script, selection]);
   const highTier = city ? city.params.era === "modern" || city.params.era === "cyberpunk" || city.params.era === "far-future" : false;
 
   return {
     id: "city",
+    legend,
     icon: "🏰",
     title: city?.name ?? null,
     seed: input.seed,

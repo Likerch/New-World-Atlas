@@ -1,6 +1,6 @@
 // What every map level (galaxy, system, planet, region, city, building, local map) gives the app shell.
 import type { ReactNode } from "react";
-import type { MapPatch } from "../../core/index";
+import type { LegendSection, MapPatch } from "../../core/index";
 import type { Locale, T } from "../i18n";
 
 export type LevelId = "universe" | "galaxy" | "system" | "planet" | "region" | "underworld" | "city" | "building" | "local";
@@ -37,6 +37,8 @@ export interface Level {
   map: { svg: string; width: number; height: number; key: string; onPick: (x: number, y: number) => void; onDrag?: (dx: number, dy: number) => void; onDragEnd?: () => void } | null;
   controls: ReactNode;
   inspector: ReactNode;
+  /** What the map's colours, lines and marks mean. */
+  legend?: LegendSection[];
   status: string;
   /** Data for the JSON export. */
   data: () => unknown;

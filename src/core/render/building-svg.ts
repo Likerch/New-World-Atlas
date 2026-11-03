@@ -2,6 +2,7 @@
 // above, the yard round it, and an optional battle-map grid (1.5 m squares). One metre is `PX` pixels.
 import type { BuildingPlan, Floor, Furniture, RoomKind } from "../building/plan";
 import type { ItemKind, RoomMap } from "../building/room";
+import { present, type LegendSection } from "./legend";
 
 export const PX = 24;
 
@@ -288,4 +289,21 @@ export function renderRoom(room: RoomMap, options: { theme?: BuildingThemeId; gr
   out.push(`<g fill="${th.label}" font-size="12"><rect x="${W - o - 1.5 * P}" y="${H - o * 0.55}" width="${1.5 * P}" height="5" fill="${th.wall}"/><text x="${W - o - 1.5 * P - 6}" y="${H - o * 0.55 + 6}" text-anchor="end">1.5 m</text></g>`);
   out.push(`</svg>`);
   return out.join("");
+}
+
+/** What a floor plan shows, for its legend: the furniture on the floor shown, walls, doors, windows and stairs. */
+export function buildingLegend(plan: BuildingPlan, options: BuildingRenderOptions = {}): LegendSection[] {
+  const th = THEMES[options.theme ?? "ink"];
+  const floor = plan.floors[Math.max(0, Math.min(plan.floors.length - 1, options.floor ?? plan.floors.findIndex((f) => f.level === 0)))];
+  const things = present(floor.rooms.flatMap((room) => room.furniture.map((f) => f.kind)));
+  const structure = [
+    { key: "legend.wall", swatch: { line: th.wall, width: 3.2 } },
+    { key: "legend.door", swatch: { svg: `<path d="M2,13H8M16,13H22" stroke="${th.wall}" stroke-width="2.4"/><path d="M8,13A8,8 0 0 1 16,5" fill="none" stroke="${th.line}" stroke-width="0.7"/><path d="M8,13V5" stroke="${th.line}" stroke-width="1"/>` } },
+    { key: "legend.window", swatch: { svg: `<path d="M2,8H22" stroke="${th.wall}" stroke-width="3"/><path d="M7,8H17" stroke="${th.window}" stroke-width="2.4"/>` } },
+    ...(floor.rooms.some((r) => r.kind === "stairs") ? [{ key: "room.stairs", swatch: { svg: `<rect x="4" y="2" width="16" height="12" fill="${th.floor}" stroke="${th.line}" stroke-width="0.7"/>${[6, 9, 12, 15, 18].map((x) => `<path d="M${x},2V14" stroke="${th.line}" stroke-width="0.6"/>`).join("")}` } }] : []),
+  ];
+  return [
+    { key: "legend.structure", entries: structure },
+    { key: "legend.furniture", entries: things.map((kind) => ({ key: `furniture.${kind}`, swatch: { svg: piece({ kind, x: 0.2, y: 0.15, w: 2, h: 1.3, round: false }, th, 10) } })) },
+  ].filter((section) => section.entries.length);
 }

@@ -1,8 +1,9 @@
 // New World Atlas: the game master's map table. Every level (planet, city, building, …) supplies its settings, map
 // and inspector; the shell around them holds the tabs, the seed, export, the names' script and the language.
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { localFromLandmark, localFromMarker, localFromStar, overlaySvg, randomSeed, toCyrillic, withOverlay, type LocalLink, settingFromText, settingToText } from "../core/index";
+import { legendSvg, localFromLandmark, localFromMarker, localFromStar, overlaySvg, randomSeed, toCyrillic, withOverlay, type LocalLink, settingFromText, settingToText } from "../core/index";
 import { useCampaign } from "./campaign";
+import { Legend, legendLabel } from "./Legend";
 import { GmPanel, type GmMode } from "./GmPanel";
 import { translator, type Locale } from "./i18n";
 import { useBuildingLevel } from "./levels/building";
@@ -54,6 +55,22 @@ export function App() {
   const [mode, setMode] = useState<GmMode>("inspect");
   const [brush, setBrush] = useState(60);
   const [players, setPlayers] = useState(false);
+  // The legend stays open or folded as the viewer left it.
+  const [legendOpen, setLegendOpenState] = useState(() => {
+    try {
+      return localStorage.getItem("atlas.legend") !== "closed";
+    } catch {
+      return true;
+    }
+  });
+  const setLegendOpen = (open: boolean) => {
+    setLegendOpenState(open);
+    try {
+      localStorage.setItem("atlas.legend", open ? "open" : "closed");
+    } catch {
+      // Storage may be off; the choice holds for this visit.
+    }
+  };
 
   const ctx: LevelContext = {
     t,
@@ -183,7 +200,18 @@ export function App() {
   // Pins and fog scale with the map, so they stay readable on big and small maps alike.
   const overlayScale = map ? Math.max(0.6, Math.min(3, Math.max(map.width, map.height) / 1600)) : 1;
   const overlay = map ? overlaySvg(patch, map.width, map.height, players, overlayScale) : "";
-  const exported = map ? withOverlay(map.svg, overlaySvg(patch, map.width, map.height, true, overlayScale), map.width, map.height) : "";
+  // An exported image carries the legend when it is open on screen.
+  const legendBox =
+    map && legendOpen && level.legend?.length
+      ? legendSvg(
+          level.legend.map((section) => ({ title: t(section.key), entries: section.entries.map((entry) => ({ label: legendLabel(t, entry), swatch: entry.swatch })) })),
+          map.width,
+          map.height,
+          { paper: "#fbf8f1", ink: "#2b2620" },
+          overlayScale,
+        )
+      : "";
+  const exported = map ? withOverlay(map.svg, overlaySvg(patch, map.width, map.height, true, overlayScale) + legendBox, map.width, map.height) : "";
   const pick = (x: number, y: number) => {
     if (!map) return;
     if (mode === "pin" && level.mapKey) {
@@ -259,6 +287,7 @@ export function App() {
         {stage}
         {busy ? <div className="busy">{t("generating")}</div> : null}
         {level.status && !players ? <div className="status">{level.status}</div> : null}
+        {map && !players ? <Legend t={t} sections={level.legend} open={legendOpen} setOpen={setLegendOpen} /> : null}
         <GmPanel t={t} store={store} mapKey={level.mapKey} selected={level.selected} mode={mode} setMode={setMode} brush={brush} setBrush={setBrush} players={players} setPlayers={setPlayers} />
       </main>
       {level.inspector ?? <aside className="inspector" />}

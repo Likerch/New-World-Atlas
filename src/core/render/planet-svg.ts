@@ -11,6 +11,7 @@ import type { MarkerKind, Planet } from "../planet/model";
 import { ageOf, settingOf } from "../setting";
 import { renderEmblem } from "./heraldry-svg";
 import { defaultLayers, THEME, type LayerId, type Theme, type ThemeId } from "./themes";
+import { present, strokeSwatch, type LegendEntry, type LegendSection } from "./legend";
 
 export interface RenderOptions {
   theme?: ThemeId;
@@ -68,7 +69,7 @@ function symbols(theme: Theme): string {
   ].join("");
 }
 
-const MARKER_GLYPH: Record<MarkerKind, string> = {
+export const MARKER_GLYPH: Record<MarkerKind, string> = {
   volcano: "▲",
   "hot-spring": "♨",
   mine: "⚒",
@@ -289,28 +290,7 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
   // Roads and sea lanes, in the manner of the world's age: railways, motorways and maglev lines for the main ways of
   // the machine ages, broken roads after the fall, and air routes as light arcs between great cities.
   if (layers.routes) {
-    const setting = settingOf(params.setting);
-    const age = ageOf(setting, setting.transport);
-    const style: Record<string, string> = {
-      highway: `stroke="${theme.road}" stroke-width="1.4"`,
-      road: `stroke="${theme.road}" stroke-width="0.9"`,
-      trail: `stroke="${theme.road}" stroke-width="0.7" stroke-dasharray="1.6 1.4"`,
-      sea: `stroke="${theme.sea}" stroke-width="0.8" stroke-dasharray="4 3" opacity="0.6"`,
-      air: `stroke="${theme.ink}" stroke-width="0.6" stroke-dasharray="1 3.5" opacity="0.55"`,
-    };
-    // A second stroke over the first: the sleepers of a railway, the light core of a motorway or a maglev line.
-    const over: Record<string, string> = {};
-    if (age === "industrial") over.highway = `stroke="${theme.halo}" stroke-width="0.7" stroke-dasharray="2.4 2.4"`;
-    if (age === "modern" || age === "cyberpunk") {
-      style.highway = `stroke="${theme.road}" stroke-width="2.2"`;
-      over.highway = `stroke="${age === "cyberpunk" ? "#ff4fa3" : "#f2a33a"}" stroke-width="1.1"`;
-      style.road = `stroke="${theme.road}" stroke-width="1"`;
-    }
-    if (age === "far-future") {
-      style.highway = `stroke="#2fb7d8" stroke-width="2" opacity="0.45"`;
-      over.highway = `stroke="#d9f6ff" stroke-width="0.7"`;
-    }
-    if (age === "post-apocalypse") for (const kind of ["highway", "road"]) style[kind] += ` stroke-dasharray="7 2.5 1.5 3" opacity="0.75"`;
+    const { style, over } = routeStyles(routeAge(planet), theme);
     out.push(`<g fill="none" stroke-linecap="round" stroke-linejoin="round">`);
     for (const route of planet.routes.slice(1)) {
       const points = route.cells.map((cell): Point => {
@@ -565,6 +545,37 @@ function climateLegend(id: keyof typeof CLIMATE, W: number, theme: Theme): strin
   return `<g>${parts.join("")}</g>`;
 }
 
+/** The age whose roads a world's routes are drawn as. */
+export function routeAge(planet: Planet) {
+  const setting = settingOf(planet.params.setting);
+  return ageOf(setting, setting.transport);
+}
+
+/** How each kind of route is stroked in an age: railways, motorways and maglev lines for the main ways of the machine
+ * ages, broken roads after the fall. `over` is a second stroke on top (sleepers, a motorway's light core). */
+export function routeStyles(age: string, theme: Theme): { style: Record<string, string>; over: Record<string, string> } {
+  const style: Record<string, string> = {
+    highway: `stroke="${theme.road}" stroke-width="1.4"`,
+    road: `stroke="${theme.road}" stroke-width="0.9"`,
+    trail: `stroke="${theme.road}" stroke-width="0.7" stroke-dasharray="1.6 1.4"`,
+    sea: `stroke="${theme.sea}" stroke-width="0.8" stroke-dasharray="4 3" opacity="0.6"`,
+    air: `stroke="${theme.ink}" stroke-width="0.6" stroke-dasharray="1 3.5" opacity="0.55"`,
+  };
+  const over: Record<string, string> = {};
+  if (age === "industrial") over.highway = `stroke="${theme.halo}" stroke-width="0.7" stroke-dasharray="2.4 2.4"`;
+  if (age === "modern" || age === "cyberpunk") {
+    style.highway = `stroke="${theme.road}" stroke-width="2.2"`;
+    over.highway = `stroke="${age === "cyberpunk" ? "#ff4fa3" : "#f2a33a"}" stroke-width="1.1"`;
+    style.road = `stroke="${theme.road}" stroke-width="1"`;
+  }
+  if (age === "far-future") {
+    style.highway = `stroke="#2fb7d8" stroke-width="2" opacity="0.45"`;
+    over.highway = `stroke="#d9f6ff" stroke-width="0.7"`;
+  }
+  if (age === "post-apocalypse") for (const kind of ["highway", "road"]) style[kind] += ` stroke-dasharray="7 2.5 1.5 3" opacity="0.75"`;
+  return { style, over };
+}
+
 /** Border, title, compass rose and scale bar. */
 function frame(planet: Planet, theme: Theme, text: (value: string) => string): string {
   const { width: W, height: H } = planet.params;
@@ -596,4 +607,56 @@ function frame(planet: Planet, theme: Theme, text: (value: string) => string): s
   const y0 = H - 30;
   parts.push(`<g fill="${theme.ink}" font-size="10" text-anchor="middle"><rect x="${r1(x0)}" y="${y0}" width="${r1(length / 2)}" height="5" fill="${theme.ink}"/><rect x="${r1(x0 + length / 2)}" y="${y0}" width="${r1(length / 2)}" height="5" fill="${theme.halo}" stroke="${theme.ink}" stroke-width="0.8"/><text x="${r1(x0)}" y="${y0 - 5}">0</text><text x="${r1(x0 + length)}" y="${y0 - 5}">${km} km</text></g>`);
   return parts.join("");
+}
+
+/** What a world map shows, for its legend: only what is on it, drawn the way the map draws it. */
+export function planetLegend(planet: Planet, options: RenderOptions = {}): LegendSection[] {
+  const themeId = options.theme ?? "atlas";
+  const theme = THEME[themeId];
+  const layers = { ...defaultLayers(themeId), ...options.layers };
+  const age = routeAge(planet);
+  const ink = theme.ink;
+  const land: LegendEntry[] = [];
+  if (layers.biomes && theme.biomes) {
+    const biomes = present(Array.from({ length: planet.mesh.cells }, (_, cell) => (planet.water[cell] ? 0 : planet.biome[cell])).filter((id) => id > 0));
+    for (const id of biomes) land.push({ key: `biome.${BIOMES[id].key}`, swatch: { fill: theme.biomes[id] } });
+  } else land.push({ key: "legend.land", swatch: { fill: theme.land } });
+  if (layers.heights && theme.heights) land.push({ key: "legend.lowland", swatch: { fill: theme.heights[0] } }, { key: "legend.highland", swatch: { fill: theme.heights[theme.heights.length - 1] } });
+  if (layers.icons) {
+    land.push({ key: "legend.mountains", swatch: { svg: `<path d="M4,14L11,3L18,14Z" fill="${theme.iconFill}" stroke="${ink}" stroke-width="0.9" stroke-linejoin="round"/><path d="M11,3L14,14" stroke="${ink}" stroke-width="0.5" opacity="0.6"/>` } });
+    land.push({ key: "legend.hills", swatch: { svg: `<path d="M3,13Q12,3 21,13" fill="${theme.iconFill}" stroke="${ink}" stroke-width="0.9"/>` } });
+    land.push({ key: "legend.forest", swatch: { svg: `<path d="M12,15V10" stroke="${ink}" stroke-width="0.9"/><circle cx="12" cy="7" r="5" fill="${theme.tree}" stroke="${ink}" stroke-width="0.7"/>` } });
+  }
+  const water: LegendEntry[] = [{ key: "legend.ocean", swatch: { fill: theme.ocean[0] } }];
+  if (layers.depth) water.push({ key: "legend.shallows", swatch: { fill: theme.ocean[4] } });
+  if (planet.features.some((f) => f.kind === "lake")) water.push({ key: "feature.lake", swatch: { fill: theme.lake } });
+  if (layers.rivers && planet.rivers.length > 1) water.push({ key: "legend.river", swatch: { line: theme.river, width: 2.2 } });
+  const arrow = (color: string) => `<path d="M3,8H20M15,4L20,8L15,12" fill="none" stroke="${color}" stroke-width="1.2" stroke-linecap="round"/>`;
+  if (layers.currents) water.push({ key: "layer.currents", swatch: { svg: arrow(theme.sea) } });
+  const realms: LegendEntry[] = [];
+  const state = planet.states.find((s) => s.id && s.cells);
+  if (layers.states && theme.stateFill > 0 && state) realms.push({ key: "legend.state", swatch: { fill: state.color, opacity: Math.min(1, theme.stateFill * 2.5) } });
+  if (layers.borders) realms.push({ key: "legend.border", swatch: { line: theme.border, width: 1.8, dash: "4 2.2" } });
+  if (layers.provinces) realms.push({ key: "legend.province", swatch: { line: theme.provinceBorder, width: 1.2, dash: "1 1.6" } });
+  if (layers.military && state) realms.push({ key: "legend.army", swatch: { fill: state.color, stroke: ink } });
+  if (layers.winds) realms.push({ key: "layer.winds", swatch: { svg: arrow(ink) } });
+  const ways: LegendEntry[] = [];
+  if (layers.routes) {
+    const { style, over } = routeStyles(age, theme);
+    for (const kind of present(planet.routes.slice(1).map((route) => route.kind))) ways.push({ key: `route.${kind}@${age}`, swatch: strokeSwatch(style[kind], over[kind]) });
+  }
+  const places: LegendEntry[] = [];
+  if (layers.burgs) {
+    places.push({ key: "legend.capital", swatch: { svg: `<circle cx="12" cy="8" r="5" fill="${theme.burg}" stroke="${theme.burgStroke}" stroke-width="1"/><circle cx="12" cy="8" r="2.1" fill="${theme.burgStroke}"/>` } });
+    places.push({ key: "legend.town", swatch: { svg: `<circle cx="12" cy="8" r="3" fill="${theme.burg}" stroke="${theme.burgStroke}" stroke-width="0.8"/>` } });
+  }
+  const marks: LegendEntry[] = layers.markers ? present(planet.markers.slice(1).map((m) => m.kind)).map((kind) => ({ key: `marker.${kind}@${age}`, swatch: { glyph: MARKER_GLYPH[kind], color: ink, ring: ink, bg: theme.halo } })) : [];
+  return [
+    { key: "legend.land", entries: land },
+    { key: "legend.water", entries: water },
+    { key: "legend.realms", entries: realms },
+    { key: "legend.ways", entries: ways },
+    { key: "legend.places", entries: places },
+    { key: "legend.marks", entries: marks },
+  ].filter((section) => section.entries.length);
 }

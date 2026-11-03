@@ -1,6 +1,6 @@
 // The local-map level: dungeons, caves and wilderness on a battle grid, with the GM's key.
 import { useMemo, useRef, useState } from "react";
-import { generateLocal, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localParams, localPixels, renameLocal, renderLocal, type Language, type LocalMap, type LocalParams, type LocalThemeId } from "../../core/index";
+import { generateLocal, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localParams, localPixels, renameLocal, renderLocal, type Language, type LocalMap, type LocalParams, type LocalThemeId, localLegend } from "../../core/index";
 import type { Level, LevelContext } from "./types";
 
 export function useLocalLevel(ctx: LevelContext, back: (() => void) | null): Level & { open: (params: Partial<LocalParams>, language: Language | null) => void } {
@@ -31,6 +31,7 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null): Lev
   };
   const set = <K extends keyof LocalParams>(key: K, value: LocalParams[K]) => setInput((current) => ({ ...current, [key]: value }));
   const svg = useMemo(() => (map ? renderLocal(map, { style, grid, highlight: keyed }) : ""), [map, style, grid, keyed]);
+  const mapLegend = useMemo(() => (map ? localLegend(map, { style }) : undefined), [map, style]);
   const S = map ? localPixels(map) : 20;
   const legend = (k: LocalMap["keyed"][number]) =>
     [
@@ -42,6 +43,7 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null): Lev
 
   return {
     id: "local",
+    legend: mapLegend,
     icon: "🗺️",
     title: map ? nm(map.name) : null,
     seed: input.seed,

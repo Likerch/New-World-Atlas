@@ -5,6 +5,7 @@ import type { City, CityParams, LandmarkKind, WardKind } from "../city/model";
 import { pathData, smooth, type Point } from "../geometry";
 import { toCyrillic } from "../language";
 import { centroid } from "../polygon";
+import { present, type LegendEntry, type LegendSection, type Swatch } from "./legend";
 
 export type CityThemeId = "ink" | "color" | "parchment" | "blueprint" | "neon" | "future" | "wasteland";
 export const CITY_THEMES: CityThemeId[] = ["ink", "color", "parchment", "blueprint", "neon", "future", "wasteland"];
@@ -378,4 +379,81 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
   }
   out.push(`</svg>`);
   return out.join("");
+}
+
+/** What a city map shows, for its legend. */
+export function cityLegend(city: City, options: CityRenderOptions = {}): LegendSection[] {
+  const themeId = options.theme ?? defaultCityTheme(city.params.era);
+  const th = THEMES[themeId];
+  const layers: Record<CityLayerId, boolean> = { wards: true, fields: true, trees: true, buildings: true, streets: true, walls: true, labels: true, landmarks: true, frame: true, ...options.layers };
+  const era = city.params.era;
+  const wards: LegendEntry[] = [];
+  if (layers.wards && era === "stone") wards.push({ key: "legend.clearing", swatch: { fill: th.plaza } });
+  else if (layers.wards)
+    for (const kind of present(city.wards.map((w) => w.kind))) {
+      const tint = kind === "plaza" ? th.plaza : th.tint[kind];
+      if (tint) wards.push({ key: `ward.${kind}@${era}`, swatch: { fill: tint } });
+    }
+  const looks: Partial<Record<string, Swatch>> = {
+    house: { fill: th.building, stroke: th.line },
+    tower: { fill: th.tower, stroke: th.line },
+    industrial: { fill: th.building, stroke: th.line },
+    landmark: { fill: th.landmark, stroke: th.line },
+    stall: { fill: themeId === "color" ? "#d9634a" : th.landmark, stroke: th.line },
+    hut: { svg: `<circle cx="12" cy="8" r="5.5" fill="${th.building}" stroke="${th.line}" stroke-width="0.7"/><circle cx="12" cy="8" r="3.2" fill="none" stroke="${th.line}" stroke-width="0.4" opacity="0.6"/><circle cx="12" cy="8" r="0.9" fill="${th.line}"/>` },
+    longhouse: { svg: `<rect x="3" y="4" width="18" height="8" rx="4" fill="${th.building}" stroke="${th.line}" stroke-width="0.7"/><path d="M5,8H19" stroke="${th.line}" stroke-width="0.6"/>` },
+    ruin: { fill: th.building, opacity: 0.45, stroke: th.line, dash: "3 2" },
+    field: { fill: th.field[0], stroke: th.fieldLine },
+    tree: { fill: th.tree, stroke: th.treeLine, round: true },
+    grave: { fill: th.rich },
+    pier: { fill: th.pier, stroke: th.line },
+    yard: { fill: th.field[1], stroke: th.fieldLine },
+    shed: { fill: th.building, stroke: th.line },
+    fire: { svg: `<circle cx="12" cy="8" r="5" fill="#e0893a" stroke="${th.tower}" stroke-width="1.6" stroke-dasharray="1.6 1"/><circle cx="12" cy="8" r="2.2" fill="#ffd36b"/>` },
+    stone: { svg: `<rect x="9" y="3" width="6" height="10" rx="1.5" fill="${th.tower}" stroke="${th.line}" stroke-width="0.7"/>` },
+    mound: { svg: `<circle cx="12" cy="8" r="6" fill="${th.field[1]}" stroke="${th.line}" stroke-width="0.6"/><circle cx="12" cy="8" r="3.6" fill="none" stroke="${th.line}" stroke-width="0.4"/>` },
+    pen: { svg: `<circle cx="12" cy="8" r="6" fill="${th.field[0]}" fill-opacity="0.6" stroke="#7a5634" stroke-width="1" stroke-dasharray="1.4 0.9"/>` },
+    rack: { svg: `<path d="M5,8H19" stroke="#7a5634" stroke-width="1.2"/><circle cx="5" cy="8" r="1.2" fill="#7a5634"/><circle cx="19" cy="8" r="1.2" fill="#7a5634"/>` },
+    boat: { svg: `<path d="M3,8L12,5.5L21,8L12,10.5Z" fill="#8a5a33" stroke="${th.line}" stroke-width="0.5"/>` },
+  };
+  const buildings = layers.buildings ? present(city.buildings.map((b) => b.kind)).flatMap((kind) => (looks[kind] ? [{ key: `bkind.${kind}`, swatch: looks[kind]! }] : [])) : [];
+  const streets: LegendEntry[] = [];
+  if (layers.streets)
+    for (const kind of present(city.streets.map((s) => s.kind))) {
+      const swatch: Swatch =
+        kind === "highway"
+          ? { line: th.casing, width: 6, over: th.highway, overWidth: 4 }
+          : kind === "rail"
+            ? era === "far-future"
+              ? { line: "#38c6e8", width: 4, opacity: 0.5, over: "#1f8fb3", overWidth: 1.4 }
+              : { line: th.line, width: 3, over: th.paper, overWidth: 1.5, overDash: "3 3" }
+            : kind === "skyway"
+              ? { line: th.glow ? "#38e1ff" : th.line, width: 2, dash: "6 3" }
+              : kind === "path"
+                ? { line: th.casing, width: 1.8, dash: "3 1.2" }
+                : { line: th.casing, width: 5.5, over: th.street, overWidth: 3.5 };
+      streets.push({ key: `street.${kind}`, swatch });
+    }
+  const water: LegendEntry[] = [];
+  if (city.sea) water.push({ key: "legend.sea", swatch: { fill: th.water, stroke: th.shore } });
+  if (city.river) water.push({ key: "legend.river", swatch: { line: th.water, width: 4.5 } });
+  const defences: LegendEntry[] = [];
+  if (layers.walls && city.walls.length) {
+    if (era === "stone") defences.push({ key: "legend.palisade", swatch: { line: "#7a5634", width: 2.4, dash: "1.2 0.8" } });
+    else if (era === "post-apocalypse") defences.push({ key: "legend.barricade", swatch: { line: th.wall, width: 3, dash: "5 2 2 2" } });
+    else
+      defences.push(
+        { key: "legend.wall", swatch: { svg: `<path d="M2,8H22" stroke="${th.wall}" stroke-width="3"/><circle cx="8" cy="8" r="2.6" fill="${th.wall}"/><circle cx="18" cy="8" r="2.6" fill="${th.wall}"/>` } },
+        { key: "legend.gate", swatch: { svg: `<path d="M2,8H22" stroke="${th.wall}" stroke-width="3"/><rect x="8" y="4" width="8" height="8" fill="${th.paper}" stroke="${th.wall}" stroke-width="1.4"/>` } },
+      );
+  }
+  const landmarks = layers.landmarks ? present(city.landmarks.map((l) => l.kind)).map((kind) => ({ key: `landmark.${kind}@${era}`, swatch: { glyph: LANDMARK_GLYPH[kind], color: th.label, ring: th.label, bg: th.halo } })) : [];
+  return [
+    { key: "legend.wards", entries: wards },
+    { key: "legend.buildings", entries: buildings },
+    { key: "legend.streets", entries: streets },
+    { key: "legend.water", entries: water },
+    { key: "legend.defences", entries: defences },
+    { key: "legend.landmarks", entries: landmarks },
+  ].filter((section) => section.entries.length);
 }

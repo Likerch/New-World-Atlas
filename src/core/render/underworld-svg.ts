@@ -4,6 +4,7 @@ import { outline, pathData, smooth, type Point } from "../geometry";
 import { toCyrillic } from "../language";
 import type { Planet } from "../planet/model";
 import type { CavernKind, Underworld } from "../planet/underworld";
+import { present, type LegendEntry, type LegendSection, type Swatch } from "./legend";
 
 const r1 = (value: number) => Math.round(value * 10) / 10;
 const esc = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
@@ -58,4 +59,21 @@ export function renderUnderworld(world: Underworld, planet: Planet, options: { s
   for (const cavern of world.caverns) if (cavern.kind === "settlement" || cavern.kind === "ruins" || cavern.kind === "metro" || cavern.kind === "undercity" || cavern.kind === "vault" || cavern.r > 22) out.push(`<text x="${r1(cavern.x)}" y="${r1(cavern.y + cavern.r + 10)}"${cavern.kind === "settlement" ? ` font-weight="700"` : ` font-style="italic" fill="${EDGE[cavern.kind]}"`}>${text(cavern.name)}</text>`);
   out.push(`</g><text x="20" y="34" font-size="20" letter-spacing="3" fill="#d8c79a" font-weight="600">${text(world.name.toUpperCase())}</text></svg>`);
   return out.join("");
+}
+
+/** What the underworld map shows, for its legend. */
+export function underworldLegend(world: Underworld): LegendSection[] {
+  const caverns: LegendEntry[] = present(world.caverns.map((c) => c.kind)).map((kind) => ({ key: `cavern.${kind}`, swatch: { fill: FILL[kind], stroke: EDGE[kind], round: true } }));
+  const look: Record<string, Swatch> = {
+    passage: { line: "#3a3744", width: 5 },
+    river: { line: "#2a6a9a", width: 4 },
+    chasm: { line: "#000000", width: 6, over: "#5a5666", overWidth: 1, overDash: "2 3" },
+    line: { line: "#d9d36a", width: 3 },
+  };
+  const ways: LegendEntry[] = present(world.tunnels.map(([, , kind]) => kind)).map((kind) => ({ key: `tunnel.${kind}`, swatch: look[kind] }));
+  if (world.entrances.length) ways.push({ key: "legend.entrance", swatch: { svg: `<path d="M7,4H17L12,13Z" fill="#c9a227"/>` } });
+  return [
+    { key: "legend.caverns", entries: caverns },
+    { key: "legend.ways", entries: ways },
+  ].filter((section) => section.entries.length);
 }

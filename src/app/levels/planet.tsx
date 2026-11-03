@@ -1,6 +1,6 @@
 // The planet level: world settings, the world map and its inspector.
 import { useMemo, useRef, useState } from "react";
-import { createRng, defaultLayers, editPlanet, eraTheme, emptyEdits, generatePlanet, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId } from "../../core/index";
+import { createRng, defaultLayers, editPlanet, eraTheme, emptyEdits, generatePlanet, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { SettingPanel } from "../SettingPanel";
 import { WorldEditor, type EditTool } from "../WorldEditor";
@@ -105,6 +105,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   const set = <K extends keyof PlanetParams>(key: K, value: PlanetParams[K]) => setParams((current) => ({ ...current, [key]: value }));
   const highlight = selection && (selection.kind === "state" || selection.kind === "province" || selection.kind === "culture" || selection.kind === "religion") ? { kind: selection.kind, id: selection.id } : null;
   const svg = useMemo(() => (!planet ? "" : globe ? renderGlobe(planet, { theme, layers, script: ctx.script, ...globe, mark: markOf(planet, selection), unknown, quick: turning }) : renderPlanet(planet, { theme, layers, script: ctx.script, highlight })), [planet, theme, layers, ctx.script, highlight?.kind, highlight?.id, globe, globe && selection, unknown, turning]); // eslint-disable-line react-hooks/exhaustive-deps
+  const legend = useMemo(() => (planet ? planetLegend(planet, { theme, layers }) : undefined), [planet, theme, layers]);
   const pick = (x: number, y: number) => {
     if (!planet) return;
     const cell = planet.mesh.find(x, y);
@@ -164,6 +165,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     },
     planet,
     load,
+    legend,
     // Pins and fog are laid on the flat map; the globe shows the world without them.
     mapKey: globe ? null : mapKey,
     selected: selectedOf(planet, selection),

@@ -9,6 +9,7 @@ import { SPECTRA, type Galaxy, type SpaceFeature, type Zone, type ZoneKind } fro
 import type { BodyKind, StarSystem } from "../space/system";
 import type { Anomaly, AnomalyKind, Universe } from "../space/universe";
 import { voronoi } from "../voronoi";
+import { present, type LegendEntry, type LegendSection, type Swatch } from "./legend";
 
 const esc = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
 const r1 = (value: number) => Math.round(value * 10) / 10;
@@ -348,4 +349,84 @@ function drawAnomaly(a: Anomaly, custom: Map<string, CustomKind>, picked: boolea
       return `<path d="M${r1(a.x + Math.cos(from) * a.size)},${r1(a.y + Math.sin(from) * a.size)}A${r1(a.size)},${r1(a.size)} 0 0 1 ${r1(a.x + Math.cos(to) * a.size)},${r1(a.y + Math.sin(to) * a.size)}" fill="none" stroke="${color}" stroke-width="1.2" stroke-dasharray="8 4" opacity="0.55"/>${ring}`;
     }
   }
+}
+
+/** The game master's kinds on a space map, for its legend. */
+function customEntries(kinds: CustomKind[], used: Set<string>): LegendEntry[] {
+  return kinds.filter((kind) => used.has(kind.id)).map((kind) => ({ label: kind.name || kind.glyph, swatch: kind.area ? { svg: `<ellipse cx="12" cy="8" rx="9" ry="6" fill="${kind.color}" fill-opacity="0.15" stroke="${kind.color}" stroke-dasharray="3 2"/><text x="12" y="11.5" text-anchor="middle" font-size="9" fill="${kind.color}">${esc(kind.glyph)}</text>` } : { glyph: kind.glyph, color: kind.color } }));
+}
+
+export function galaxyLegend(galaxy: Galaxy): LegendSection[] {
+  const stars: LegendEntry[] = present(galaxy.stars.map((s) => s.spectral)).map((spectral) => ({
+    key: `spectral.${spectral}`,
+    swatch: spectral === "BH" ? { svg: `<circle cx="12" cy="8" r="4" fill="#000" stroke="#ffb35c" stroke-width="1.2"/>` } : { fill: SPECTRA[spectral].color, round: true, stroke: "none" },
+  }));
+  const owner = galaxy.empires[1];
+  const space: LegendEntry[] = [
+    ...(owner ? [{ key: "legend.territory", swatch: { fill: owner.color, opacity: 0.35 } }, { key: "legend.capital-star", swatch: { svg: `<circle cx="12" cy="8" r="2.4" fill="#fff1c9"/><circle cx="12" cy="8" r="5.5" fill="none" stroke="${owner.color}" stroke-width="1.2"/>` } }] : []),
+    { key: "legend.hyperlane", swatch: { line: "#6f8cc7", width: 1.2, opacity: 0.7 } },
+    ...(galaxy.wormholes.length ? [{ key: "feature2.wormhole", swatch: { line: "#c77dff", width: 1.6, dash: "5 4" } }] : []),
+    ...(galaxy.nebulae.length ? [{ key: "legend.nebula", swatch: { fill: galaxy.nebulae[0].color, opacity: 0.35, round: true, stroke: "none" } }] : []),
+  ];
+  const wonders: LegendEntry[] = present(galaxy.stars.flatMap((s) => (s.feature ? [s.feature] : []))).map((feature) => ({ key: `feature2.${feature}`, swatch: { glyph: FEATURE_GLYPH[feature], color: "#ffd27a" } }));
+  const zones: LegendEntry[] = present((galaxy.zones ?? []).flatMap((z) => (z.kind === "custom" ? [] : [z.kind]))).map((kind) => ({ key: `zone.${kind}`, swatch: { fill: ZONE_STYLE[kind].fill, stroke: ZONE_STYLE[kind].edge, opacity: kind === "dead-zone" || kind === "dark-nebula" ? 0.7 : 0.35, round: true } }));
+  const used = new Set([...galaxy.stars.flatMap((s) => (s.custom ? [s.custom] : [])), ...(galaxy.zones ?? []).flatMap((z) => (z.custom ? [z.custom] : []))]);
+  return [
+    { key: "legend.stars", entries: stars },
+    { key: "legend.space", entries: space },
+    { key: "legend.wonders", entries: wonders },
+    { key: "legend.zones", entries: zones },
+    { key: "legend.custom", entries: customEntries(galaxy.params.custom ?? [], used) },
+  ].filter((section) => section.entries.length);
+}
+
+export function systemLegend(system: StarSystem): LegendSection[] {
+  const worlds: LegendEntry[] = present(system.bodies.map((b) => b.kind)).map((kind) => ({
+    key: `body.${kind}`,
+    swatch: kind === "belt" ? { line: "#a69a86", width: 5, dash: "1.5 3.5" } : { svg: `<circle cx="12" cy="8" r="6" fill="${WORLD_COLORS[kind][0]}" stroke="${WORLD_COLORS[kind][1]}" stroke-width="1.6"/>` },
+  }));
+  const orbits: LegendEntry[] = [
+    { key: "space.zone", swatch: { line: "#36e0a0", width: 6, opacity: 0.3 } },
+    { key: "legend.frost-line", swatch: { line: "#9cc9e6", width: 1.2, dash: "4 3" } },
+    ...(system.bodies.some((b) => b.habitable) ? [{ key: "legend.habitable", swatch: { svg: `<circle cx="12" cy="8" r="6" fill="none" stroke="#36e0a0" stroke-width="1.2" stroke-dasharray="3 2"/>` } }] : []),
+    ...(system.bodies.some((b) => b.rings) ? [{ key: "legend.rings", swatch: { svg: `<ellipse cx="12" cy="8" rx="10" ry="3" fill="none" stroke="#d9c9a4" stroke-width="1.4"/><circle cx="12" cy="8" r="3.5" fill="#e0b88a"/>` } }] : []),
+    ...(system.bodies.some((b) => b.station) ? [{ key: "feature2.station", swatch: { svg: `<rect x="9" y="5" width="6" height="6" fill="none" stroke="#ffd27a" stroke-width="1.2" transform="rotate(45 12 8)"/>` } }] : []),
+    ...(system.bodies.some((b) => b.population) ? [{ key: "legend.population", swatch: { glyph: "◉", color: "#36e0a0" } }] : []),
+  ];
+  return [
+    { key: "legend.worlds", entries: worlds },
+    { key: "legend.orbits", entries: orbits },
+  ].filter((section) => section.entries.length);
+}
+
+const GALAXY_LOOK: Record<string, Swatch> = {
+  spiral: { svg: `<ellipse cx="12" cy="8" rx="8" ry="3" fill="#cfe0ff" opacity="0.6"/><circle cx="12" cy="8" r="2" fill="#fff4dc"/>` },
+  barred: { svg: `<ellipse cx="12" cy="8" rx="8" ry="3" fill="#cfe0ff" opacity="0.6"/><rect x="8" y="7" width="8" height="2" fill="#fff4dc"/>` },
+  ring: { svg: `<ellipse cx="12" cy="8" rx="8" ry="4" fill="none" stroke="#9fd8ff" stroke-width="1"/><circle cx="12" cy="8" r="1.6" fill="#fff4dc"/>` },
+  elliptical: { svg: `<ellipse cx="12" cy="8" rx="6" ry="4" fill="#ffd9a8" opacity="0.85"/>` },
+  lenticular: { svg: `<ellipse cx="12" cy="8" rx="8" ry="1.6" fill="#ffe7c2"/><circle cx="12" cy="8" r="2.2" fill="#fff4dc"/>` },
+  irregular: { svg: `<circle cx="10" cy="8" r="2.4" fill="#bcd2ff"/><circle cx="14" cy="6" r="1.6" fill="#bcd2ff"/><circle cx="13" cy="11" r="1.3" fill="#bcd2ff"/>` },
+  dwarf: { fill: "#c8c8ff", round: true, stroke: "none" },
+  quasar: { svg: `<circle cx="12" cy="8" r="2.6" fill="#ffffff"/><path d="M12,1V15" stroke="#9fd8ff" stroke-width="1"/>` },
+  starburst: { svg: `<circle cx="12" cy="8" r="2.6" fill="#bfe8ff"/><path d="M6,8H18M12,2V14" stroke="#ff9fd0" stroke-width="0.8"/>` },
+  colliding: { svg: `<ellipse cx="9" cy="8" rx="5" ry="2" fill="#cfe0ff" opacity="0.7"/><ellipse cx="15" cy="9" rx="4.5" ry="2" fill="#ffd9a8" opacity="0.7" transform="rotate(40 15 9)"/>` },
+  ghost: { svg: `<circle cx="12" cy="8" r="5" fill="none" stroke="#8a8fb8" stroke-width="0.8" stroke-dasharray="1 1.4"/>` },
+};
+const ANOMALY_GLYPH: Record<AnomalyKind, string> = { "great-attractor": "◎", "cosmic-string": "╱", lens: "○", "white-hole": "✺", "dark-flow": "⇉", relic: "⬡", supermassive: "●", "bubble-wall": "◜" };
+
+export function universeLegend(universe: Universe): LegendSection[] {
+  const galaxies: LegendEntry[] = present(universe.galaxies.map((g) => g.kind)).map((kind) => ({ key: `gkind.${kind}`, swatch: GALAXY_LOOK[kind] }));
+  const web: LegendEntry[] = [
+    { key: "legend.filament", swatch: { line: "#6c6fd8", width: 1.2, opacity: 0.6 } },
+    { key: "legend.void", swatch: { svg: `<circle cx="12" cy="8" r="6.5" fill="#000" stroke="#1b1f3a" stroke-width="1" stroke-dasharray="2 3"/>` } },
+    ...(universe.galaxies.some((g) => g.civilisations) ? [{ key: "legend.civilisation", swatch: { fill: "#36e0a0", round: true, stroke: "none" } }] : []),
+  ];
+  const strange: LegendEntry[] = present((universe.anomalies ?? []).flatMap((a) => (a.kind === "custom" ? [] : [a.kind]))).map((kind) => ({ key: `anomaly.${kind}`, swatch: { glyph: ANOMALY_GLYPH[kind], color: ANOMALY_COLOR[kind] } }));
+  const used = new Set((universe.anomalies ?? []).flatMap((a) => (a.custom ? [a.custom] : [])));
+  return [
+    { key: "legend.galaxies", entries: galaxies },
+    { key: "legend.web", entries: web },
+    { key: "legend.strange", entries: strange },
+    { key: "legend.custom", entries: customEntries(universe.params.custom ?? [], used) },
+  ].filter((section) => section.entries.length);
 }

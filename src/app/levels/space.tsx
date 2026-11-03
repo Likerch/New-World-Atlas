@@ -3,7 +3,7 @@
 // own kinds of thing can be added to the galaxy and the universe.
 import { useMemo, useRef, useState } from "react";
 import { CustomKinds, loadKinds, saveKinds } from "../CustomKinds";
-import { FEATURE_GLYPH, GALAXY_PLACEMENTS, UNIVERSE_PLACEMENTS, type CustomKind, type Zone, generateUniverse, renderUniverse, shapeOf, universeParams, type Universe, type UniverseParams, GALAXY_SHAPES, localFromStar, galaxyParams, generateGalaxy, generateLoneSystem, generateSystem, planetFromBody, randomSeed, type SpectralClass, type SystemParams, renameGalaxy, renameSystem, renderGalaxy, renderSystem, SPECTRA, type Galaxy, type GalaxyParams, type PlanetParams, type StarSystem } from "../../core/index";
+import { FEATURE_GLYPH, galaxyLegend, systemLegend, universeLegend, GALAXY_PLACEMENTS, UNIVERSE_PLACEMENTS, type CustomKind, type Zone, generateUniverse, renderUniverse, shapeOf, universeParams, type Universe, type UniverseParams, GALAXY_SHAPES, localFromStar, galaxyParams, generateGalaxy, generateLoneSystem, generateSystem, planetFromBody, randomSeed, type SpectralClass, type SystemParams, renameGalaxy, renameSystem, renderGalaxy, renderSystem, SPECTRA, type Galaxy, type GalaxyParams, type PlanetParams, type StarSystem } from "../../core/index";
 import type { Level, LevelContext } from "./types";
 
 const STRANGENESS = [0, 0.5, 1, 2, 3];
@@ -69,12 +69,14 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
   const set = <K extends keyof GalaxyParams>(key: K, value: GalaxyParams[K]) => setInput((current) => ({ ...current, [key]: value }));
   const svg = useMemo(() => (galaxy ? renderGalaxy(galaxy, { script: ctx.script, highlight: empire, highlightZone: zone }) : ""), [galaxy, ctx.script, empire, zone]);
   const kinds = new Map((galaxy?.params.custom ?? []).map((kind) => [kind.id, kind]));
+  const legend = useMemo(() => (galaxy ? galaxyLegend(galaxy) : undefined), [galaxy]);
   const zoneName = (z: Zone) => (z.kind === "custom" ? kinds.get(z.custom ?? "")?.name || t("custom.unnamed") : t(`zone.${z.kind}`));
   const selected = galaxy && star !== null ? galaxy.stars[star] : null;
   const empireName = (id: number) => (galaxy && id ? t(`eform.${galaxy.empires[id].form}`, { name: nm(galaxy.empires[id].name) }) : t("space.unclaimed"));
 
   return {
     id: "galaxy",
+    legend,
     icon: "🌌",
     title: galaxy?.name ?? null,
     seed: input.seed,
@@ -264,6 +266,7 @@ export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<P
   const [input, setInput] = useState<SystemParams>(() => ({ seed: randomSeed() }));
   const [body, setBody] = useState<number | null>(null);
   const svg = useMemo(() => (system ? renderSystem(system, { script: ctx.script, highlight: body }) : ""), [system, ctx.script, body]);
+  const legend = useMemo(() => (system ? systemLegend(system) : undefined), [system]);
   const open = (galaxy: Galaxy, star: number) =>
     ctx.run(() => {
       const made = generateSystem(galaxy, star);
@@ -283,6 +286,7 @@ export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<P
 
   return {
     id: "system",
+    legend,
     icon: "☀️",
     title: system?.name ?? null,
     seed: input.seed,
@@ -413,11 +417,13 @@ export function useUniverseLevel(ctx: LevelContext, openGalaxy: (params: Partial
   const svg = useMemo(() => (universe ? renderUniverse(universe, { script: ctx.script, highlight: picked, highlightAnomaly: anomaly }) : ""), [universe, ctx.script, picked, anomaly]);
   const selected = universe && picked !== null ? universe.galaxies[picked] : null;
   const strange = universe && anomaly !== null ? universe.anomalies[anomaly] : null;
+  const legend = useMemo(() => (universe ? universeLegend(universe) : undefined), [universe]);
   const ukinds = new Map((universe?.params.custom ?? []).map((kind): [string, CustomKind] => [kind.id, kind]));
   const anomalyName = (kind: string, custom?: string) => (kind === "custom" ? ukinds.get(custom ?? "")?.name || t("custom.unnamed") : t(`anomaly.${kind}`));
   const open = (id: number) => universe && openGalaxy({ seed: `${universe.params.seed}/galaxy-${id}`, shape: shapeOf(universe.galaxies[id].kind), stars: universe.galaxies[id].stars });
   return {
     id: "universe",
+    legend,
     icon: "🌠",
     title: universe?.name ?? null,
     seed: input.seed,

@@ -2,6 +2,7 @@
 // walls, trees, rocks, a stream and a trail in the wild, doors, stairs, traps and numbered keys for the GM.
 import { chainSegments, pathData, smooth, type Point } from "../geometry";
 import { TILE, type LocalFeatureKind, type LocalMap } from "../local/local";
+import { present, type LegendEntry, type LegendSection } from "./legend";
 
 export type LocalThemeId = "classic" | "parchment" | "dark";
 export const LOCAL_STYLES: LocalThemeId[] = ["classic", "parchment", "dark"];
@@ -151,4 +152,36 @@ export function renderLocal(map: LocalMap, options: LocalRenderOptions = {}): st
   out.push(`<g font-size="11" fill="${wild ? "#3a2c1c" : st.ink}"><rect x="10" y="${H * S - 18}" width="${10 * S}" height="5" fill="${wild ? "#3a2c1c" : st.ink}"/><text x="${10 * S + 16}" y="${H * S - 12}">${metres} m</text></g>`);
   out.push(`</svg>`);
   return out.join("");
+}
+
+/** What a local map shows, for its legend: its ground, the things on it and the GM's numbered keys. */
+export function localLegend(map: LocalMap, options: LocalRenderOptions = {}): LegendSection[] {
+  const st = STYLES[options.style ?? "classic"];
+  const wild = map.params.kind === "wilderness";
+  const names = Object.fromEntries(Object.entries(TILE).map(([name, id]) => [id, name])) as Record<number, string>;
+  const ground: LegendEntry[] = present(Array.from(map.tiles)).map((t) => ({
+    key: `tile.${names[t]}${!wild && t === TILE.rock ? "@underground" : ""}`,
+    swatch: { fill: wild ? WILD[t] ?? WILD[TILE.grass] : t === TILE.rock ? st.rock : t === TILE.water ? st.water : t === TILE.deep ? st.deep : t === TILE.rubble ? st.grid : st.floor, stroke: st.wall },
+  }));
+  if (map.stream.length > 1) ground.push({ key: "legend.stream", swatch: { line: WILD[TILE.deep], width: 4 } });
+  const drawn: Partial<Record<string, string>> = {
+    tree: `<circle cx="12" cy="8" r="6" fill="#4f7d3a" stroke="#2f4f22" stroke-width="1"/>`,
+    rock: `<path d="M5,13L8,3L18,5L19,13Z" fill="#9a9284" stroke="#5e584d" stroke-width="1"/>`,
+    pillar: `<circle cx="12" cy="8" r="4" fill="${wild ? "#bdb6a6" : st.wall}"/>`,
+    stalagmite: `<circle cx="12" cy="8" r="4" fill="${wild ? "#bdb6a6" : st.wall}"/>`,
+    door: `<rect x="6" y="5" width="12" height="6" fill="${st.floor}" stroke="${st.wall}" stroke-width="2"/>`,
+    "locked-door": `<rect x="6" y="5" width="12" height="6" fill="${st.floor}" stroke="${st.wall}" stroke-width="2"/><circle cx="12" cy="8" r="1.6" fill="${st.wall}"/>`,
+    "secret-door": `<rect x="6" y="3" width="12" height="10" fill="none" stroke="${st.wall}" stroke-width="1.6" stroke-dasharray="3 2"/><text x="12" y="12" text-anchor="middle" font-size="9" font-weight="700" fill="${st.wall}">S</text>`,
+    bridge: `<rect x="4" y="3" width="16" height="10" fill="#a07a4a" stroke="#5a4428"/>`,
+  };
+  const things: LegendEntry[] = present(map.features.map((f) => f.kind)).flatMap((kind): LegendEntry[] => {
+    if (drawn[kind]) return [{ key: `lfeature.${kind}`, swatch: { svg: drawn[kind]! } }];
+    const glyph = GLYPH[kind];
+    return glyph ? [{ key: `lfeature.${kind}`, swatch: { glyph, color: kind === "fire" ? "#e0602a" : kind === "pool" ? st.deep : wild ? "#3a2c1c" : st.ink } }] : [];
+  });
+  if (map.keyed.length) things.push({ key: "legend.key", swatch: { svg: `<circle cx="12" cy="8" r="6.5" fill="${st.key}"/><text x="12" y="11.5" text-anchor="middle" font-size="9" font-weight="700" fill="${st.keyText}">1</text>` } });
+  return [
+    { key: "legend.ground", entries: ground },
+    { key: "legend.features", entries: things },
+  ].filter((section) => section.entries.length);
 }

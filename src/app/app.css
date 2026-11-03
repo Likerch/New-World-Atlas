@@ -567,3 +567,53 @@ button.back {
 .controls .custom-row label.check {
   margin: 0;
 }
+
+/* The map legend: a panel in the map's lower right corner, folding to a button. */
+.legend,
+.legend-toggle {
+  position: absolute;
+  right: 10px;
+  bottom: 40px;
+  z-index: 3;
+}
+.legend {
+  width: 250px;
+  max-height: calc(100% - 140px);
+  overflow-y: auto;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  box-shadow: 0 8px 24px #0000004d;
+}
+.legend-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.legend-head button {
+  padding: 1px 7px;
+}
+.legend-section h4 {
+  margin: 8px 0 3px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--muted);
+}
+.legend-section ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.legend-section li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 1px 0;
+  font-size: 12px;
+}
+.legend-section svg {
+  flex: none;
+  color: var(--text);
+}

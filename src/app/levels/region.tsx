@@ -1,6 +1,6 @@
 // The region level: one province of the planet up close, with its villages, roads and local places.
 import { useMemo, useState } from "react";
-import { defaultLayers, generateCountry, generateRegion, LAYERS, planetToJson, renamePlanet, renderPlanet, THEMES, type LayerId, type Planet, type ThemeId } from "../../core/index";
+import { defaultLayers, generateCountry, generateRegion, LAYERS, planetToJson, renamePlanet, renderPlanet, THEMES, type LayerId, type Planet, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { selectedOf } from "./planet";
 import type { Level, LevelContext } from "./types";
@@ -18,9 +18,11 @@ export function useRegionLevel(ctx: LevelContext, links: { openCity: (region: Pl
   const [time, setTime] = useState(0);
   const highlight = selection && (selection.kind === "state" || selection.kind === "province" || selection.kind === "culture") ? { kind: selection.kind, id: selection.id } : null;
   const svg = useMemo(() => (region ? renderPlanet(region, { theme, layers, script: ctx.script, highlight }) : ""), [region, theme, layers, ctx.script, highlight?.kind, highlight?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const legend = useMemo(() => (region ? planetLegend(region, { theme, layers }) : undefined), [region, theme, layers]);
 
   return {
     id: "region",
+    legend,
     icon: "🗺",
     title: region?.name ?? null,
     seed: region?.params.seed ?? "",

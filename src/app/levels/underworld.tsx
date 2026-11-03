@@ -1,6 +1,6 @@
 // The underworld level: the caverns beneath the planet, opened from the planet's settings.
 import { useMemo, useState } from "react";
-import { generateUnderworld, renderUnderworld, type Planet, type Underworld } from "../../core/index";
+import { generateUnderworld, renderUnderworld, type Planet, type Underworld, underworldLegend } from "../../core/index";
 import type { Level, LevelContext } from "./types";
 
 export function useUnderworldLevel(ctx: LevelContext, openCave: (world: Underworld, cavern: number) => void, back: (() => void) | null): Level & { open: (planet: Planet) => void } {
@@ -8,10 +8,12 @@ export function useUnderworldLevel(ctx: LevelContext, openCave: (world: Underwor
   const [state, setState] = useState<{ world: Underworld; planet: Planet } | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
   const svg = useMemo(() => (state ? renderUnderworld(state.world, state.planet, { script: ctx.script, highlight: picked }) : ""), [state, ctx.script, picked]);
+  const legend = useMemo(() => (state ? underworldLegend(state.world) : undefined), [state]);
   const world = state?.world ?? null;
   const cavern = world && picked !== null ? world.caverns[picked] : null;
   return {
     id: "underworld",
+    legend,
     icon: "🕳",
     title: world?.name ?? null,
     seed: world?.seed ?? "",

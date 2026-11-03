@@ -1,6 +1,6 @@
 // The building level: floor plans, floor by floor, with the rooms' furnishings.
 import { useMemo, useRef, useState } from "react";
-import { BUILDING_THEMES, BUILDING_TYPES, ERA_BUILDINGS, buildingFromCity, buildingParams, ERAS, generateBuilding, generateRoom, PX, renderBuilding, renderRoom, ROOM_PX, type BuildingParams, type BuildingPlan, type BuildingThemeId, type City } from "../../core/index";
+import { BUILDING_THEMES, BUILDING_TYPES, ERA_BUILDINGS, buildingFromCity, buildingParams, ERAS, generateBuilding, generateRoom, PX, renderBuilding, renderRoom, ROOM_PX, type BuildingParams, type BuildingPlan, type BuildingThemeId, type City, buildingLegend } from "../../core/index";
 import type { Level, LevelContext } from "./types";
 
 export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): Level & { openFromCity: (city: City, index: number) => void } {
@@ -35,6 +35,7 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): 
   const typeName = (type: string) => t(`btype.${type}@${era}`);
   const svg = useMemo(() => (plan ? renderBuilding(plan, { theme, floor, grid, highlight: room, label: (kind) => t(`room.${kind}@${plan.params.era}`) }) : ""), [plan, theme, floor, grid, room, t]);
   const current = plan?.floors[floor];
+  const legend = useMemo(() => (plan ? buildingLegend(plan, { theme, floor }) : undefined), [plan, theme, floor]);
   const roomMap = useMemo(() => (plan && close !== null ? generateRoom(plan, floor, close) : null), [plan, floor, close]);
   const roomSvg = useMemo(() => (roomMap ? renderRoom(roomMap, { theme, grid: true, players: ctx.players, label: roomName(roomMap.kind) }) : ""), [roomMap, theme, ctx.players, t, era]); // eslint-disable-line react-hooks/exhaustive-deps
   const bounds = plan ? plan.yard?.bounds ?? { x: -2, y: -2, w: plan.params.width + 4, h: plan.params.depth + 4 } : null;
@@ -44,6 +45,7 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): 
 
   return {
     id: "building",
+    legend,
     icon: "🏠",
     title: plan ? names.world || plan.params.name || typeName(plan.params.type) : null,
     mapKey,
