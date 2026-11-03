@@ -1,6 +1,6 @@
 // The planet level: world settings, the world map and its inspector.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { parseRecipe, recipeText, generateUnderworld, underworldGhostSvg, sheetBox, editPlanet, mapKeyOf, pastPlanet, planetGeoJSON, eraTheme, emptyEdits, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
+import { REROLL_STAGES, parseRecipe, recipeText, generateUnderworld, underworldGhostSvg, sheetBox, editPlanet, mapKeyOf, pastPlanet, planetGeoJSON, eraTheme, emptyEdits, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { SettingPanel } from "../SettingPanel";
 import { WorldForm, type ZoomRange } from "../WorldForm";
@@ -28,6 +28,7 @@ const NUMBER_FIELDS: { key: keyof PlanetParams; min: number; max: number; step: 
   { key: "towns", min: 0, max: 2000, step: 10 },
   { key: "provinceShare", min: 0, max: 1, step: 0.05 },
   { key: "growth", min: 0.3, max: 3, step: 0.1 },
+  { key: "families", min: 0, max: 8, step: 1 },
 ];
 
 /** Where a selection sits on the map, to ring it on the globe. */
@@ -488,9 +489,23 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
         {NUMBER_FIELDS.map(({ key, min, max, step }) => (
           <label key={key} title={hintOf(t, key)}>
             {t(`field.${key}`)}
-            <NumberInput min={min} max={max} step={step} value={params[key] as number} onChange={(value) => set(key, value as never)} />
+            <NumberInput min={min} max={max} step={step} value={(params[key] as number | undefined) ?? 0} onChange={(value) => set(key, value as never)} />
           </label>
         ))}
+        {raw ? (
+          <>
+            <h4 className="muted" title={t("reroll.hint")}>
+              🎲 {t("reroll.title")}
+            </h4>
+            <div className="row-buttons">
+              {REROLL_STAGES.map((stage) => (
+                <button key={stage} type="button" title={t(`reroll.${stage}.hint`)} onClick={() => load({ reroll: { ...params.reroll, [stage]: (params.reroll?.[stage] ?? 0) + 1 } })}>
+                  {t(`reroll.${stage}`)}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
         <details className="recipe">
           <summary>{t("relief.title")}</summary>
           <label className="check">

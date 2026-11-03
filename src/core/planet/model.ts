@@ -49,7 +49,15 @@ export interface PlanetParams {
   recipe?: string;
   /** The share of the map that is land (0–1); none keeps what the relief gives. */
   land?: number;
+  /** Stages thrown again, each so many times, leaving the rest of the world as it was (see REROLL_STAGES). */
+  reroll?: Partial<Record<RerollStage, number>>;
+  /** Peoples speak tongues of this many families (daughters of one proto-language sound alike); none: each its own. */
+  families?: number;
 }
+
+/** The stages of a world that can be thrown again on their own: everything after a stage follows from it. */
+export const REROLL_STAGES = ["peoples", "towns", "realms", "faiths", "names", "places"] as const;
+export type RerollStage = (typeof REROLL_STAGES)[number];
 
 export type FeatureKind = "ocean" | "lake" | "continent" | "island" | "isle";
 
@@ -100,6 +108,8 @@ export interface Culture {
   expansionism: number;
   cells: number;
   population: number;
+  /** The family of tongues its language belongs to, when the world has families. */
+  family?: string;
 }
 
 export interface Burg {

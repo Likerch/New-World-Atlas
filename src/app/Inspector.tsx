@@ -277,6 +277,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
             {nm(culture.name)}
           </h3>
           <Row label={t("stat.kind")} value={t(`culture.${culture.kind}`)} />
+          {culture.family ? <Row label={t("culture.family")} value={t("culture.familyName", { name: nm(culture.family) })} /> : null}
           <Row label={t("stat.population")} value={people(culture.population, t)} />
           <Row label={t("stat.cells")} value={culture.cells} />
           <p className="muted">{towns.map((burg) => nm(burg.name)).join(", ")}</p>

@@ -385,4 +385,16 @@ test("a recipe, a share of land, plates and salt lakes", () => {
   }
 });
 
+test("a stage thrown again leaves the stages before it; families of tongues", () => {
+  const base = generatePlanet({ seed: "reroll", cells: 3000 });
+  const towns = generatePlanet({ seed: "reroll", cells: 3000, reroll: { towns: 1 } });
+  assert.deepEqual([...towns.height], [...base.height], "the relief moved");
+  assert.deepEqual(towns.cultures.map((c) => c.name), base.cultures.map((c) => c.name), "the peoples changed");
+  assert.notDeepEqual(towns.burgs.map((b) => b.name), base.burgs.map((b) => b.name), "the towns stayed");
+  const names = generatePlanet({ seed: "reroll", cells: 3000, reroll: { names: 2 } });
+  assert.deepEqual(names.burgs.map((b) => b.name), base.burgs.map((b) => b.name), "names moved the towns");
+  const kin = generatePlanet({ seed: "reroll", cells: 3000, families: 2 });
+  assert.equal(new Set(kin.cultures.slice(1).map((c) => c.family)).size, Math.min(2, kin.cultures.length - 1));
+});
+
 console.log(`planet: ${passed} regressions passed`);

@@ -13,7 +13,7 @@ import { settleCultures, suitability } from "./cultures";
 import { markFeatures } from "./features";
 import { generateHeights, RANDOM_TEMPLATES, setLandShare } from "./heightmap";
 import { placeMarkers } from "./markers";
-import { evaporationOf, SEA_LEVEL, type Ground, type Planet, type PlanetParams } from "./model";
+import { type RerollStage, evaporationOf, SEA_LEVEL, type Ground, type Planet, type PlanetParams } from "./model";
 import { spreadReligions } from "./religions";
 import { hydrology } from "./rivers";
 import { buildRoutes } from "./routes";
@@ -96,20 +96,22 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   }
 
   const ground: Ground = { params, mesh, height, water, feature, features, coast, temperature, precipitation: rain, flux: hydro.flux, river: hydro.river, rivers: hydro.rivers, biome, scale };
-  const { culture, cultures } = settleCultures(ground, params.cultures, rng.fork("cultures"), anchors?.cultures);
+  // A stage thrown again draws from a fork of its own; the stages before it are untouched.
+  const fork = (label: string, stage: RerollStage) => rng.fork(params.reroll?.[stage] ? `${label}#${params.reroll[stage]}` : label);
+  const { culture, cultures } = settleCultures(ground, params.cultures, fork("cultures", "peoples"), anchors?.cultures);
   const lifeless = params.lifeless === true;
   progress?.(0.25, "peoples");
   // A lived history decides where the towns stand and who rules them; without one they are placed at once.
-  const history = params.history && !lifeless ? simulateHistory(ground, culture, cultures, { years: params.history, polities: params.states, tech: settingOf(params.setting).tech }, rng.fork("history"), (share) => progress?.(0.25 + share * 0.55, "history")) : undefined;
+  const history = params.history && !lifeless ? simulateHistory(ground, culture, cultures, { years: params.history, polities: params.states, tech: settingOf(params.setting).tech }, fork("history", "towns"), (share) => progress?.(0.25 + share * 0.55, "history")) : undefined;
   const lived = history ? townsOfHistory(ground, history, cultures) : null;
-  const { burg, burgs } = lived ?? placeBurgs(ground, culture, cultures, lifeless ? 0 : params.states, lifeless ? -1 : params.towns, rng.fork("burgs"), anchors?.burgs);
+  const { burg, burgs } = lived ?? placeBurgs(ground, culture, cultures, lifeless ? 0 : params.states, lifeless ? -1 : params.towns, fork("burgs", "towns"), anchors?.burgs);
   progress?.(0.82, "realms");
   // The age decides how big towns grow and what guards them; the classic world keeps its towns as they were.
   const setting = settingOf(params.setting);
   settleAge(burgs, setting, rng.fork("age"));
   const rural = isClassic(setting) ? 1 : peopleOf(setting).rural;
   const given = history && lived ? { owner: history.eras[history.eras.length - 1].owner, realms: realmsOfHistory(history, burgs, lived.order), relation: (a: number, b: number) => standingOf(history, a, b) } : undefined;
-  const { state, states, province, provinces } = formStates(ground, culture, cultures, burgs, params.provinceShare, rng.fork("states"), given);
+  const { state, states, province, provinces } = formStates(ground, culture, cultures, burgs, params.provinceShare, fork("states", "realms"), given);
 
   // Country folk: thousands per cell, by how kind the land is.
   const population = new Float32Array(mesh.cells);
@@ -121,10 +123,10 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
     cultures[culture[cell]].population += population[cell];
   }
   for (const item of burgs.slice(1)) cultures[item.culture].population += item.population;
-  const { religion, religions, secular } = spreadReligions(ground, culture, cultures, burgs, state, states, population, rng.fork("religions"));
+  const { religion, religions, secular } = spreadReligions(ground, culture, cultures, burgs, state, states, population, fork("religions", "faiths"));
 
   // Names for the waters and lands, in the tongue of the people living there.
-  const names = rng.fork("names");
+  const names = fork("names", "names");
   const speakerOf = (cells: number[]) => {
     const votes = new Map<number, number>();
     for (const cell of cells) if (culture[cell]) votes.set(culture[cell], (votes.get(culture[cell]) ?? 0) + 1);
@@ -149,7 +151,7 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
 
   progress?.(0.9, "roads");
   const routes = buildRoutes(ground, burgs, states);
-  let markers = placeMarkers(ground, culture, cultures, state, states, burgs, burg, routes, rng.fork("markers"));
+  let markers = placeMarkers(ground, culture, cultures, state, states, burgs, burg, routes, fork("markers", "places"));
   if (history) marksOfHistory(ground, history, markers);
   const placed = { ...ground, routes, rivers: hydro.rivers } as Planet;
   naturalPlaces(placed, markers);

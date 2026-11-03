@@ -1,7 +1,7 @@
 // Cultures: peoples rise where land is kind, take a character from their homeland (sailors on coasts, nomads on the
 // steppe, highlanders in the mountains) and spread along the paths that suit them. Each speaks its own language.
 import { paletteColor } from "../color";
-import { createLanguage, name } from "../language";
+import { createLanguage, name, shiftLanguage } from "../language";
 import { PriorityQueue } from "../queue";
 import type { Rng } from "../random";
 import { BIOMES } from "./biomes";
@@ -119,6 +119,13 @@ export function settleCultures(g: Ground, count: number, rng: Rng, anchors?: [nu
     return cell;
   }) : spacedPicks(g, scores, count, spacing, rng.fork("centers"));
   const hue = rng.next();
+  // Families of tongues: a few proto-languages, each people's tongue a daughter of one of them.
+  const families = Math.max(0, Math.min(8, Math.round(g.params.families ?? 0)));
+  const protos = Array.from({ length: families }, (_, k) => {
+    const own = rng.fork(`family-${k}`);
+    const language = createLanguage(own.fork("language"));
+    return { language, name: name(language, own, "people") };
+  });
   const cultures: Culture[] = [
     { id: 0, name: "", kind: "generic", language: createLanguage(rng.fork("wild")), center: -1, color: "#999999", expansionism: 0, cells: 0, population: 0 },
   ];
@@ -126,9 +133,10 @@ export function settleCultures(g: Ground, count: number, rng: Rng, anchors?: [nu
     const id = cultures.length;
     const own = rng.fork(`culture-${id}`);
     const kind = kindAt(g, center, own);
-    const language = createLanguage(own.fork("language"));
+    const proto = protos.length ? protos[(id - 1) % protos.length] : null;
+    const language = proto ? shiftLanguage(proto.language, own.fork("language")) : createLanguage(own.fork("language"));
     const boost = kind === "nomadic" ? 1.5 : kind === "naval" ? 1.3 : kind === "hunting" ? 0.8 : 1;
-    cultures.push({ id, name: name(language, own, "people"), kind, language, center, color: paletteColor(id, hue, 0.45, 0.66), expansionism: own.float(1, 2) * boost, cells: 0, population: 0 });
+    cultures.push({ id, name: name(language, own, "people"), kind, language, center, color: paletteColor(id, hue, 0.45, 0.66), expansionism: own.float(1, 2) * boost, cells: 0, population: 0, ...(proto ? { family: proto.name } : {}) });
   }
 
   const culture = new Uint16Array(n);
