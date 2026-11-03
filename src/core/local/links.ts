@@ -20,7 +20,7 @@ export function localFromMarker(planet: Planet, markerId: number): LocalLink | n
   const biome = planet.biome[marker.cell];
   const wildTheme = planet.height[marker.cell] > 60 ? "mountain" : planet.coast[marker.cell] === 1 ? "coast" : biome === 12 ? "swamp" : biome === 1 || biome === 2 ? "desert" : biome === 9 || biome === 10 || biome === 11 ? "taiga" : "forest";
   const language = planet.cultures[planet.culture[marker.cell]]?.language ?? null;
-  const danger = marker.kind === "cave" || marker.kind === "ruins" || marker.kind === "portal" ? 3 : 2;
+  const danger = ["cave", "ruins", "portal", "radiation", "toxic-zone", "crash-site", "wizard-tower"].includes(marker.kind) ? 3 : 2;
   const by: Partial<Record<string, Partial<LocalParams>>> = {
     cave: { kind: "cave", theme: "lair" },
     mine: { kind: "cave", theme: "mine" },
@@ -33,6 +33,29 @@ export function localFromMarker(planet: Planet, markerId: number): LocalLink | n
     battlefield: { kind: "wilderness", theme: wildTheme },
     volcano: { kind: "wilderness", theme: "mountain" },
     "hot-spring": { kind: "wilderness", theme: "mountain" },
+    megalith: { kind: "wilderness", theme: wildTheme },
+    "hunting-ground": { kind: "wilderness", theme: wildTheme },
+    "ley-nexus": { kind: "wilderness", theme: wildTheme },
+    biodome: { kind: "wilderness", theme: "forest" },
+    tomb: { kind: "dungeon", theme: "crypt" },
+    oracle: { kind: "dungeon", theme: "temple" },
+    "wizard-tower": { kind: "dungeon", theme: "temple" },
+    factory: { kind: "dungeon", theme: "factory" },
+    dam: { kind: "dungeon", theme: "factory" },
+    "power-plant": { kind: "dungeon", theme: "factory" },
+    terraformer: { kind: "dungeon", theme: "factory" },
+    base: { kind: "dungeon", theme: "bunker" },
+    "data-haven": { kind: "dungeon", theme: "lab" },
+    airport: { kind: "dungeon", theme: "mall" },
+    arcology: { kind: "dungeon", theme: "mall" },
+    spaceport: { kind: "dungeon", theme: "starship" },
+    "space-elevator": { kind: "dungeon", theme: "starship" },
+    "crash-site": { kind: "dungeon", theme: "derelict" },
+    bunker: { kind: "dungeon", theme: "vault" },
+    "oil-field": { kind: "wilderness", theme: "wasteland" },
+    "toxic-zone": { kind: "wilderness", theme: "wasteland" },
+    crater: { kind: "wilderness", theme: "wasteland" },
+    radiation: { kind: "wilderness", theme: "wasteland" },
   };
   const params = by[marker.kind];
   const dweller = typeof marker.facts.dweller === "string" ? marker.facts.dweller.replace(/ /gu, "-") : undefined;

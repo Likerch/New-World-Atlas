@@ -7,8 +7,8 @@ import type { CavernKind, Underworld } from "../planet/underworld";
 
 const r1 = (value: number) => Math.round(value * 10) / 10;
 const esc = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
-const FILL: Record<CavernKind, string> = { cavern: "#2c2a33", fungal: "#2d3a2c", sea: "#143049", magma: "#4a1c10", crystal: "#2b3348", ruins: "#3a3430", abyss: "#08080b", settlement: "#3a3328" };
-const EDGE: Record<CavernKind, string> = { cavern: "#5a5666", fungal: "#7fb36a", sea: "#3f8fc4", magma: "#ff6a2b", crystal: "#9fd8ff", ruins: "#a8936a", abyss: "#3a3a48", settlement: "#e0b35a" };
+const FILL: Record<CavernKind, string> = { cavern: "#2c2a33", fungal: "#2d3a2c", sea: "#143049", magma: "#4a1c10", crystal: "#2b3348", ruins: "#3a3430", abyss: "#08080b", settlement: "#3a3328", metro: "#2a2f3a", undercity: "#1d2333", bunker: "#30343a", vault: "#2f3a33" };
+const EDGE: Record<CavernKind, string> = { cavern: "#5a5666", fungal: "#7fb36a", sea: "#3f8fc4", magma: "#ff6a2b", crystal: "#9fd8ff", ruins: "#a8936a", abyss: "#3a3a48", settlement: "#e0b35a", metro: "#d9d36a", undercity: "#38c6e8", bunker: "#9aa4ad", vault: "#7fd8a0" };
 
 /** A lumpy cave outline round a centre. */
 function blob(x: number, y: number, r: number, salt: number): string {
@@ -40,6 +40,10 @@ export function renderUnderworld(world: Underworld, planet: Planet, options: { s
     const bend = (((a * 31 + b * 17) % 13) / 13 - 0.5) * 0.5;
     const mid: Point = [(p.x + q.x) / 2 - (q.y - p.y) * bend, (p.y + q.y) / 2 + (q.x - p.x) * bend];
     const d = pathData(smooth([[p.x, p.y], mid, [q.x, q.y]], false, 3), false);
+    if (kind === "line") {
+      out.push(`<path d="M${r1(world.caverns[a].x)},${r1(world.caverns[a].y)}L${r1(world.caverns[b].x)},${r1(world.caverns[b].y)}" stroke="${EDGE[world.caverns[a].kind]}" stroke-width="3" opacity="0.85"/>`);
+      continue;
+    }
     if (kind === "chasm") out.push(`<path d="${d}" fill="none" stroke="#000" stroke-width="7"/><path d="${d}" fill="none" stroke="#5a5666" stroke-width="1" stroke-dasharray="2 3"/>`);
     else out.push(`<path d="${d}" fill="none" stroke="${kind === "river" ? "#2a6a9a" : "#3a3744"}" stroke-width="${kind === "river" ? 4 : 5}" stroke-linecap="round"/>`);
   }
@@ -51,7 +55,7 @@ export function renderUnderworld(world: Underworld, planet: Planet, options: { s
   }
   for (const entrance of world.entrances) out.push(`<path d="M${r1(entrance.x - 4)},${r1(entrance.y - 3)}L${r1(entrance.x + 4)},${r1(entrance.y - 3)}L${r1(entrance.x)},${r1(entrance.y + 4)}Z" fill="#c9a227"/>`);
   out.push(`<g text-anchor="middle" font-size="9" fill="#cfc6b0">`);
-  for (const cavern of world.caverns) if (cavern.kind === "settlement" || cavern.kind === "ruins" || cavern.r > 22) out.push(`<text x="${r1(cavern.x)}" y="${r1(cavern.y + cavern.r + 10)}"${cavern.kind === "settlement" ? ` font-weight="700"` : ` font-style="italic" fill="${EDGE[cavern.kind]}"`}>${text(cavern.name)}</text>`);
+  for (const cavern of world.caverns) if (cavern.kind === "settlement" || cavern.kind === "ruins" || cavern.kind === "metro" || cavern.kind === "undercity" || cavern.kind === "vault" || cavern.r > 22) out.push(`<text x="${r1(cavern.x)}" y="${r1(cavern.y + cavern.r + 10)}"${cavern.kind === "settlement" ? ` font-weight="700"` : ` font-style="italic" fill="${EDGE[cavern.kind]}"`}>${text(cavern.name)}</text>`);
   out.push(`</g><text x="20" y="34" font-size="20" letter-spacing="3" fill="#d8c79a" font-weight="600">${text(world.name.toUpperCase())}</text></svg>`);
   return out.join("");
 }

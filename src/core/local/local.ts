@@ -1,5 +1,6 @@
 // Local maps on a battle grid: dungeons of rooms and corridors (crypts, temples, mines, sewers, bunkers, derelict
-// ships), caves grown by cellular automata, and wilderness — forest, taiga, swamp, desert, mountain pass, coast —
+// ships, and for later ages factories, metro stations, labs, malls, vaults and starships), caves grown by cellular
+// automata, and wilderness — forest, taiga, swamp, desert, mountain pass, coast, the wasteland after the fall —
 // with streams, trails and camps. Every room or site is keyed for a game master: what it is, who is there, what
 // lies hidden, what will hurt.
 import Delaunator from "delaunator";
@@ -18,17 +19,24 @@ export type LocalTheme =
   | "sewer"
   | "bunker"
   | "derelict"
+  | "factory"
+  | "metro"
+  | "lab"
+  | "mall"
+  | "vault"
+  | "starship"
   | "lair"
   | "forest"
   | "taiga"
   | "swamp"
   | "desert"
   | "mountain"
-  | "coast";
+  | "coast"
+  | "wasteland";
 export const LOCAL_THEMES: Record<LocalKind, LocalTheme[]> = {
-  dungeon: ["crypt", "temple", "mine", "sewer", "bunker", "derelict"],
+  dungeon: ["crypt", "temple", "mine", "sewer", "bunker", "derelict", "factory", "metro", "lab", "mall", "vault", "starship"],
   cave: ["lair", "mine"],
-  wilderness: ["forest", "taiga", "swamp", "desert", "mountain", "coast"],
+  wilderness: ["forest", "taiga", "swamp", "desert", "mountain", "coast", "wasteland"],
 };
 
 /** Tile kinds, by id. */
@@ -130,6 +138,7 @@ const MONSTERS: Record<string, string[]> = {
   scifi: ["drones", "security-bots", "mutants", "cyberpsychos", "gangers", "corp-soldiers", "scavengers"],
   scifiBoss: ["xenomorph", "rogue-ai", "war-mech"],
   wild: ["wolves", "bear", "bandits", "boars", "giant-eagle", "trolls", "harpies"],
+  waste: ["raiders", "mutants", "feral-dogs", "scavengers", "giant-rats"],
 };
 const TREASURE: Record<string, string[]> = { fantasy: ["coins", "gems", "magic-item", "scroll", "potions", "fine-weapon", "relic"], scifi: ["credits", "chip", "cyberware", "prototype-weapon", "data-shard", "medkits"] };
 const TRAPS: Record<string, string[]> = { fantasy: ["pit", "darts", "gas", "falling-block", "glyph", "net"], scifi: ["laser-grid", "mines", "turret", "nerve-gas"] };
@@ -150,15 +159,15 @@ export function localParams(input: Partial<LocalParams> = {}): LocalParams {
   };
 }
 
-const scifiTheme = (theme: LocalTheme) => theme === "bunker" || theme === "derelict";
+const scifiTheme = (theme: LocalTheme) => ["bunker", "derelict", "factory", "metro", "lab", "mall", "vault", "starship"].includes(theme);
 
 function stock(rng: Rng, purpose: Purpose, theme: LocalTheme, danger: number, boss?: string): Pick<Keyed, "monsters" | "treasure" | "trap"> {
   const sf = scifiTheme(theme);
-  const pool = theme === "forest" || theme === "taiga" || theme === "swamp" || theme === "desert" || theme === "mountain" || theme === "coast" ? MONSTERS.wild : sf ? MONSTERS.scifi : MONSTERS.fantasy;
+  const pool = theme === "wasteland" ? MONSTERS.waste : theme === "forest" || theme === "taiga" || theme === "swamp" || theme === "desert" || theme === "mountain" || theme === "coast" ? MONSTERS.wild : sf ? MONSTERS.scifi : MONSTERS.fantasy;
   const final = purpose === "lair" || purpose === "tomb";
   const monsters: string[] = [];
   const crowd = purpose === "barracks" || purpose === "guard-room" || purpose === "camp" || purpose === "nest" ? 1 : 0;
-  if (final) monsters.push(boss ?? rng.pick(sf ? MONSTERS.scifiBoss : pool === MONSTERS.wild ? ["bear", "trolls", "giant-eagle"] : MONSTERS.boss));
+  if (final) monsters.push(boss ?? rng.pick(sf ? MONSTERS.scifiBoss : pool === MONSTERS.waste ? ["war-mech", "mutants", "raiders"] : pool === MONSTERS.wild ? ["bear", "trolls", "giant-eagle"] : MONSTERS.boss));
   else if (rng.chance(0.25 + danger * 0.12 + crowd * 0.4)) monsters.push(rng.pick(pool));
   const rich = purpose === "treasury" || final;
   const treasure = rich || rng.chance(0.2) ? rng.pick(sf ? TREASURE.scifi : TREASURE.fantasy) : null;
@@ -236,7 +245,15 @@ function dungeon(params: LocalParams, rng: Rng, tiles: Uint8Array, keyed: Keyed[
           ? ["workshop", "storage", "barracks", "flooded", "trap-room"]
           : params.theme === "sewer"
             ? ["flooded", "storage", "barracks", "trap-room", "prison"]
-            : ["server-room", "laboratory", "barracks", "storage", "trap-room", "prison"];
+            : params.theme === "factory"
+              ? ["workshop", "storage", "workshop", "flooded", "trap-room", "barracks"]
+              : params.theme === "metro"
+                ? ["camp", "storage", "flooded", "nest", "workshop", "trap-room"]
+                : params.theme === "mall"
+                  ? ["storage", "camp", "nest", "workshop", "barracks", "trap-room"]
+                  : params.theme === "vault"
+                    ? ["barracks", "storage", "workshop", "server-room", "laboratory", "prison"]
+                    : ["server-room", "laboratory", "barracks", "storage", "trap-room", "prison"];
   order.forEach((index, rank) => {
     const b = boxes[index];
     const purpose: Purpose = rank === 0 ? "entrance" : rank === order.length - 1 ? (params.theme === "crypt" ? "tomb" : "lair") : rank === 1 ? "guard-room" : rng.pick(pool);
@@ -260,7 +277,7 @@ function dungeon(params: LocalParams, rng: Rng, tiles: Uint8Array, keyed: Keyed[
   const deepest = boxes[order[order.length - 2] ?? order[0]];
   if (deepest) features.push({ x: deepest.x + deepest.w - 2, y: deepest.y + deepest.h - 2, kind: "stairs-down" });
   // Rubble and scattered rubbish in derelicts and mines.
-  if (params.theme === "derelict" || params.theme === "mine") for (let k = 0; k < W * H * 0.01; k++) {
+  if (params.theme === "derelict" || params.theme === "mine" || params.theme === "metro" || params.theme === "factory" || params.theme === "mall") for (let k = 0; k < W * H * 0.01; k++) {
     const i = rng.int(0, W * H - 1);
     if (tiles[i] === TILE.corridor) tiles[i] = TILE.rubble;
   }
@@ -353,6 +370,7 @@ function wilderness(params: LocalParams, rng: Rng, tiles: Uint8Array, keyed: Key
       else if (theme === "swamp") tile = g > 0.25 ? TILE.water : g > 0 ? TILE.marsh : g > -0.3 ? TILE.forest : TILE.grass;
       else if (theme === "mountain") tile = h > 0.55 ? TILE.snow : h > 0.3 ? TILE.cliff : h > 0.15 ? TILE.stone : g > 0.2 ? TILE.forest : TILE.grass;
       else if (theme === "taiga") tile = g > 0.35 ? TILE.thicket : g > -0.05 ? TILE.forest : g > -0.35 ? TILE.grass : TILE.snow;
+      else if (theme === "wasteland") tile = g > 0.4 ? TILE.rubble : g > 0.1 ? TILE.stone : g > -0.35 ? TILE.sand : TILE.grass;
       else tile = g > 0.38 ? TILE.thicket : g > 0.02 ? TILE.forest : g > -0.45 ? TILE.grass : TILE.stone;
       if (theme === "coast" && h < -0.15) tile = h < -0.3 ? TILE.deep : h < -0.22 ? TILE.water : TILE.sand;
       tiles[at(x, y)] = tile;

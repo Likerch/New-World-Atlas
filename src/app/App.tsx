@@ -99,7 +99,10 @@ export function App() {
     ctx,
     (world, cavern) => {
       go("local", "underworld");
-      local.open({ seed: `${world.seed}/cavern-${cavern}`, kind: "cave", theme: "lair", danger: 3 }, world.caverns[cavern].people ? world.peoples[world.caverns[cavern].people - 1].language : null);
+      // The age's underground opens as built places; the rest as caves.
+      const built: Partial<Record<string, "metro" | "bunker" | "vault">> = { metro: "metro", undercity: "metro", bunker: "bunker", vault: "vault" };
+      const theme = built[world.caverns[cavern].kind];
+      local.open({ seed: `${world.seed}/cavern-${cavern}`, kind: theme ? "dungeon" : "cave", theme: theme ?? "lair", danger: 3 }, world.caverns[cavern].people ? world.peoples[world.caverns[cavern].people - 1].language : null);
     },
     cameFrom.underworld ? () => setView(cameFrom.underworld!) : null,
   );

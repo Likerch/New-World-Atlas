@@ -37,6 +37,7 @@ const WILD: Record<number, string> = {
   [TILE.cliff]: "#8d8577",
   [TILE.water]: "#8cc3e3",
   [TILE.deep]: "#4f8fc4",
+  [TILE.rubble]: "#a39a8a",
 };
 
 const GLYPH: Partial<Record<LocalFeatureKind, string>> = { "stairs-up": "▲", "stairs-down": "▼", chest: "▣", altar: "✝", statue: "♟", trap: "T", terminal: "▤", crate: "☒", bones: "☠", tent: "▲", fire: "✹", pool: "◍" };

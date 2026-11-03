@@ -1,6 +1,6 @@
 // Local-map regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { generateLocal, generatePlanet, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localFromMarker, renderLocal, TILE } from "../src/core/index";
+import { generateUnderworld, renderUnderworld, SETTINGS, generateLocal, generatePlanet, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localFromMarker, renderLocal, TILE } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -69,6 +69,26 @@ test("dungeons and caves lead further down, and a deeper level is a new place", 
     assert.equal(second.params.depth, 2);
     assert.notDeepEqual(Array.from(second.tiles), Array.from(first.tiles));
   }
+});
+
+test("later ages have their own dungeons and wastes, and their underworld has metro lines, bunkers and vaults", () => {
+  for (const theme of ["factory", "metro", "lab", "mall", "vault", "starship"] as const) {
+    const map = generateLocal({ seed: `age-${theme}`, kind: "dungeon", theme });
+    assert.equal(map.params.theme, theme);
+    assert.ok(map.keyed.length > 3);
+    assert.doesNotMatch(renderLocal(map), /NaN|undefined/u);
+  }
+  const waste = generateLocal({ seed: "age-waste", kind: "wilderness", theme: "wasteland" });
+  assert.ok(waste.tiles.some((tile) => tile === TILE.rubble));
+  const modern = generatePlanet({ seed: "age-under", cells: 3000, setting: SETTINGS.modern });
+  const below = generateUnderworld(modern);
+  assert.ok(below.tunnels.some(([, , kind]) => kind === "line") && below.caverns.some((cavern) => cavern.kind === "metro"), "metro lines under the great cities");
+  assert.equal(below.peoples.length, 0, "no peoples of the deep without magic");
+  assert.doesNotMatch(renderUnderworld(below, modern), /NaN|undefined/u);
+  const factory = modern.markers.find((marker) => marker.kind === "factory")!;
+  assert.equal(localFromMarker(modern, factory.id)?.params.theme, "factory");
+  const fallen = generatePlanet({ seed: "age-under", cells: 3000, setting: SETTINGS["post-apocalypse"] });
+  assert.ok(generateUnderworld(fallen).caverns.some((cavern) => cavern.kind === "vault"), "vaults after the fall");
 });
 
 console.log(`local: ${passed} regressions passed`);

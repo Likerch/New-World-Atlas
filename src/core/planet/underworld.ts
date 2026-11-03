@@ -1,15 +1,18 @@
 // The underworld beneath a planet: caverns under the land (most under the mountains), joined by tunnels, rivers in
 // the dark and chasms; underground seas, fungal forests, magma under the volcanoes, crystal grottoes, the ruins of
 // deep cities; peoples of the deep with their own tongues and settlements; and the ways down from the surface —
-// the caves, mines and volcanoes of the planet map.
+// the caves, mines and volcanoes of the planet map. The age adds its own: metro lines under the great cities of the
+// machine ages (an undercity in the far future), bunkers under bases, vaults of survivors after the fall; a world
+// without magic has no peoples of the deep.
 import Delaunator from "delaunator";
 import { paletteColor } from "../color";
 import { createLanguage, name, type Language } from "../language";
 import { createRng } from "../random";
+import { ageOf, settingOf } from "../setting";
 import { SEA_LEVEL, type Planet } from "./model";
 
-export type CavernKind = "cavern" | "fungal" | "sea" | "magma" | "crystal" | "ruins" | "abyss" | "settlement";
-export type TunnelKind = "passage" | "river" | "chasm";
+export type CavernKind = "cavern" | "fungal" | "sea" | "magma" | "crystal" | "ruins" | "abyss" | "settlement" | "metro" | "undercity" | "bunker" | "vault";
+export type TunnelKind = "passage" | "river" | "chasm" | "line";
 
 export interface Cavern {
   id: number;
@@ -87,7 +90,8 @@ export function generateUnderworld(planet: Planet): Underworld {
   // Peoples of the deep: each holds a cluster of caverns round its first settlement.
   const peoples: DeepPeople[] = [];
   const hue = rng.next();
-  const homes = rng.shuffle(caverns.filter((c) => c.kind === "cavern" || c.kind === "fungal" || c.kind === "crystal")).slice(0, rng.int(2, 4));
+  const setting = settingOf(planet.params.setting);
+  const homes = setting.magic >= 1 ? rng.shuffle(caverns.filter((c) => c.kind === "cavern" || c.kind === "fungal" || c.kind === "crystal")).slice(0, rng.int(2, 4)) : [];
   for (const home of homes) {
     const language = createLanguage(rng.fork(`deep-${peoples.length}`));
     const id = peoples.length + 1;
@@ -105,7 +109,45 @@ export function generateUnderworld(planet: Planet): Underworld {
     if (cavern.kind === "settlement") cavern.population = Math.round(rng.float(0.5, 25) * 10) / 10;
     cavern.name = name(tongue, rng, cavern.kind === "settlement" ? "town" : "plain");
   }
-  // Ways down: the planet's caves, mines and volcanoes over the nearest cavern.
+  // The age's underground: stations under the greatest towns joined by lines, bunkers and vaults under their markers.
+  const age = ageOf(setting);
+  const own = rng.fork("age");
+  const stations: { cavern: number; x: number; y: number }[] = [];
+  if (setting.tech >= 6.25) {
+    const future = age === "far-future";
+    const hubs = planet.burgs
+      .slice(1)
+      .filter((burg) => !burg.removed)
+      .sort((a, b) => b.population - a.population)
+      .slice(0, 10);
+    const first = caverns.length;
+    for (const town of hubs) {
+      caverns.push({ id: caverns.length, x: town.x, y: town.y, r: spacing * (future ? 0.34 : 0.2), kind: future ? "undercity" : "metro", name: town.name, people: 0, population: 0 });
+      stations.push({ cavern: caverns.length - 1, x: town.x, y: town.y });
+    }
+    // Lines: a spanning tree over the stations of each landmass.
+    const joined = new Set([first]);
+    while (joined.size < hubs.length) {
+      let best: [number, number, number] | null = null;
+      for (const a of joined)
+        for (let b = first; b < caverns.length; b++) {
+          if (joined.has(b)) continue;
+          const d = Math.hypot(caverns[a].x - caverns[b].x, caverns[a].y - caverns[b].y);
+          if (!best || d < best[2]) best = [a, b, d];
+        }
+      if (!best) break;
+      joined.add(best[1]);
+      if (planet.feature[hubs[best[0] - first].cell] === planet.feature[hubs[best[1] - first].cell]) tunnels.push([best[0], best[1], "line"]);
+    }
+  }
+  for (const marker of planet.markers.slice(1)) {
+    if (marker.kind !== "base" && marker.kind !== "bunker") continue;
+    const vault = marker.kind === "bunker";
+    caverns.push({ id: caverns.length, x: marker.x, y: marker.y, r: spacing * own.float(0.12, 0.2), kind: vault ? "vault" : "bunker", name: marker.name, people: 0, population: vault ? Math.round((Number(marker.facts.dwellers) || 0) / 100) / 10 : 0 });
+    stations.push({ cavern: caverns.length - 1, x: marker.x, y: marker.y });
+  }
+
+  // Ways down: the planet's caves, mines and volcanoes over the nearest cavern; the age's stations, bunkers and vaults.
   const entrances = planet.markers
     .slice(1)
     .filter((m) => m.kind === "cave" || m.kind === "mine" || m.kind === "volcano" || m.kind === "portal")
@@ -114,5 +156,6 @@ export function generateUnderworld(planet: Planet): Underworld {
       return { x: m.x, y: m.y, cavern: cavern?.id ?? 0, marker: m.id };
     })
     .filter((e) => caverns.length > 0);
+  for (const station of stations) entrances.push({ x: station.x, y: station.y, cavern: station.cavern, marker: 0 });
   return { seed, name: name(peoples[0]?.language ?? createLanguage(rng.fork("n")), rng.fork("name"), "land"), width: W, height: H, caverns, tunnels, entrances, peoples };
 }
