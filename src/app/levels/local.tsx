@@ -183,7 +183,7 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null, link
             ⬆ {t("local.up")}
           </button>
         ) : null}
-        {map && links.toUnderworld && map.params.kind === "cave" ? (
+        {map && links.toUnderworld && (map.params.kind === "cave" || map.params.seed.includes("/underworld/cavern-")) ? (
           <button type="button" className="wide" onClick={() => links.toUnderworld!(map) || alert(t("local.noUnderworld"))}>
             🕳 {t("local.toUnderworld")}
           </button>
