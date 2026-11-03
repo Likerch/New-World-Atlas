@@ -68,7 +68,7 @@ export function generateVillage(params: CityParams, language: Language): City {
   let river: City["river"] = null;
   if (params.river !== null) {
     const shift = rng.float(-0.2, 0.2) * Math.min(W, H);
-    const points = road([center[0] + Math.cos(params.river + Math.PI / 2) * shift, center[1] + Math.sin(params.river + Math.PI / 2) * shift], params.river, reach / 2, (t) => fbm(wave, t / 300, 9.1, 3) * m(60)).filter((p, k, all) => k < 2 || !wetSea(all[k - 1]));
+    const points = road([center[0] + Math.cos(params.river + Math.PI / 2) * shift, center[1] + Math.sin(params.river + Math.PI / 2) * shift], params.river, reach / 2, (t) => fbm(wave, t / 300, 9.1, 3) * m(60)).filter((_, k, all) => k < 2 || !wetSea(all[k - 1]));
     river = { points, width: Math.max(4, m(rng.float(8, 18))) };
   }
   const wet = (poly: Point[]) => poly.some((p) => wetSea(p) || (!!river && distanceToPolyline(p, river.points) < river.width / 2 + m(2)));
@@ -104,7 +104,6 @@ export function generateVillage(params: CityParams, language: Language): City {
   const frontage = m(hamlet ? 30 : rng.float(28, 40));
   const setback = m(hamlet ? 22 : 26);
   const homes = hamlet ? rng.int(1, 4) : Math.max(6, Math.min(60, Math.round((params.population * 1000) / 5.5)));
-  const nearRoad = (p: Point) => roads.some((line) => distanceToPolyline(p, line) < setback * 0.6);
   if (hamlet) {
     // A few farmsteads round the yard at the track's end, none on the track itself.
     for (let k = 0, placed = 0; k < homes * 5 && placed < homes; k++) {
