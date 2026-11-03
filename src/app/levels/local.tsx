@@ -2,7 +2,7 @@
 // factions and people, every room's look, dwellers, loot, traps, locks and ways on, the GM's edits and rerolls, a room
 // as a scene, the next sheet of the wilds, and the GM's own rooms, themes and tables.
 import { useMemo, useRef, useState } from "react";
-import { editLocal, feetOf, generateLocal, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localLegend, localParams, localPixels, localScene, localStory, mapKeyOf, renameLocal, renderLocal, renderLocalScene, roomLinks, SCENE_ZOOM, tablesFor, type Language, type LocalChanges, type LocalLink, type LocalMap, type LocalParams, type LocalRoomEdit, type LocalThemeId } from "../../core/index";
+import { editLocal, feetOf, generateLocal, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localLegend, localParams, localPixels, localScene, localStory, mapKeyOf, placeSeed, renameLocal, renderLocal, renderLocalScene, roomLinks, SCENE_ZOOM, tablesFor, type Language, type LocalChanges, type LocalLink, type LocalMap, type LocalParams, type LocalRoomEdit, type LocalThemeId } from "../../core/index";
 import { NumberInput } from "../NumberInput";
 import { FactionList, PeopleList, RumourList, say } from "../People";
 import { bandLine, loadOwn, OwnEditor, purposeName, RoomCard, saveOwn } from "./local-panels";
@@ -52,7 +52,9 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null, link
       const made = generateLocal(params, tongue ?? undefined, own);
       setMap(made);
       setInput(made.params);
-      if (!(params.depth && params.depth > 1)) setAbove([]);
+      // The levels above stay only while this is a deeper level of the same place: "Up" never opens another place.
+      const depth = made.params.depth ?? 1;
+      setAbove((stack) => stack.filter((level) => placeSeed(level.params.seed) === placeSeed(made.params.seed) && (level.params.depth ?? 1) < depth));
       setKeyed(null);
       setScene(null);
       setVersion((v) => v + 1);
@@ -110,10 +112,13 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null, link
     title: map ? nm(map.name) : null,
     seed: input.seed,
     setSeed: (seed) => set("seed", seed),
-    // A new seed is a new place: it starts at its way in, on its first sheet, not where the old one was seen.
+    // A new seed is a new place: it starts at its way in, on its first sheet, not where the old one was seen, and keeps
+    // only the kind of place asked for (as the first level was asked for), never the old place's name, legend or ways.
     generate: (seed) => {
-      const { sheet: _sheet, ...rest } = input;
-      build(localParams(seed && seed !== input.seed ? { ...rest, seed, depth: 1 } : { ...input, seed: seed ?? input.seed }), language);
+      if (!seed || seed === input.seed) return build(localParams({ ...input, seed: seed ?? input.seed }), language);
+      const first = (input.depth ?? 1) > 1 ? above[0]?.params : input;
+      const { kind, theme, own: mine, width, height, age, magic } = input;
+      build(localParams({ seed, kind, theme, own: mine, width, height, age, magic, danger: first?.danger, rooms: first?.rooms }), language);
     },
     ensure: () => {
       if (!map && !pending.current) build(input, language);
@@ -264,7 +269,7 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null, link
         {(["width", "height", "rooms", "danger"] as const).map((key) => (
           <label key={key}>
             {t(`field.l${key}`)}
-            <NumberInput min={key === "danger" ? 1 : key === "rooms" ? 1 : 24} max={key === "danger" ? 3 : key === "rooms" ? 30 : 160} value={input[key]} onChange={(value) => set(key, value)} />
+            <NumberInput min={key === "danger" ? 1 : key === "rooms" ? 1 : 24} max={key === "danger" ? 3 : key === "rooms" ? 30 : 160} step={1} value={input[key]} onChange={(value) => set(key, Math.round(value))} />
           </label>
         ))}
         <label>
