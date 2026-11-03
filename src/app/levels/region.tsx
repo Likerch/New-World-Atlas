@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { eraTheme, generateCountry, generateRegion, settingOf, LAYERS, planetToJson, renamePlanet, renderPlanet, THEMES, type Planet, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { selectedOf } from "./planet";
+import { describePlanet, searchPlanet } from "../planetText";
 import { useLayers } from "./layers";
 import type { Level, LevelContext } from "./types";
 
@@ -40,6 +41,15 @@ export function useRegionLevel(ctx: LevelContext, links: { openCity: (region: Pl
     mapKey,
     params: of,
     selected: selectedOf(region, selection, t, ctx.nm),
+    search: (query) =>
+      region
+        ? searchPlanet(region, query, t, ctx.nm, (next, at) => {
+            setSelection(next);
+            setTab("place");
+            ctx.focus(at[0], at[1]);
+          })
+        : [],
+    describe: () => (region ? describePlanet(region, selection, t, ctx.nm) : ""),
     fixed: true,
     openCountry: (planet, state, style) => {
       styleOf(planet, style);

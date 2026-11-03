@@ -11,6 +11,7 @@
 //   shown in another age opens its houses in that age).
 // When a parent changes, its children are derived afresh on the next visit and their overrides laid back on top.
 import { cleanPatch, type MapPatch } from "./campaign";
+import type { Page } from "./handbook";
 import type { Language } from "./language";
 import { localParams } from "./local/local";
 import { planetParams } from "./planet/generate";
@@ -99,6 +100,8 @@ export interface WorldDoc {
   patches: Record<string, MapPatch>;
   /** The map the game master was on, and the last map of each level. */
   last: { key: string | null; byLevel: Partial<Record<MapLevel, string>> };
+  /** The handbook: a page for each place written about, by `pageKey`. */
+  pages?: Record<string, Page>;
 }
 
 /** A short summary for the list of worlds. */
@@ -276,5 +279,8 @@ export function mergeWorlds(base: WorldDoc, incoming: WorldDoc): WorldDoc {
           ...(old.changes || patch.changes ? { changes: { ...old.changes, ...patch.changes } } : {}),
         };
   }
-  return { ...base, maps: { ...base.maps, ...incoming.maps }, patches, updated: Math.max(base.updated, incoming.updated) };
+  // Pages of both; where both wrote the same page, the later writing.
+  const pages = { ...base.pages };
+  for (const [key, page] of Object.entries(incoming.pages ?? {})) if (!pages[key] || pages[key].updated < page.updated) pages[key] = page;
+  return { ...base, maps: { ...base.maps, ...incoming.maps }, patches, pages, updated: Math.max(base.updated, incoming.updated) };
 }

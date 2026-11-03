@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   GENERATOR,
+  pageKey,
   ageOf,
   buildingFromCity,
   localFromCavern,
@@ -58,6 +59,9 @@ import { MapView, type Focus } from "./MapView";
 import { LEVEL_ICON, WorldLibrary } from "./WorldLibrary";
 import { useWorlds, type Worlds } from "./worlds";
 import { useListKeys } from "./keys";
+import { printAtlas } from "./book";
+import { Handbook } from "./Handbook";
+import { Search } from "./Search";
 import { growPlanet } from "./work";
 
 function download(name: string, blob: Blob) {
@@ -172,6 +176,9 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   // A pin or fog brush in hand is put down when the GM goes to another kind of map.
   useEffect(() => setMode("inspect"), [view]);
   const exportMenu = useRef<HTMLDetailsElement>(null);
+  // The handbook (at a page, or at its index) and the world's search.
+  const [book, setBook] = useState<{ key: string; map: string; entity: string; name: string } | null | "index">(null);
+  const [searching, setSearching] = useState(false);
   const closeExport = () => exportMenu.current?.removeAttribute("open");
   const setLegendOpen = (open: boolean) => {
     setLegendOpenState(open);
@@ -431,7 +438,8 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
       const typing = (event.target as Element | null)?.closest?.("input, textarea, select, [contenteditable]");
       if (typing || !(event.ctrlKey || event.metaKey)) return;
       const key = event.key.toLowerCase();
-      if (key === "z" && !event.shiftKey) worlds.undo();
+      if (key === "k") setSearching(true);
+      else if (key === "z" && !event.shiftKey) worlds.undo();
       else if (key === "y" || (key === "z" && event.shiftKey)) worlds.redo();
       else return;
       event.preventDefault();
@@ -545,6 +553,12 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
           </button>
         )}
         <span className="grow" />
+        <button type="button" className="ghost" onClick={() => setSearching(true)} title={t("search.title")} aria-label={t("search.title")}>
+          🔍
+        </button>
+        <button type="button" className="ghost" onClick={() => setBook("index")} title={t("book.title.book")} aria-label={t("book.title.book")}>
+          📖
+        </button>
         <button type="button" className="ghost" onClick={worlds.undo} disabled={!worlds.canUndo} title={t("action.undo")} aria-label={t("action.undo")}>
           ↶
         </button>
@@ -658,9 +672,54 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
         ) : null}
         {level.status && !players ? <div className="status">{level.status}</div> : null}
         {map && !players ? <Legend t={t} sections={level.legend} open={legendOpen} setOpen={setLegendOpen} /> : null}
-        <GmPanel t={t} store={store} mapKey={level.mapKey} sheetKey={sheetKey} selected={level.selected} mode={mode} setMode={setMode} brush={brush} setBrush={setBrush} players={players} setPlayers={setPlayers} />
+        <GmPanel
+          t={t}
+          store={store}
+          mapKey={level.mapKey}
+          sheetKey={sheetKey}
+          selected={level.selected}
+          onPage={
+            level.mapKey && level.selected
+              ? () => {
+                  const map = (level.worldKey ?? level.mapKey)!;
+                  const entity = level.worldKey && level.worldKey !== level.mapKey ? level.selected!.key === "world" ? "world" : `${level.mapKey}/${level.selected!.key}` : level.selected!.key;
+                  setBook({ key: pageKey(world, map, entity), map, entity, name: level.selected!.label });
+                }
+              : undefined
+          }
+          onCopy={() => {
+            const notes = level.selected ? store.patch(level.mapKey).notes[level.selected.key] : "";
+            navigator.clipboard?.writeText([level.describe?.() ?? `## ${level.selected?.label ?? ""}`, notes].filter(Boolean).join("\n\n"));
+          }} mode={mode} setMode={setMode} brush={brush} setBrush={setBrush} players={players} setPlayers={setPlayers} />
       </main>
       {level.inspector ?? <aside className="inspector" />}
+      {book ? (
+        <Handbook
+          t={t}
+          world={world}
+          players={players}
+          focus={book === "index" ? null : book}
+          onSave={(key, page) => worlds.update((current) => ({ ...current, pages: { ...current.pages, [key]: page }, updated: Date.now() }))}
+          onShow={(page) => {
+            setBook(null);
+            if (world.maps[page.map]) openMap(page.map);
+          }}
+          onBook={() => printAtlas(t, nm, world, levels.filter((item) => item.map && shown.includes(item.id)).map((item) => ({ title: `${t(`view.${item.id}`)}${item.title ? `: ${nm(item.title)}` : ""}`, svg: item.map!.svg })), !players)}
+          onClose={() => setBook(null)}
+        />
+      ) : null}
+      {searching ? (
+        <Search
+          t={t}
+          world={world}
+          here={level.search}
+          onFound={(found) => {
+            if (found.page) setBook({ key: found.page, map: found.map, entity: found.entity, name: found.label });
+            else if (world.maps[found.map]) openMap(found.map);
+          }}
+          onClose={() => setSearching(false)}
+        />
+      ) : null}
       {library ? <WorldLibrary t={t} worlds={worlds} onClose={() => setLibrary(false)} onWorldSetting={setWorldSetting} /> : null}
     </div>
   );

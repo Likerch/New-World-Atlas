@@ -14,6 +14,10 @@ interface Props {
   /** Where pins and fog of the view go; null when the view takes none. */
   sheetKey: string | null;
   selected: { key: string; label: string } | null;
+  /** Opens the handbook page of the selected thing. */
+  onPage?: () => void;
+  /** Copies the selected thing's description. */
+  onCopy?: () => void;
   mode: GmMode;
   setMode: (mode: GmMode) => void;
   brush: number;
@@ -24,7 +28,7 @@ interface Props {
 
 const COLORS = ["#d64545", "#2f7fd0", "#2e9e5b", "#c98a1a", "#8a4fc9", "#1d1d1d"];
 
-export function GmPanel({ t, store, mapKey, sheetKey, selected, mode, setMode, brush, setBrush, players, setPlayers }: Props) {
+export function GmPanel({ t, store, mapKey, sheetKey, selected, onPage, onCopy, mode, setMode, brush, setBrush, players, setPlayers }: Props) {
   const [open, setOpen] = useState(false);
   const file = useRef<HTMLInputElement>(null);
   // Names and notes belong to the map; pins and fog to the sheet on screen.
@@ -87,7 +91,19 @@ export function GmPanel({ t, store, mapKey, sheetKey, selected, mode, setMode, b
 
       {selected ? (
         <div className="gm-block">
-          <h4>{selected.label}</h4>
+          <div className="row-buttons">
+            <h4 className="grow">{selected.label}</h4>
+            {onPage ? (
+              <button type="button" className="ghost" onClick={onPage} title={t("book.page")}>
+                📖
+              </button>
+            ) : null}
+            {onCopy ? (
+              <button type="button" className="ghost" onClick={onCopy} title={t("book.copy")}>
+                📋
+              </button>
+            ) : null}
+          </div>
           <input
             placeholder={t("gm.rename")}
             value={patch.names[selected.key] ?? ""}

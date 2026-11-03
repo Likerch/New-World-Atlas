@@ -6,6 +6,7 @@ import { SettingPanel } from "../SettingPanel";
 import { WorldForm, type ZoomRange } from "../WorldForm";
 import { WorldEditor, type EditTool } from "../WorldEditor";
 import type { T } from "../i18n";
+import { describePlanet, searchPlanet } from "../planetText";
 import { growPlanet } from "../work";
 import { useLayers } from "./layers";
 import type { Level, LevelContext } from "./types";
@@ -225,6 +226,15 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     // Pins and fog are laid on the flat map; the globe shows the world without them, its names and notes still at hand.
     sheetKey: globe ? null : mapKey,
     selected: selectedOf(planet, selection, t, ctx.nm),
+    search: (query) =>
+      planet
+        ? searchPlanet(planet, query, t, ctx.nm, (next, at) => {
+            setSelection(next);
+            setTab("place");
+            ctx.focus(at[0], at[1]);
+          })
+        : [],
+    describe: () => (planet ? describePlanet(planet, selection, t, ctx.nm) : ""),
     theme,
     map: planet
       ? {

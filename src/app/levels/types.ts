@@ -62,4 +62,15 @@ export interface Level {
   sheetKey?: string | null;
   /** The thing selected on it, for renaming and notes; "world" for the map itself. */
   selected: { key: string; label: string } | null;
+  /** The map's own things a word turns up, for the world's search. */
+  search?: (query: string) => Hit[];
+  /** The selected thing (or the map) in Markdown, to copy. */
+  describe?: () => string;
+}
+
+/** A thing of the map on screen that the search found: how to show it, and how to pick it. */
+export interface Hit {
+  label: string;
+  detail: string;
+  select: () => void;
 }

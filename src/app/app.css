@@ -824,3 +824,52 @@ button.back {
   margin: 4px 0;
   font-style: italic;
 }
+
+/* The handbook: the index on the left, a page on the right. */
+.modal.handbook {
+  width: min(1100px, 96vw);
+}
+.handbook-grid {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 16px;
+  min-height: 60vh;
+}
+.handbook-grid textarea {
+  width: 100%;
+  font: inherit;
+}
+.page-text p,
+.page-text li {
+  line-height: 1.5;
+}
+.page-image {
+  max-width: 45%;
+  float: right;
+  margin: 0 0 8px 12px;
+  border-radius: 6px;
+}
+.secret-box {
+  border-left: 3px solid #b5562e;
+  padding-left: 10px;
+  margin-top: 10px;
+}
+.wiki-link {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  text-decoration: underline dotted;
+  cursor: pointer;
+}
+/* The search: one field, the finds beneath. */
+.modal.search-box {
+  width: min(640px, 94vw);
+  align-self: start;
+  margin-top: 10vh;
+}
+@media (max-width: 760px) {
+  .handbook-grid {
+    grid-template-columns: 1fr;
+  }
+}

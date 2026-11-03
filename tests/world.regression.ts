@@ -1,6 +1,6 @@
 // Worlds: the tree of maps, parameters handed down with the GM's overrides on top, names flowing up. Run with `npm test`.
 import assert from "node:assert/strict";
-import { mergeWorlds, mapKeyOf, rekey, planetParams, generateUniverse, renameUniverse, generateUnderworld, renameUnderworld, generateDistrict, buildingFromCity, cityFromBurg, emptyPatch, emptyWorld, generateCity, generatePlanet, levelsOf, nameUp, overridesOf, pathTo, readWorld, resolve, rootOf, settingAt, SETTINGS, visit, type WorldDoc } from "../src/core/index";
+import { emptyPage, handbookMarkdown, markdown, pageKey, searchWorld, mergeWorlds, mapKeyOf, rekey, planetParams, generateUniverse, renameUniverse, generateUnderworld, renameUnderworld, generateDistrict, buildingFromCity, cityFromBurg, emptyPatch, emptyWorld, generateCity, generatePlanet, levelsOf, nameUp, overridesOf, pathTo, readWorld, resolve, rootOf, settingAt, SETTINGS, visit, type WorldDoc } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -151,6 +151,25 @@ test("two copies of one world merge: names and notes of both, pins of both, fog 
   assert.deepEqual(merged.pins.map((pin) => pin.id), ["p1", "p2"]);
   assert.equal(merged.fog.enabled, true);
   assert.equal(merged.fog.revealed.length, 2);
+});
+
+test("a place has one handbook page at every scale; pages are safe Markdown, found by the search", () => {
+  const world = planetWorld();
+  const cityKey = `city:${city.params.seed}`;
+  assert.equal(pageKey(world, cityKey, "world"), `${PLANET}|burg:${burg.id}`, "a city's page is its town's page on the planet");
+  assert.equal(pageKey(world, cityKey, "ward:3"), `${cityKey}|ward:3`);
+  const html = markdown(["# Port", "The **old** quay, see [[Harbour Gate]].", "- <script>alert(1)</script>"].join("\n"));
+  assert.match(html, /<h3>Port<\/h3>/u);
+  assert.match(html, /data-page="Harbour Gate"/u);
+  assert.doesNotMatch(html, /<script>/u, "a page cannot carry markup of its own");
+  const key = pageKey(world, cityKey, "world");
+  const page = { ...emptyPage(PLANET, `burg:${burg.id}`, burg.name), text: "Smugglers meet at the quay.", secret: "The mayor is one of them.", tags: ["port"] };
+  const withPage = { ...world, pages: { [key]: page }, patches: { [PLANET]: { ...emptyPatch(), names: { "burg:9": "Gullhaven" }, notes: { "burg:9": "a lighthouse keeper owes the party" } } } };
+  assert.equal(searchWorld(withPage, "smugglers")[0].page, key);
+  assert.ok(searchWorld(withPage, "gullhaven").some((found) => found.kind === "name"));
+  assert.ok(searchWorld(withPage, "lighthouse").some((found) => found.kind === "note"));
+  assert.doesNotMatch(handbookMarkdown(withPage, false), /mayor/u, "the players' handbook keeps the GM's secrets");
+  assert.match(handbookMarkdown(withPage, true), /mayor/u);
 });
 
 console.log(`world: ${passed} regressions passed`);
