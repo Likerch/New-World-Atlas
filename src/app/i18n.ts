@@ -450,6 +450,7 @@ const TERMS: Record<string, [string, string]> = {
   "edit.pickOnMap": ["Click the map where it should stand.", "Щёлкни по карте, где ему стоять."],
   "edit.addPlace": ["Make it a place", "Сделать местом"],
   "edit.placeKind": ["What place?", "Какое место?"],
+  "edit.putPlace": ["Put a place down here", "Поставить место здесь"],
   "edit.addGate": ["Open a gate", "Прорубить ворота"],
   "edit.removeGate": ["Brick up", "Заложить"],
   "edit.pickWall": ["Click the wall where the gate should be.", "Щёлкни по стене, где быть воротам."],

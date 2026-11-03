@@ -188,8 +188,8 @@ export function CityControls({ params, set, theme, setTheme, layers, setLayers, 
 
 export type CitySelection = { kind: "ward" | "landmark" | "building" | "faction"; id: number | string } | null;
 
-/** What a click on the map does next, when the GM has asked for it: move a place, or open a gate. */
-export type CityPending = { action: "move"; place: number } | { action: "gate" } | null;
+/** What a click on the map does next, when the GM has asked for it: move a place, put a new one down, open a gate. */
+export type CityPending = { action: "move"; place: number } | { action: "add"; kind: string } | { action: "gate" } | null;
 
 const wealthWord = (value: number) => (value > 0.75 ? "rich" : value > 0.5 ? "comfortable" : value > 0.25 ? "modest" : "poor");
 
@@ -385,6 +385,23 @@ export function CityInspector({ city, society, shops, t, nm, players, selection,
                 {t("edit.wealth")}: {t(`wealth.${wealthWord(ward.wealth)}`)}
                 <input type="range" min={0} max={1} step={0.05} value={ward.wealth} onChange={(event) => setWard(ward.id, { wealth: Number(event.target.value) })} />
               </label>
+              <label>
+                {t("edit.putPlace")}
+                <select value={pending?.action === "add" ? pending.kind : ""} onChange={(event) => setPending(event.target.value ? { action: "add", kind: event.target.value } : null)}>
+                  <option value="">—</option>
+                  {PLACE_KINDS.map((kind) => (
+                    <option key={kind} value={kind}>
+                      {t(`landmark.${kind}@${era}`)}
+                    </option>
+                  ))}
+                  {placeKinds.map((kind) => (
+                    <option key={kind.id} value={`custom:${kind.id}`}>
+                      ★ {kind.name || t("custom.unnamed")}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {pending?.action === "add" ? <p className="muted">{t("edit.pickOnMap")}</p> : null}
               <div className="gm-row">
                 <button type="button" onClick={() => setWard(ward.id, { salt: (change?.salt ?? 0) + 1 })}>
                   🎲 {t("edit.reroll")}

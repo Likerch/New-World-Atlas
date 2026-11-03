@@ -30,6 +30,7 @@ import {
   type CityLayerId,
   type CityParams,
   type CityThemeId,
+  type LandmarkKind,
   type Language,
   type LocalLink,
   type Planet,
@@ -185,6 +186,15 @@ export function useCityLevel(
             // A click the GM asked for: where a place moves to, where a gate is opened.
             if (waiting?.action === "move") {
               setEdits((e) => ({ ...e, places: { ...e.places, ...(e.places?.added?.some((a) => a.id === waiting.place) ? { added: e.places!.added!.map((a) => (a.id === waiting.place ? { ...a, x, y } : a)) } : { moved: { ...e.places?.moved, [String(waiting.place)]: [x, y] } }) } }));
+              setWaiting(null);
+              return;
+            }
+            if (waiting?.action === "add") {
+              const own = waiting.kind.startsWith("custom:") ? placeKinds.find((kind) => kind.id === waiting.kind.slice(7)) : undefined;
+              setEdits((e) => {
+                const id = Math.max(city.landmarks.reduce((most, l) => Math.max(most, l.id), 0), ...(e.places?.added ?? []).map((a) => a.id)) + 1;
+                return { ...e, places: { ...e.places, added: [...(e.places?.added ?? []), { id, kind: own ? "custom" : (waiting.kind as LandmarkKind), ...(own ? { custom: own.id, own } : {}), x, y }] } };
+              });
               setWaiting(null);
               return;
             }

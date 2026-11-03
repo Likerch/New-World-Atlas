@@ -169,6 +169,8 @@ export function cityFromBurg(planet: Planet, burgId: number, era: Era = cityEraO
   // What the world gives the town: its roads out, its faith and god, its arms, its land, whether it rules and who camps by it.
   const roads: CityRoad[] = [];
   for (const route of planet.routes ?? []) {
+    // Sea lanes leave from the docks and air routes from the field, not through a gate.
+    if (route.kind === "sea" || route.kind === "air") continue;
     const at = route.cells.indexOf(cell);
     if (at < 0) continue;
     for (const step of [-1, 1]) {
