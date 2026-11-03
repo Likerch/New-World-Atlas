@@ -916,4 +916,66 @@ table.figures td span:not(.bar) {
   height: auto;
   border: 1px solid var(--border);
   border-radius: 6px;
+
+/* Local maps: a room's card, read-aloud words, the GM's room editor, the wilds' next sheets, the deep's lists. */
+.read-aloud {
+  margin: 6px 0;
+  padding: 6px 8px;
+  border-left: 3px solid var(--accent, #c9a227);
+  background: rgba(127, 127, 127, 0.08);
+  font-style: italic;
+}
+.room-card .row-buttons .muted {
+  align-self: center;
+}
+.room-edit {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed rgba(127, 127, 127, 0.4);
+}
+.room-edit textarea,
+.custom-kind textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  resize: vertical;
+}
+.sheet-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+.sheet-arrows {
+  display: flex;
+  gap: 4px;
+}
+.sheet-arrows button {
+  min-width: 30px;
+}
+.purpose-picks {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 8px;
+  max-height: 180px;
+  overflow: auto;
+  font-size: 12px;
+}
+.way-line {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.way-line button:first-child {
+  text-align: left;
+  flex: 1;
+}
+.wandering li {
+  margin: 2px 0;
+}
+.list.deep-peoples li {
+  align-items: flex-start;
 }

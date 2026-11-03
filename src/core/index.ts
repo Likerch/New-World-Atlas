@@ -56,3 +56,7 @@ export * from "./handbook";
 export * from "./planet/nature";
 export * from "./planet/geojson";
 export * from "./planet/countryside";
+export * from "./local/own";
+export * from "./local/describe";
+export * from "./local/edit";
+export * from "./local/scene";
