@@ -1,6 +1,6 @@
 // Galaxy and star-system regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { anomalyDistance, anomalyPoint, bodyCode, buildingOfSite, localOfBelt, systemLegend, cityOfBody, cleanGalaxyEdits, cleanKind, cosmicHooks, editGalaxy, editUniverse, emptyGalaxyEdits, filamentPath, galaxyOfNode, generateUniverse, localFromStar, localOfSite, openingOfAnomaly, powersOf, renameGalaxy, renderUniverse, shapeOf, siteOfStar, skyOf, starLore, surveyGalaxy, systemLore, tradeCodes, GALAXY_SHAPES, generateGalaxy, generateLoneSystem, generatePlanet, generateSystem, planetFromBody, renderGalaxy, renderSystem, type SpaceFeature } from "../src/core/index";
+import { anomalyDistance, anomalyPoint, bodyCode, renderSector, sectorLayout, sectorPick, buildingOfSite, localOfBelt, systemLegend, cityOfBody, cleanGalaxyEdits, cleanKind, cosmicHooks, editGalaxy, editUniverse, emptyGalaxyEdits, filamentPath, galaxyOfNode, generateUniverse, localFromStar, localOfSite, openingOfAnomaly, powersOf, renameGalaxy, renderUniverse, shapeOf, siteOfStar, skyOf, starLore, surveyGalaxy, systemLore, tradeCodes, GALAXY_SHAPES, generateGalaxy, generateLoneSystem, generatePlanet, generateSystem, planetFromBody, renderGalaxy, renderSystem, type SpaceFeature } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -434,6 +434,21 @@ test("a system inside a region of trouble shows it; every world has its code; a 
     if (!belt) continue;
     assert.equal(localOfBelt(lone, belt.id)!.params.theme, "mine");
     return;
+  }
+});
+
+test("a sector map lays each of its stars on a hex of its own, and a click finds the star again", () => {
+  const galaxy = generateGalaxy({ seed: "sectors", stars: 700 });
+  const survey = surveyGalaxy(galaxy);
+  for (const sector of survey.sectors.slice(0, 6)) {
+    const layout = sectorLayout(galaxy, survey, sector.id)!;
+    assert.equal(layout.hexes.length, sector.stars, `${sector.name}: a star lost its hex`);
+    assert.equal(new Set(layout.hexes.map((hex) => `${hex.col},${hex.row}`)).size, layout.hexes.length, "two stars in one hex");
+    for (const hex of layout.hexes) {
+      assert.equal(sectorPick(layout, hex.x + 2, hex.y - 2), hex.star);
+      assert.ok(hex.x > 0 && hex.x < 1600 && hex.y > 0 && hex.y < 1000, "a hex off the sheet");
+    }
+    assert.doesNotMatch(renderSector(galaxy, survey, sector.id, { highlightStar: layout.hexes[0].star }), /NaN|undefined|Infinity/u);
   }
 });
 

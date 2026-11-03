@@ -56,3 +56,4 @@ export * from "./space/edit";
 export * from "./space/links";
 export * from "./space/lore";
 export * from "./space/sky";
+export * from "./render/sector-svg";

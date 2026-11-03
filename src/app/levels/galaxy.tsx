@@ -25,6 +25,11 @@ import {
   openingOf,
   renameGalaxy,
   renderGalaxy,
+  renderSector,
+  SECTOR_SIZE,
+  sectorLayout,
+  sectorLegend,
+  sectorPick,
   siteOfStar,
   SPECTRA,
   starLore,
@@ -86,6 +91,8 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
   const [layers, setLayersState] = useState<GalaxyLayers>(() => loadLayers("atlas.layers.galaxy", LAYER_DEFAULTS));
   const setLayers = (next: GalaxyLayers) => (setLayersState(next), saveLayers("atlas.layers.galaxy", next));
   const [tool, setTool] = useState<Tool | null>(null);
+  // A sector up close, as a hex map, instead of the whole galaxy.
+  const [sectorView, setSectorView] = useState<number | null>(null);
   const [power, setPower] = useState(1);
   const [pending, setPending] = useState<number | null>(null);
   const [history, setHistory] = useState<GalaxyEdits[]>([]);
@@ -104,6 +111,7 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
       setNebula(null);
       setHistory([]);
       setPending(null);
+      setSectorView(null);
       setVersion((v) => v + 1);
     });
   // The world's setting changed: the same galaxy, grown again in it.
@@ -141,6 +149,9 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
   const listed = filtering ? matches : matches.filter((s) => s.capital || s.feature || s.custom || s.independent || s.natives);
   const svg = useMemo(() => (galaxy ? renderGalaxy(galaxy, { script: ctx.script, highlight: empire, highlightZone: zone, highlightStar: star, survey, layers, marked, pending, players: ctx.players }) : ""), [galaxy, ctx.script, empire, zone, star, survey, layers, marked, pending, ctx.players]);
   const legend = useMemo(() => (galaxy ? galaxyLegend(galaxy, survey, layers, ctx.players) : undefined), [galaxy, survey, layers, ctx.players]);
+  const sector = galaxy && survey && sectorView !== null && survey.sectors[sectorView] ? survey.sectors[sectorView] : null;
+  const sectorTitle = (id: number) => (galaxy && survey ? t("sector.name", { name: nm(galaxy.stars[survey.sectors[id].capital].name) }) : "");
+  const sectorMap = useMemo(() => (galaxy && survey && sector ? { svg: renderSector(galaxy, survey, sector.id, { script: ctx.script, highlightStar: star, title: sectorTitle(sector.id), subtitle: `${t(`eform.${galaxy.empires[sector.power].form}`, { name: nm(galaxy.empires[sector.power].name) })} · ${t("sector.stars", { stars: sector.stars })}` }), layout: sectorLayout(galaxy, survey, sector.id) } : null), [galaxy, survey, sector, ctx.script, star, t, nm]); // eslint-disable-line react-hooks/exhaustive-deps
   const zoneName = (z: Zone) => (z.kind === "custom" ? kinds.get(z.custom ?? "")?.name || t("custom.unnamed") : t(`zone.${z.kind}`));
   const selected = galaxy && star !== null ? galaxy.stars[star] : null;
   const empireName = (id: number) => (galaxy && id ? t(`eform.${galaxy.empires[id].form}`, { name: nm(galaxy.empires[id].name) }) : t("space.unclaimed"));
@@ -201,7 +212,7 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
 
   return {
     id: "galaxy",
-    legend,
+    legend: sector && galaxy && survey ? sectorLegend(galaxy, survey, sector.id) : legend,
     icon: "🌌",
     title: galaxy?.name ?? null,
     seed: input.seed,
@@ -216,6 +227,8 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
       ctx.show("galaxy");
     },
     mapKey,
+    // A sector map has pins and fog of its own.
+    sheetKey: mapKey && sector ? `${mapKey}#sector-${sector.id}` : mapKey,
     params: raw ? (raw.params as unknown as Record<string, unknown>) : null,
     restore: (saved) => build(galaxyParams(saved as Partial<GalaxyParams>)),
     selected: !galaxy
@@ -229,7 +242,22 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
             : empire !== null
               ? { key: `empire:${empire}`, label: empireName(empire) }
               : { key: "world", label: nm(galaxy.name) },
-    map: galaxy
+    map:
+      galaxy && sectorMap
+        ? {
+            svg: sectorMap.svg,
+            width: SECTOR_SIZE.width,
+            height: SECTOR_SIZE.height,
+            key: `sector-${version}-${sectorMap && sector ? sector.id : ""}`,
+            onPick: (x, y) => {
+              const id = sectorMap.layout ? sectorPick(sectorMap.layout, x, y) : null;
+              setStar(id);
+              setZone(null);
+              setNebula(null);
+              setEmpire(id !== null ? galaxy.stars[id].empire || null : null);
+            },
+          }
+        : galaxy
       ? {
           svg,
           width: galaxy.params.width,
@@ -267,6 +295,11 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
         {back ? (
           <button type="button" className="back" onClick={back}>
             ← {t("action.backToUniverse")}
+          </button>
+        ) : null}
+        {sector ? (
+          <button type="button" className="back" onClick={() => setSectorView(null)}>
+            ← {t("sector.back")}
           </button>
         ) : null}
         <h2>{t("view.galaxy")}</h2>
@@ -381,7 +414,22 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
                   )
                 }
               />
-              <Row label={t("space.grid")} value={`${gridCell(selected.x, selected.y)}${survey.sectorOf[selected.id] >= 0 ? ` · ${t("sector.name", { name: nm(galaxy.stars[survey.sectors[survey.sectorOf[selected.id]].capital].name) })}` : ""}`} />
+              <Row
+                label={t("space.grid")}
+                value={
+                  <>
+                    {gridCell(selected.x, selected.y)}
+                    {survey.sectorOf[selected.id] >= 0 ? (
+                      <>
+                        {" · "}
+                        <button type="button" className="link" title={t("sector.open")} onClick={() => setSectorView(survey.sectorOf[selected.id])}>
+                          {sectorTitle(survey.sectorOf[selected.id])}
+                        </button>
+                      </>
+                    ) : null}
+                  </>
+                }
+              />
               {selected.natives ? <p className="muted">☘ {t("space.nativesHere")}</p> : null}
               <ProfileCard t={t} profile={world} locale={ctx.locale} />
               {selected.feature ? <Row label={t("space.feature")} value={`${FEATURE_GLYPH[selected.feature]} ${t(`feature2.${selected.feature}`)}`} /> : null}
@@ -526,8 +574,8 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
                     {survey.sectors
                       .filter((sector) => sector.power === empire)
                       .map((sector) => (
-                        <li key={sector.id} onClick={() => pickStar(sector.capital)}>
-                          <span className="grow">{t("sector.name", { name: nm(galaxy.stars[sector.capital].name) })}</span>
+                        <li key={sector.id} onClick={() => setSectorView(sector.id)} title={t("sector.open")}>
+                          <span className="grow">🔍 {t("sector.name", { name: nm(galaxy.stars[sector.capital].name) })}</span>
                           <small>{sector.stars}</small>
                         </li>
                       ))}
@@ -628,7 +676,7 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
                   ))
                 : tab === "sectors"
                   ? survey.sectors.map((sector) => (
-                      <li key={sector.id} onClick={() => pickStar(sector.capital)}>
+                      <li key={sector.id} aria-selected={sectorView === sector.id} title={t("sector.open")} onClick={() => setSectorView(sector.id)}>
                         <span className="swatch" style={{ background: galaxy.empires[sector.power].color }} />
                         <span className="grow">{t("sector.name", { name: nm(galaxy.stars[sector.capital].name) })}</span>
                         <small>{sector.stars}</small>
