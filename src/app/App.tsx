@@ -344,7 +344,11 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
       const above = planet.planet;
       if (!above) return false;
       const seed = made.params.seed.replace(/\/depth-\d+$/u, "");
-      const of = (prefix: string) => (seed.startsWith(prefix) ? Number(seed.slice(prefix.length)) : undefined);
+      // The number after the prefix, and what follows it (a place opened through one of its rooms) left aside.
+      const of = (prefix: string) => {
+        const id = seed.startsWith(prefix) ? Number(/^(\d+)(?:\/|$)/u.exec(seed.slice(prefix.length))?.[1]) : NaN;
+        return Number.isFinite(id) ? id : undefined;
+      };
       const cavern = of(`${above.params.seed}/underworld/cavern-`);
       const marker = of(`${above.params.seed}/marker-`);
       if (cavern === undefined && marker === undefined) return false;
@@ -400,7 +404,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   const underworld = useUnderworldLevel(
     ctx,
     (made, cavern) => {
-      const link = localFromCavern(made, cavern, underworld.of ? ageOf(settingOf(underworld.of.params.setting)) : undefined);
+      const link = localFromCavern(made, cavern, underworld.of ? settingOf(underworld.of.params.setting) : undefined);
       if (link) openLocal(underworld, link, `cavern:${cavern}`);
     },
     back("underworld"),

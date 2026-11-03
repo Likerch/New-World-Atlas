@@ -11,7 +11,7 @@ import { paletteColor } from "../color";
 import { createLanguage, name, type Language } from "../language";
 import { createRng, type Rng } from "../random";
 import { ageOf, settingOf, type EraId } from "../setting";
-import { SEA_LEVEL, type Planet } from "./model";
+import { SEA_LEVEL, type Burg, type Planet } from "./model";
 
 export type CavernKind = "cavern" | "fungal" | "sea" | "magma" | "crystal" | "ruins" | "abyss" | "settlement" | "metro" | "undercity" | "bunker" | "vault" | "catacombs" | "sewers";
 export const CAVERN_KINDS: CavernKind[] = ["cavern", "fungal", "sea", "magma", "crystal", "ruins", "abyss", "settlement", "metro", "undercity", "bunker", "vault", "catacombs", "sewers"];
@@ -116,10 +116,13 @@ export function generateUnderworld(planet: Planet): Underworld {
     const points = caverns.map((c) => [c.x, c.y] as [number, number]);
     const d = Delaunator.from(points);
     const edges: [number, number, number][] = [];
+    // An edge of the hull has a half-edge only one way round; those running the other way are kept apart.
+    const rim: [number, number, number][] = [];
     for (let e = 0; e < d.triangles.length; e++) {
       const a = d.triangles[e],
         b = d.triangles[e % 3 === 2 ? e - 2 : e + 1];
       if (a < b) edges.push([a, b, Math.hypot(points[a][0] - points[b][0], points[a][1] - points[b][1])]);
+      else if (d.halfedges[e] === -1) rim.push([a, b, Math.hypot(points[a][0] - points[b][0], points[a][1] - points[b][1])]);
     }
     edges.sort((p, q) => p[2] - q[2]);
     const parent = caverns.map((_, k) => k);
@@ -129,6 +132,14 @@ export function generateUnderworld(planet: Planet): Underworld {
       if (joined && (length > spacing * 2.2 || !rng.chance(0.25))) continue;
       if (!joined) parent[root(a)] = root(b);
       tunnels.push([a, b, rng.weighted<TunnelKind>([["passage", 8], ["river", 2], ["chasm", 1]])]);
+    }
+    // Those hull edges join only what the others left apart, from a stream of their own: a cavern on the rim is never
+    // cut off, and a world the others already joined keeps its tunnels as they were.
+    const lone = rng.fork("rim");
+    for (const [a, b] of rim.sort((p, q) => p[2] - q[2])) {
+      if (root(a) === root(b)) continue;
+      parent[root(a)] = root(b);
+      tunnels.push([a, b, lone.weighted<TunnelKind>([["passage", 8], ["river", 2], ["chasm", 1]])]);
     }
   }
   // Peoples of the deep: each holds a cluster of caverns round its first settlement.
@@ -154,27 +165,25 @@ export function generateUnderworld(planet: Planet): Underworld {
     cavern.name = name(tongue, rng, cavern.kind === "settlement" ? "town" : "plain");
   }
   // The age's underground: stations under the greatest towns joined by lines, bunkers and vaults under their markers.
+  // A station under a town the GM razed is kept, taken away with its town, so the caverns after it keep their numbers.
   const age = ageOf(setting);
   const own = rng.fork("age");
   const stations: { cavern: number; x: number; y: number }[] = [];
   if (setting.tech >= 6.25) {
     const future = age === "far-future";
-    const hubs = planet.burgs
-      .slice(1)
-      .filter((burg) => !burg.removed)
-      .sort((a, b) => b.population - a.population)
-      .slice(0, 10);
+    const hubs = greatTowns(planet).slice(0, 10);
     const first = caverns.length;
     for (const town of hubs) {
-      caverns.push({ id: caverns.length, x: town.x, y: town.y, r: spacing * (future ? 0.34 : 0.2), kind: future ? "undercity" : "metro", name: town.name, people: 0, population: 0, depth: 0 });
-      stations.push({ cavern: caverns.length - 1, x: town.x, y: town.y });
+      caverns.push({ id: caverns.length, x: town.x, y: town.y, r: spacing * (future ? 0.34 : 0.2), kind: future ? "undercity" : "metro", name: town.name, people: 0, population: 0, depth: 0, burg: town.id, ...(town.removed ? { removed: true } : {}) });
+      if (!town.removed) stations.push({ cavern: caverns.length - 1, x: town.x, y: town.y });
     }
     // Lines: a spanning tree over the stations of each landmass.
-    const joined = new Set([first]);
-    while (joined.size < hubs.length) {
+    const live = stations.map((station) => station.cavern);
+    const joined = new Set(live.slice(0, 1));
+    while (joined.size < live.length) {
       let best: [number, number, number] | null = null;
       for (const a of joined)
-        for (let b = first; b < caverns.length; b++) {
+        for (const b of live) {
           if (joined.has(b)) continue;
           const d = Math.hypot(caverns[a].x - caverns[b].x, caverns[a].y - caverns[b].y);
           if (!best || d < best[2]) best = [a, b, d];
@@ -226,6 +235,18 @@ export function generateUnderworld(planet: Planet): Underworld {
   return world;
 }
 
+/** A town's size as the world grew it, before the GM set another. */
+const sizeOf = (town: Burg) => town.grown ?? town.population;
+
+/** The towns the age's works are dug under, the greatest first: the world's own towns as they grew, razed ones among
+ * them, so a town the GM founds, razes or resizes renumbers no cavern. */
+function greatTowns(planet: Planet): Burg[] {
+  return planet.burgs
+    .slice(1)
+    .filter((town) => !town.founded)
+    .sort((a, b) => sizeOf(b) - sizeOf(a));
+}
+
 /** The kinds of deep peoples: those of a world with magic, and in every age the folk who live in its dark without. */
 const FANTASTIC = ["deep-dwarves", "dark-elves", "myconids", "troglodytes", "fish-folk", "deep-gnomes"];
 const FOLK: Record<EraId, string[]> = {
@@ -263,25 +284,17 @@ function deepen(world: Underworld, planet: Planet, spacing: number) {
   const age = ageOf(setting);
   const natural = () => caverns.filter((c) => !BUILT_KINDS.includes(c.kind));
   const nearest = (list: Cavern[], x: number, y: number) => list.reduce<Cavern | null>((best, c) => (!best || Math.hypot(c.x - x, c.y - y) < Math.hypot(best.x - x, best.y - y) ? c : best), null);
-  // The towns above the metro: its stations are theirs.
-  for (const c of caverns) {
-    if (c.kind !== "metro" && c.kind !== "undercity") continue;
-    const town = planet.burgs.find((b) => b.id && !b.removed && b.x === c.x && b.y === c.y);
-    if (town) c.burg = town.id;
-  }
-  // Before the metro, the great towns have catacombs (old ages) or sewers (from the age of print), dug down to the caves.
+  // Before the metro, the great towns have catacombs (old ages) or sewers (from the age of print), dug down to the caves;
+  // a razed town's are kept, taken away with it, like its station.
   if (setting.tech < 6.25 && age !== "stone" && age !== "post-apocalypse") {
     const own = rng.fork("undercrofts");
     const kind: CavernKind = setting.tech >= 4 ? "sewers" : "catacombs";
-    const towns = planet.burgs
-      .slice(1)
-      .filter((b) => !b.removed && b.population >= 5)
-      .sort((a, b) => b.population - a.population)
-      .slice(0, 8);
+    const towns = greatTowns(planet).filter((town) => sizeOf(town) >= 5).slice(0, 8);
     for (const town of towns) {
       const below = nearest(natural(), town.x, town.y);
-      const node: Cavern = { id: caverns.length, x: town.x, y: town.y, r: spacing * own.float(0.14, 0.2), kind, name: town.name, people: 0, population: 0, burg: town.id, depth: 0 };
+      const node: Cavern = { id: caverns.length, x: town.x, y: town.y, r: spacing * own.float(0.14, 0.2), kind, name: town.name, people: 0, population: 0, burg: town.id, depth: 0, ...(town.removed ? { removed: true } : {}) };
       caverns.push(node);
+      if (town.removed) continue;
       if (below) tunnels.push([below.id, node.id, "passage"]);
       world.entrances.push({ x: town.x, y: town.y, cavern: node.id, marker: 0 });
     }

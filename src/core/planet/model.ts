@@ -127,6 +127,10 @@ export interface Burg {
   origin?: number;
   /** Razed by the GM: kept only so other towns keep their ids. */
   removed?: boolean;
+  /** Founded by the GM: not one of the towns the world grew. */
+  founded?: boolean;
+  /** The size it grew to (thousands), when the GM has set another. */
+  grown?: number;
   /** In a close-up: a village or a hamlet rather than one of the planet's towns. */
   tier?: "village" | "hamlet";
   /** Thousands of people. */

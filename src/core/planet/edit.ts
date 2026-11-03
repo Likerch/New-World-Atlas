@@ -159,6 +159,7 @@ export function editPlanet(planet: Planet, edits: PlanetEdits | null | undefined
       ...guardsOf(planet, population),
       shanty: false,
       kind: people.kind,
+      founded: true,
     };
     burgs.push(town);
     // A town that cannot stand there (water, another town) still takes its id, so later ones keep theirs.
@@ -211,7 +212,10 @@ export function editPlanet(planet: Planet, edits: PlanetEdits | null | undefined
   for (const [key, set] of Object.entries(edits.towns ?? {})) {
     const town = burgs[Number(key)];
     if (!town) continue;
-    if (set.population !== undefined) town.population = Math.max(0.01, set.population);
+    if (set.population !== undefined) {
+      town.grown ??= town.population;
+      town.population = Math.max(0.01, set.population);
+    }
     if (set.walls !== undefined) town.walls = set.walls;
     if (set.port !== undefined) town.port = set.port;
   }

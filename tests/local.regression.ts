@@ -1,6 +1,6 @@
 // Local-map regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { blocked, doorsOf, editLocal, editUnderworld, generateBuilding, localFromCellar, localParams, renderUnderworldSection, tierOf, underworldGhostSvg, generateCity, generateGalaxy, localAt, localFromCavern, localFromLandmark, localFromStar, localScene, localStory, generateUnderworld, reachOf, renderLocal, renderLocalScene, renderUnderworld, SETTINGS, generateLocal, generatePlanet, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localFromMarker, TILE, walk, whoKey, type LocalMap, type LocalTheme } from "../src/core/index";
+import { blocked, doorsOf, editLocal, editPlanet, editUnderworld, emptyEdits, generateBuilding, localFromCellar, localParams, renderUnderworldSection, tierOf, underworldGhostSvg, generateCity, generateGalaxy, localAt, localFromCavern, localFromLandmark, localFromStar, localScene, localStory, generateUnderworld, reachOf, renderLocal, renderLocalScene, renderUnderworld, SETTINGS, generateLocal, generatePlanet, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localFromMarker, TILE, walk, whoKey, type LocalMap, type LocalTheme } from "../src/core/index";
 import { translator } from "../src/app/i18n";
 
 let passed = 0;
@@ -546,6 +546,40 @@ test("review fixes: stairs meet and stay dry, cisterns hold water, pieces stand 
       assert.ok(purposes.includes("engine-room") && purposes.includes("ship-bridge") && purposes.includes("entrance"), `${theme} ${width}: ${purposes.join(",")}`);
       assert.ok(map.features.some((f) => f.kind === "airlock" && f.to === ""), `${theme} ${width}: no way aboard`);
     }
+});
+
+test("review fixes: a cavern's map keeps its world's magic and its tunnels; a removed cavern opens no map", () => {
+  const planet = generatePlanet({ seed: "regression", template: "continents", cells: 6000 });
+  const world = generateUnderworld(planet);
+  const cave = world.caverns.find((c) => c.kind === "cavern")!;
+  assert.equal(localFromCavern(world, cave.id, { ...SETTINGS.medieval, magic: 0 })!.params.magic, 0, "a world without magic");
+  assert.equal(localFromCavern(world, cave.id, SETTINGS.medieval)!.params.age, "medieval");
+  assert.equal(localFromCavern(editUnderworld(world, { caverns: { [cave.id]: { removed: true } } }), cave.id), null, "a removed cavern's map");
+  const modern = generateUnderworld(generatePlanet({ seed: "age-under", cells: 3000, setting: SETTINGS.modern }));
+  for (const w of [world, modern])
+    for (const built of w.caverns.filter((c) => ["metro", "undercity", "bunker", "vault", "ruins", "catacombs", "sewers"].includes(c.kind)).slice(0, 6)) {
+      const link = localFromCavern(w, built.id)!;
+      const map = generateLocal(link.params);
+      const ways = map.features.filter((f) => f.kind === "exit" && f.to && f.to !== "line");
+      assert.equal(ways.length, link.params.exits?.length ?? 0, `${built.kind}: a tunnel lost`);
+      if (ways.length) assert.ok(!map.features.some((f) => f.kind === "exit" && f.to === ""), `${built.kind}: a way in from the surface`);
+      const dist = walk(map, doorsOf(map), startOf(map));
+      for (const way of ways) assert.ok(dist[way.x + way.y * map.params.width] < Infinity, `${built.kind}: a tunnel leads nowhere`);
+    }
+});
+
+test("review fixes: the underworld's caverns keep their numbers when the GM founds, razes or resizes a town", () => {
+  for (const setting of [SETTINGS.modern, SETTINGS.renaissance]) {
+    const planet = generatePlanet({ seed: "uw-edit", cells: 3000, setting });
+    const before = generateUnderworld(planet);
+    const towns = planet.burgs.slice(1).sort((a, b) => b.population - a.population);
+    const razed = towns.find((town) => !town.capital)!;
+    const edited = editPlanet(planet, { ...emptyEdits(), removed: [razed.id], added: [[towns[5].x + 3, towns[5].y + 3, "Newtown", 900]], towns: { [towns[20].id]: { population: 999 }, [towns[2].id]: { population: 0.1 } } });
+    const after = generateUnderworld(edited);
+    assert.deepEqual(after.caverns.map((c) => [c.id, c.kind, c.burg ?? 0]), before.caverns.map((c) => [c.id, c.kind, c.burg ?? 0]), `${setting.era}: caverns renumbered`);
+    const gone = after.caverns.find((c) => c.burg === razed.id);
+    if (gone) assert.ok(gone.removed && !after.tunnels.some(([a, b]) => a === gone.id || b === gone.id) && !after.entrances.some((e) => e.cavern === gone.id), "a razed town's works are taken away with it");
+  }
 });
 
 test("review fixes: legend dwellers in the story read as words; rerolls and cleared words of the GM", () => {
