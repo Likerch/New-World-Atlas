@@ -53,8 +53,8 @@ const ON: Partial<Record<FurnitureKind, ItemKind[]>> = {
   rack: ["weapon"],
   bed: ["cushion", "letter"],
 };
-const FULL = new Set<FurnitureKind>(["shelf", "rack", "wardrobe", "counter", "booth", "forge", "pillar", "screen"]);
-const HALF = new Set<FurnitureKind>(["table", "round-table", "desk", "bench", "pew", "chest", "barrel", "crate", "altar", "sofa", "bed", "bunk", "tub", "anvil", "operating-table", "throne"]);
+const FULL = new Set<FurnitureKind>(["shelf", "rack", "wardrobe", "counter", "booth", "forge", "pillar", "screen", "machine", "locker", "generator"]);
+const HALF = new Set<FurnitureKind>(["table", "round-table", "desk", "bench", "pew", "chest", "barrel", "crate", "altar", "sofa", "bed", "bunk", "tub", "anvil", "operating-table", "throne", "vat"]);
 const LIGHT = new Set<FurnitureKind>(["hearth", "forge", "stove"]);
 
 export function generateRoom(plan: BuildingPlan, floorIndex: number, roomId: number): RoomMap {

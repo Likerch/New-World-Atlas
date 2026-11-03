@@ -137,6 +137,16 @@ export function piece(f: Furniture, th: Theme, px = PX): string {
       return rect("#c9d3da") + `<rect x="${x + w * 0.3}" y="${y + h * 0.25}" width="${w * 0.4}" height="${h * 0.5}" fill="#38c6e8"/>`;
     case "mattress":
       return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#e9e1cc" stroke="${th.line}" stroke-width="0.6" stroke-dasharray="2 1.5"/>`;
+    case "machine":
+      return rect("#8a9099") + circle(th.dark, 0.45) + circle("#c9ced4", 0.18);
+    case "locker":
+      return rect("#a3acb6") + `<path d="M${x + w / 2},${y}V${y + h}" stroke="${th.line}" stroke-width="0.5"/>`;
+    case "pool":
+      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="#9fd4ea" stroke="${th.line}" stroke-width="1"/><rect x="${x + 3}" y="${y + 3}" width="${Math.max(0, w - 6)}" height="${Math.max(0, h - 6)}" rx="2" fill="none" stroke="#ffffff" stroke-width="0.8" opacity="0.7"/>`;
+    case "vat":
+      return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="#cfe7c4" stroke="${th.line}" stroke-width="0.8"/><path d="M${x + w / 2},${y + 3}V${y + h - 3}" stroke="#5c9a4a" stroke-width="${Math.max(1.5, w * 0.35)}" stroke-dasharray="3 2" stroke-linecap="round"/>`;
+    case "generator":
+      return rect("#5f6773") + circle("#f2c94c", 0.42);
   }
 }
 

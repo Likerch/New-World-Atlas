@@ -1,5 +1,5 @@
 // A building on a city map, opened as a floor plan: its footprint from the drawn outline (the smallest rectangle
-// around it), its purpose from the quarter it stands in and any landmark there, its height from the map.
+// around it), its purpose from the quarter it stands in, any landmark there and the city's age, its height from the map.
 import { PROPS, type City } from "../city/model";
 import type { Point } from "../geometry";
 import { pointInPolygon } from "../polygon";
@@ -32,15 +32,15 @@ const BY_LANDMARK: Record<string, BuildingType> = {
   temple: "temple",
   keep: "keep",
   smithy: "smithy",
-  guildhall: "manor",
-  bathhouse: "house",
+  guildhall: "guildhall",
+  bathhouse: "bathhouse",
   docks: "warehouse",
   barracks: "keep",
   "town-hall": "manor",
-  station: "warehouse",
+  station: "station",
   hospital: "clinic",
-  police: "office",
-  factory: "warehouse",
+  police: "police",
+  factory: "factory",
   "corp-hq": "office",
   ripperdoc: "clinic",
   "netrunner-den": "apartment",
@@ -48,19 +48,22 @@ const BY_LANDMARK: Record<string, BuildingType> = {
   "night-market": "shop",
   "gang-hq": "club",
   museum: "manor",
-  university: "office",
+  university: "school",
   "chief-hut": "hut",
   "flint-workshop": "hut",
   theatre: "temple",
   library: "manor",
   gymnasium: "manor",
   agora: "shop",
-  lab: "clinic",
-  "ai-core": "office",
-  "garden-dome": "manor",
-  "barter-market": "shop",
-  "water-still": "warehouse",
-  "raider-fort": "keep",
+  lab: "lab",
+  "ai-core": "lab",
+  "garden-dome": "hydroponics",
+  "launch-pad": "station",
+  "barter-market": "trading-post",
+  "water-still": "factory",
+  "raider-fort": "bunker",
+  "vault-door": "bunker",
+  "radio-tower": "bunker",
   scrapyard: "warehouse",
 };
 
@@ -74,9 +77,27 @@ export function buildingFromCity(city: City, index: number): BuildingParams {
   const ward = city.wards.find((w) => w.id === building.ward);
   const landmark = city.landmarks.find((l) => l.ward === building.ward && pointInPolygon([l.x, l.y], building.polygon));
   const modern = ["modern", "cyberpunk", "industrial", "far-future", "post-apocalypse"].includes(city.params.era);
+  const era = city.params.era;
+  const pick = (k: number) => (index * 2654435761) % k;
   let type: BuildingType = "house";
-  if (building.kind === "hut" || building.kind === "longhouse") type = "hut";
+  if (building.kind === "hut" || building.kind === "longhouse") type = building.kind;
   else if (landmark && BY_LANDMARK[landmark.kind]) type = BY_LANDMARK[landmark.kind];
+  else if (era === "stone") type = "hut";
+  // Each age's own houses: a Roman's atrium house or a tenement block, a worker's tenement, a habitat module, a
+  // survivor's shack.
+  else if (era === "ancient" && building.kind === "house" && ward && ["patriciate", "merchants", "administration"].includes(ward.kind)) type = "domus";
+  else if (era === "ancient" && building.kind === "house" && ward && ["craftsmen", "slum", "suburb"].includes(ward.kind)) type = building.floors >= 2 ? "insula" : pick(3) ? "domus" : "shop";
+  else if (era === "industrial" && building.kind === "house" && ward && ["craftsmen", "slum", "old-town", "residential"].includes(ward.kind)) type = pick(4) ? "tenement" : "shop";
+  else if (era === "industrial" && building.kind === "industrial") type = pick(3) ? "factory" : "warehouse";
+  else if ((era === "modern" || era === "cyberpunk") && building.kind === "industrial") type = pick(2) ? "factory" : "warehouse";
+  else if ((era === "modern" || era === "cyberpunk") && building.kind === "house" && ward && ["commercial", "downtown"].includes(ward.kind)) type = "store";
+  else if (era === "cyberpunk" && building.kind === "tower" && ward && ["megablock", "combat-zone"].includes(ward.kind) && !pick(4)) type = "capsule-hotel";
+  else if (era === "far-future" && (building.kind === "tower" || building.kind === "house")) type = ward?.kind === "campus" ? "lab" : ward && ["commercial", "arcology"].includes(ward.kind) ? (pick(3) ? "office" : "store") : "hab";
+  else if (era === "far-future" && building.kind === "industrial") type = pick(2) ? "hydroponics" : "factory";
+  else if (era === "post-apocalypse" && (building.kind === "house" || building.kind === "ruin")) type = ward?.kind === "settlement" && !pick(5) ? "trading-post" : "shelter";
+  else if (era === "post-apocalypse" && building.kind === "industrial") type = pick(2) ? "smithy" : "warehouse";
+  else if (era === "renaissance" && building.kind === "house" && ward?.kind === "merchants" && !pick(9)) type = "bank";
+  else if (era === "renaissance" && building.kind === "house" && ward?.kind === "administration") type = "guildhall";
   else if (building.kind === "landmark") type = ward?.kind === "temple" || ward?.kind === "cemetery" ? "temple" : ward?.kind === "castle" ? "keep" : "manor";
   else if (building.kind === "tower") type = ward && ["megablock", "residential", "combat-zone"].includes(ward.kind) ? "apartment" : "office";
   else if (building.kind === "industrial") type = "warehouse";

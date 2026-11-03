@@ -1,6 +1,6 @@
 // Building-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { BUILDING_THEMES, BUILDING_TYPES, buildingFromCity, generateBuilding, generateCity, generateRoom, pointInPolygon, renderBuilding, renderRoom } from "../src/core/index";
+import { BUILDING_THEMES, BUILDING_TYPES, buildingAt, buildingFromCity, centroid, ERA_BUILDINGS, generateBuilding, generateCity, generateRoom, pointInPolygon, renderBuilding, renderRoom } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -43,6 +43,26 @@ test("a tavern on a city map opens as a named tavern with guest rooms upstairs",
   assert.equal(params.name, tavern.name);
   const plan = generateBuilding(params);
   assert.ok(plan.floors.some((floor) => floor.rooms.some((room) => room.kind === "guest-room")));
+});
+
+test("every age raises buildings of its own, furnished and drawn, and its city maps open as them", () => {
+  const signature: Partial<Record<string, string>> = { longhouse: "hearth", domus: "pool", bathhouse: "pool", factory: "machine", school: "desk", store: "shelf", "capsule-hotel": "pod", hydroponics: "vat", bunker: "generator", shelter: "mattress" };
+  for (const [era, types] of Object.entries(ERA_BUILDINGS)) {
+    for (const type of types) {
+      const plan = generateBuilding({ seed: `age-${type}`, type, era: era as never });
+      const things = plan.floors.flatMap((floor) => floor.rooms.flatMap((room) => room.furniture.map((f) => f.kind)));
+      if (signature[type]) assert.ok(things.includes(signature[type] as never), `${era}/${type} has no ${signature[type]}`);
+      for (let floor = 0; floor < plan.floors.length; floor++) assert.doesNotMatch(renderBuilding(plan, { floor }), /NaN|undefined|Infinity/u, `${era}/${type}`);
+    }
+  }
+  const opened = (era: "ancient" | "industrial" | "far-future" | "post-apocalypse") => {
+    const city = generateCity({ seed: "ages", era, population: era === "far-future" ? 900 : 20 });
+    return new Set(city.buildings.map((_, index) => index).filter((index) => buildingAt(city, centroid(city.buildings[index].polygon)) === index).slice(0, 400).map((index) => buildingFromCity(city, index).type));
+  };
+  assert.ok(opened("ancient").has("domus") || opened("ancient").has("insula"), "a Roman town has atrium houses or tenements");
+  assert.ok(opened("industrial").has("tenement"), "an industrial city has tenements");
+  assert.ok(opened("far-future").has("hab"), "a city of the far future has habitat modules");
+  assert.ok(opened("post-apocalypse").has("shelter"), "a dead city has shelters");
 });
 
 test("every style draws every floor", () => {

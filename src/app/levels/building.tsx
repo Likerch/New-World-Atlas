@@ -1,6 +1,6 @@
 // The building level: floor plans, floor by floor, with the rooms' furnishings.
 import { useMemo, useRef, useState } from "react";
-import { BUILDING_THEMES, BUILDING_TYPES, buildingFromCity, buildingParams, ERAS, generateBuilding, generateRoom, PX, renderBuilding, renderRoom, ROOM_PX, type BuildingParams, type BuildingPlan, type BuildingThemeId, type City } from "../../core/index";
+import { BUILDING_THEMES, BUILDING_TYPES, ERA_BUILDINGS, buildingFromCity, buildingParams, ERAS, generateBuilding, generateRoom, PX, renderBuilding, renderRoom, ROOM_PX, type BuildingParams, type BuildingPlan, type BuildingThemeId, type City } from "../../core/index";
 import type { Level, LevelContext } from "./types";
 
 export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): Level & { openFromCity: (city: City, index: number) => void } {
@@ -29,10 +29,14 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): 
     });
   };
   const set = <K extends keyof BuildingParams>(key: K, value: BuildingParams[K]) => setInput((current) => ({ ...current, [key]: value }));
-  const svg = useMemo(() => (plan ? renderBuilding(plan, { theme, floor, grid, highlight: room, label: (kind) => t(`room.${kind}`) }) : ""), [plan, theme, floor, grid, room, t]);
+  // Names follow the building's age: a tavern after the fall is a saloon, a temple's nave in antiquity its cella.
+  const era = plan?.params.era ?? input.era;
+  const roomName = (kind: string | undefined) => t(`room.${kind}@${era}`);
+  const typeName = (type: string) => t(`btype.${type}@${era}`);
+  const svg = useMemo(() => (plan ? renderBuilding(plan, { theme, floor, grid, highlight: room, label: (kind) => t(`room.${kind}@${plan.params.era}`) }) : ""), [plan, theme, floor, grid, room, t]);
   const current = plan?.floors[floor];
   const roomMap = useMemo(() => (plan && close !== null ? generateRoom(plan, floor, close) : null), [plan, floor, close]);
-  const roomSvg = useMemo(() => (roomMap ? renderRoom(roomMap, { theme, grid: true, players: ctx.players, label: t(`room.${roomMap.kind}`) }) : ""), [roomMap, theme, ctx.players, t]);
+  const roomSvg = useMemo(() => (roomMap ? renderRoom(roomMap, { theme, grid: true, players: ctx.players, label: roomName(roomMap.kind) }) : ""), [roomMap, theme, ctx.players, t, era]); // eslint-disable-line react-hooks/exhaustive-deps
   const bounds = plan ? plan.yard?.bounds ?? { x: -2, y: -2, w: plan.params.width + 4, h: plan.params.depth + 4 } : null;
   const mapKey = plan ? `building:${plan.params.seed}` : null;
   const names = ctx.names(mapKey);
@@ -41,9 +45,9 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): 
   return {
     id: "building",
     icon: "🏠",
-    title: plan ? names.world || plan.params.name || t(`btype.${plan.params.type}`) : null,
+    title: plan ? names.world || plan.params.name || typeName(plan.params.type) : null,
     mapKey,
-    selected: !plan || !current ? null : room !== null ? { key: `room:${current.level}:${room}`, label: t(`room.${current.rooms.find((r) => r.id === room)?.kind}`) } : { key: "world", label: plan.params.name || t(`btype.${plan.params.type}`) },
+    selected: !plan || !current ? null : room !== null ? { key: `room:${current.level}:${room}`, label: roomName(current.rooms.find((r) => r.id === room)?.kind) } : { key: "world", label: plan.params.name || typeName(plan.params.type) },
     seed: input.seed,
     setSeed: (seed) => set("seed", seed),
     generate: (seed) => build(seed ? { ...input, seed } : input),
@@ -96,16 +100,32 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): 
         <label>
           {t("field.type")}
           <select value={input.type} onChange={(event) => set("type", event.target.value as BuildingParams["type"])}>
-            {BUILDING_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {t(`btype.${type}`)}
-              </option>
-            ))}
+            <optgroup label={t("building.ofAge")}>
+              {ERA_BUILDINGS[input.era].map((type) => (
+                <option key={type} value={type}>
+                  {t(`btype.${type}@${input.era}`)}
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label={t("building.otherAges")}>
+              {BUILDING_TYPES.filter((type) => !ERA_BUILDINGS[input.era].includes(type)).map((type) => (
+                <option key={type} value={type}>
+                  {t(`btype.${type}@${input.era}`)}
+                </option>
+              ))}
+            </optgroup>
           </select>
         </label>
         <label>
           {t("field.era")}
-          <select value={input.era} onChange={(event) => set("era", event.target.value as BuildingParams["era"])}>
+          <select
+            value={input.era}
+            onChange={(event) => {
+              // A new age offers its own buildings; a type it never raised gives way to its first.
+              const next = event.target.value as BuildingParams["era"];
+              setInput((current) => ({ ...current, era: next, type: ERA_BUILDINGS[next].includes(current.type) ? current.type : ERA_BUILDINGS[next][0] }));
+            }}
+          >
             {ERAS.map((era) => (
               <option key={era} value={era}>
                 {t(`era.${era}`)}
@@ -151,7 +171,7 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): 
             for (const f of selected.furniture) counts.set(f.kind, (counts.get(f.kind) ?? 0) + 1);
             return (
               <div className="card">
-                <h3>{t(`room.${selected.kind}`)}</h3>
+                <h3>{roomName(selected.kind)}</h3>
                 <div className="row">
                   <span>{t("stat.size")}</span>
                   <b>
@@ -193,7 +213,7 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): 
               .filter((r) => r.kind !== "stairs")
               .map((r) => (
                 <li key={r.id} aria-selected={r.id === room} onClick={() => setRoom(r.id)}>
-                  <span className="grow">{t(`room.${r.kind}`)}</span>
+                  <span className="grow">{roomName(r.kind)}</span>
                   <small>{(r.w * r.h).toFixed(0)} {t("unit.m")}²</small>
                 </li>
               ))}

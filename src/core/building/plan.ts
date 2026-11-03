@@ -2,13 +2,63 @@
 // the building's purpose — a tavern's common room and guest rooms, a temple's nave, a keep's hall and cells, an
 // office tower's open floors. Doors join every room to the way in, windows open the outer walls, furniture fills the
 // rooms, and a fenced yard surrounds the house. Coordinates are metres. The age furnishes them: furs and a hearth in a
-// stone-age hut, holo-tables and sleep pods in the far future, mattresses and crates after the fall.
+// stone-age hut, holo-tables and sleep pods in the far future, mattresses and crates after the fall. Each age also has
+// buildings of its own: longhouses; a Roman house round its atrium, tenements and baths; guildhalls and banks; mills,
+// stations and schools; capsule hotels; habitat modules, labs and grow halls; shelters, trading posts and bunkers.
 import type { Era } from "../city/model";
 import type { Point } from "../geometry";
 import { createRng, type Rng } from "../random";
 
-export type BuildingType = "house" | "manor" | "tavern" | "shop" | "smithy" | "temple" | "keep" | "warehouse" | "apartment" | "office" | "clinic" | "club" | "hut";
-export const BUILDING_TYPES: BuildingType[] = ["house", "manor", "tavern", "shop", "smithy", "temple", "keep", "warehouse", "apartment", "office", "clinic", "club", "hut"];
+export type BuildingType =
+  | "house"
+  | "manor"
+  | "tavern"
+  | "shop"
+  | "smithy"
+  | "temple"
+  | "keep"
+  | "warehouse"
+  | "apartment"
+  | "office"
+  | "clinic"
+  | "club"
+  | "hut"
+  | "longhouse"
+  | "domus"
+  | "insula"
+  | "bathhouse"
+  | "guildhall"
+  | "bank"
+  | "tenement"
+  | "factory"
+  | "station"
+  | "school"
+  | "police"
+  | "store"
+  | "capsule-hotel"
+  | "hab"
+  | "lab"
+  | "hydroponics"
+  | "shelter"
+  | "trading-post"
+  | "bunker";
+export const BUILDING_TYPES: BuildingType[] = ["house", "manor", "tavern", "shop", "smithy", "temple", "keep", "warehouse", "apartment", "office", "clinic", "club", "hut", "longhouse", "domus", "insula", "bathhouse", "guildhall", "bank", "tenement", "factory", "station", "school", "police", "store", "capsule-hotel", "hab", "lab", "hydroponics", "shelter", "trading-post", "bunker"];
+
+/** The buildings each age raises, its own first. */
+export const ERA_BUILDINGS: Record<Era, BuildingType[]> = {
+  stone: ["hut", "longhouse"],
+  ancient: ["domus", "insula", "temple", "bathhouse", "tavern", "shop", "smithy", "warehouse", "keep"],
+  medieval: ["house", "manor", "tavern", "shop", "smithy", "temple", "keep", "warehouse"],
+  renaissance: ["house", "manor", "guildhall", "bank", "tavern", "shop", "smithy", "temple", "keep", "warehouse"],
+  industrial: ["tenement", "house", "manor", "factory", "station", "bank", "tavern", "shop", "temple", "clinic", "police", "warehouse"],
+  modern: ["house", "apartment", "office", "store", "school", "clinic", "police", "club", "station", "factory", "warehouse", "temple"],
+  cyberpunk: ["apartment", "capsule-hotel", "office", "store", "clinic", "club", "tavern", "police", "factory", "warehouse"],
+  "far-future": ["hab", "lab", "hydroponics", "office", "store", "clinic", "club", "station", "temple"],
+  "post-apocalypse": ["shelter", "trading-post", "bunker", "tavern", "clinic", "smithy", "warehouse", "temple"],
+};
+
+/** The age a building type belongs to when none is asked for. */
+const TYPE_ERA: Partial<Record<BuildingType, Era>> = { apartment: "modern", office: "modern", clinic: "modern", club: "modern", hut: "stone", longhouse: "stone", domus: "ancient", insula: "ancient", bathhouse: "ancient", guildhall: "renaissance", bank: "renaissance", tenement: "industrial", factory: "industrial", station: "industrial", school: "modern", police: "modern", store: "modern", "capsule-hotel": "cyberpunk", hab: "far-future", lab: "far-future", hydroponics: "far-future", shelter: "post-apocalypse", "trading-post": "post-apocalypse", bunker: "post-apocalypse" };
 
 export type RoomKind =
   | "hall"
@@ -42,7 +92,27 @@ export type RoomKind =
   | "bar"
   | "vip"
   | "toilet"
-  | "server-room";
+  | "server-room"
+  // Rooms of other ages' buildings.
+  | "atrium"
+  | "garden"
+  | "classroom"
+  | "gym"
+  | "canteen"
+  | "machine-hall"
+  | "boiler-room"
+  | "vault"
+  | "ticket-hall"
+  | "platform"
+  | "airlock"
+  | "grow-room"
+  | "lab"
+  | "capsules"
+  | "changing-room"
+  | "pool-room"
+  | "furnace"
+  | "generator"
+  | "garage";
 
 export type FurnitureKind =
   | "bed"
@@ -83,7 +153,12 @@ export type FurnitureKind =
   | "holo-table"
   | "pod"
   | "replicator"
-  | "mattress";
+  | "mattress"
+  | "machine"
+  | "locker"
+  | "pool"
+  | "vat"
+  | "generator";
 
 export interface Rect {
   x: number;
@@ -168,6 +243,25 @@ const SIZES: Record<BuildingType, [number, number, number, number]> = {
   clinic: [11, 15, 9, 12],
   club: [18, 26, 13, 18],
   hut: [4, 7, 4, 7],
+  longhouse: [14, 26, 5, 8],
+  domus: [16, 24, 12, 18],
+  insula: [16, 26, 12, 16],
+  bathhouse: [20, 32, 14, 20],
+  guildhall: [16, 24, 10, 14],
+  bank: [14, 22, 12, 16],
+  tenement: [14, 22, 10, 13],
+  factory: [30, 50, 18, 30],
+  station: [30, 46, 12, 18],
+  school: [26, 40, 12, 16],
+  police: [18, 26, 12, 16],
+  store: [20, 34, 16, 24],
+  "capsule-hotel": [14, 20, 10, 13],
+  hab: [10, 16, 8, 12],
+  lab: [18, 28, 12, 18],
+  hydroponics: [20, 34, 10, 16],
+  shelter: [5, 9, 4, 7],
+  "trading-post": [10, 16, 8, 12],
+  bunker: [14, 24, 10, 16],
 };
 
 /** Floor counts each type usually has. */
@@ -185,13 +279,38 @@ export const BUILDING_FLOORS: Record<BuildingType, [number, number]> = {
   clinic: [1, 2],
   club: [1, 2],
   hut: [1, 1],
+  longhouse: [1, 1],
+  domus: [1, 1],
+  insula: [3, 5],
+  bathhouse: [1, 1],
+  guildhall: [2, 3],
+  bank: [2, 3],
+  tenement: [3, 5],
+  factory: [1, 2],
+  station: [1, 2],
+  school: [2, 3],
+  police: [2, 3],
+  store: [1, 1],
+  "capsule-hotel": [3, 6],
+  hab: [1, 2],
+  lab: [1, 3],
+  hydroponics: [1, 2],
+  shelter: [1, 1],
+  "trading-post": [1, 2],
+  bunker: [1, 2],
 };
 
 /** Rooms of each floor: [kind, share of the floor]; "corridor" floors line their rooms along a central hallway. */
 type Program = { rooms: [RoomKind, number][]; corridor?: boolean };
 function program(type: BuildingType, level: number, top: number, rng: Rng, modern: boolean): Program {
   const guests = (count: number, kind: RoomKind = "guest-room"): [RoomKind, number][] => Array.from({ length: count }, () => [kind, 1] as [RoomKind, number]);
-  if (level < 0) return type === "keep" ? { rooms: [...guests(rng.int(4, 6), "cell"), ["storage", 1.5]], corridor: true } : { rooms: [["cellar", 1]] };
+  if (level < 0) {
+    if (type === "keep" || type === "police") return { rooms: [...guests(rng.int(4, 6), "cell"), ["storage", 1.5]], corridor: true };
+    if (type === "bank") return { rooms: [["vault", 0.7], ["storage", 0.3]] };
+    if (type === "bunker") return { rooms: [["generator", 0.3], ["storage", 0.4], ["armory", 0.3]] };
+    if (type === "factory" || type === "station" || type === "school" || type === "office") return { rooms: [["boiler-room", 0.4], ["storage", 0.6]] };
+    return { rooms: [["cellar", 1]] };
+  }
   switch (type) {
     case "house":
       return level === 0 ? { rooms: [[modern ? "living-room" : "hall", 0.45], ["kitchen", 0.3], [modern ? "bath" : "pantry", 0.25]] } : { rooms: [["bedroom", 0.55], ["bedroom", 0.45]] };
@@ -221,6 +340,44 @@ function program(type: BuildingType, level: number, top: number, rng: Rng, moder
       return level === 0 ? { rooms: [["dance-floor", 0.5], ["bar", 0.2], ["vip", 0.15], ["toilet", 0.15]] } : { rooms: [["vip", 0.5], ["office", 0.5]] };
     case "hut":
       return { rooms: [["hall", 1]] };
+    case "longhouse":
+      return { rooms: [["storage", 0.14], ["hall", 0.72], ["storage", 0.14]] };
+    case "domus":
+      return level === 0 ? { rooms: [["atrium", 0.2], ["garden", 0.24], ["shop-floor", 0.12], ["dining", 0.12], ["study", 0.08], ["bedroom", 0.08], ["bedroom", 0.08], ["kitchen", 0.08]] } : { rooms: guests(rng.int(3, 4), "bedroom") };
+    case "insula":
+      return level === 0 ? { rooms: [["shop-floor", 1], ["shop-floor", 1], ["shop-floor", 1], ["storage", 0.6]] } : { rooms: Array.from({ length: rng.int(6, 8) }, (_, k): [RoomKind, number] => [(["bedroom", "living-room", "kitchen"] as RoomKind[])[k % 3], 1]), corridor: true };
+    case "bathhouse":
+      return { rooms: [["changing-room", 0.16], ["pool-room", 0.22], ["pool-room", 0.2], ["pool-room", 0.2], ["furnace", 0.12], ["storage", 0.1]] };
+    case "guildhall":
+      return level === 0 ? { rooms: [["hall", 0.5], ["office", 0.2], ["kitchen", 0.15], ["storage", 0.15]] } : { rooms: [["hall", 0.5], ["study", 0.25], ["office", 0.25]] };
+    case "bank":
+      return level === 0 ? { rooms: [["lobby", 0.45], ["office", 0.2], ["vault", 0.25], ["office", 0.1]] } : { rooms: [...guests(rng.int(3, 5), "office"), ["toilet", 0.6]], corridor: true };
+    case "tenement":
+      return level === 0 ? { rooms: [["shop-floor", 0.35], ["living-room", 0.25], ["kitchen", 0.2], ["toilet", 0.2]] } : { rooms: [...Array.from({ length: rng.int(6, 8) }, (_, k): [RoomKind, number] => [k % 2 ? "kitchen" : "bedroom", 1]), ["toilet", 0.5]], corridor: true };
+    case "factory":
+      return level === 0 ? { rooms: [["machine-hall", 0.62], ["boiler-room", 0.14], ["storage", 0.14], ["office", 0.1]] } : { rooms: [["office", 0.4], ["storage", 0.6]] };
+    case "station":
+      return level === 0 ? { rooms: [["ticket-hall", 0.4], ["platform", 0.4], ["office", 0.1], ["toilet", 0.1]] } : { rooms: [["office", 0.6], ["storage", 0.4]] };
+    case "school":
+      return level === 0 ? { rooms: [["lobby", 0.2], ["canteen", 0.3], ["gym", 0.3], ["office", 0.2]] } : { rooms: [...guests(rng.int(5, 6), "classroom"), ["toilet", 0.6]], corridor: true };
+    case "police":
+      return level === 0 ? { rooms: [["lobby", 0.3], ["office", 0.3], ["armory", 0.16], ["cell", 0.12], ["cell", 0.12]] } : { rooms: [...guests(rng.int(3, 5), "office"), ["toilet", 0.6]], corridor: true };
+    case "store":
+      return { rooms: [["shop-floor", 0.76], ["storage", 0.14], ["office", 0.1]] };
+    case "capsule-hotel":
+      return level === 0 ? { rooms: [["lobby", 0.45], ["bath", 0.2], ["toilet", 0.15], ["storage", 0.2]] } : { rooms: [...guests(4, "capsules"), ["bath", 0.6]], corridor: true };
+    case "hab":
+      return level === 0 ? { rooms: [["airlock", 0.12], ["living-room", 0.3], ["grow-room", 0.16], ["kitchen", 0.14], ["bedroom", 0.28]] } : { rooms: [["bedroom", 0.5], ["lab", 0.5]] };
+    case "lab":
+      return level === 0 ? { rooms: [["lobby", 0.2], ["lab", 0.3], ["lab", 0.3], ["server-room", 0.2]] } : { rooms: [...guests(3, "lab"), ...guests(2, "office")], corridor: true };
+    case "hydroponics":
+      return level === 0 ? { rooms: [["grow-room", 0.76], ["storage", 0.12], ["office", 0.12]] } : { rooms: [["grow-room", 1]] };
+    case "shelter":
+      return { rooms: [["hall", 0.65], ["storage", 0.35]] };
+    case "trading-post":
+      return level === 0 ? { rooms: [["shop-floor", 0.55], ["storage", 0.3], ["bedroom", 0.15]] } : { rooms: [["bedroom", 0.5], ["storage", 0.5]] };
+    case "bunker":
+      return level === 0 ? { rooms: [["barracks", 1], ["armory", 0.6], ["storage", 0.7], ["generator", 0.6], ["kitchen", 0.7]], corridor: true } : { rooms: [["barracks", 0.5], ["office", 0.5]] };
   }
 }
 
@@ -250,7 +407,7 @@ function slice(rect: Rect, rooms: [RoomKind, number][], out: { rect: Rect; kind:
   slice(b, rooms.slice(k), out, along);
 }
 
-const CIRCULATION = new Set<RoomKind>(["corridor", "hall", "common-room", "lobby", "shop-floor", "nave", "stairs", "dance-floor", "living-room", "waiting-room", "workshop", "storage", "cellar", "throne-room"]);
+const CIRCULATION = new Set<RoomKind>(["corridor", "hall", "common-room", "lobby", "shop-floor", "nave", "stairs", "dance-floor", "living-room", "waiting-room", "workshop", "storage", "cellar", "throne-room", "atrium", "garden", "ticket-hall", "platform", "machine-hall", "canteen", "gym", "changing-room", "airlock", "grow-room"]);
 
 /** The wall two rooms share, if they touch along at least a door's width. */
 function sharedWall(a: Rect, b: Rect): { from: Point; to: Point; horizontal: boolean } | null {
@@ -309,6 +466,20 @@ function furnish(room: Room, doors: Door[], type: BuildingType, modern: boolean,
       break;
     case "hall":
     case "living-room":
+      if (type === "longhouse" && room.kind === "hall") {
+        // Hearths down the middle, sleeping places along both long walls.
+        for (let px = x + 2; px + 1.4 <= x + w - 2; px += 4) add("hearth", px, y + h / 2 - 0.6, 1.4, 1.2);
+        for (let px = x + 0.8; px + 1.4 <= x + w - 0.8; px += 1.8) {
+          add("bed", px, y + m, 1.4, 1.6);
+          add("bed", px, y + h - m - 1.6, 1.4, 1.6);
+        }
+        break;
+      }
+      if (type === "shelter" && room.kind === "hall") {
+        add("barrel", x + w / 2 - 0.4, y + h / 2 - 0.4, 0.8, 0.8, true);
+        grid("mattress", 0.9, 1.9, 1.5, 2.6, false, 0.5);
+        break;
+      }
       add(modern ? "sofa" : "hearth", x + w / 2 - 1, y + m, 2, 0.8);
       add(modern ? "sofa" : "bench", x + m, y + h / 2 - 1, 0.8, 2);
       add("table", x + w / 2 - 1, y + h / 2 - 0.6, 2, 1.2);
@@ -334,6 +505,12 @@ function furnish(room: Room, doors: Door[], type: BuildingType, modern: boolean,
       add("rack", x + w - m - 0.5, y + h - m - 2, 0.5, 2);
       break;
     case "shop-floor":
+      if (type === "store") {
+        // Aisles of shelving, the tills by the door.
+        for (let py = y + 1.6; py + 0.6 <= y + h - 2.6; py += 2.2) add("shelf", x + 1.2, py, w - 2.4, 0.6);
+        for (let px = x + 1; px + 1.2 <= x + Math.min(w, 9); px += 2) add("counter", px, y + h - m - 0.8, 1.2, 0.6);
+        break;
+      }
       add("counter", x + m + 1, y + h / 2 - 0.4, Math.min(3, w - 3), 0.8);
       alongTop("shelf", 1.4, 0.5, 1.6);
       break;
@@ -416,6 +593,90 @@ function furnish(room: Room, doors: Door[], type: BuildingType, modern: boolean,
     case "server-room":
       grid("rack", 0.6, 2.2, 1.6, 3, false, 0.8);
       break;
+    case "atrium":
+      // The rain pool under the open roof, columns round it.
+      add("pool", x + w / 2 - w * 0.18, y + h / 2 - h * 0.18, w * 0.36, h * 0.36);
+      for (const [px, py] of [[0.28, 0.28], [0.72, 0.28], [0.28, 0.72], [0.72, 0.72]]) add("pillar", x + w * px - 0.3, y + h * py - 0.3, 0.6, 0.6, true);
+      add("plant", x + m, y + m, 0.7, 0.7, true);
+      add("plant", x + w - m - 0.7, y + m, 0.7, 0.7, true);
+      break;
+    case "garden":
+      for (let px = x + 0.6; px + 0.6 <= x + w - 0.6; px += 2.4) {
+        add("pillar", px, y + 0.6, 0.6, 0.6, true);
+        add("pillar", px, y + h - 1.2, 0.6, 0.6, true);
+      }
+      add("pool", x + w / 2 - 0.9, y + h / 2 - 0.9, 1.8, 1.8);
+      grid("plant", 0.8, 0.8, 2.2, 2.2, true, 2);
+      break;
+    case "classroom":
+      add("screen", x + w / 2 - Math.min(2, w / 4), y + m, Math.min(4, w / 2), 0.3);
+      add("desk", x + w / 2 - 0.7, y + m + 0.8, 1.4, 0.7);
+      grid("desk", 1.2, 0.6, 1.8, 1.5, false, 1.4);
+      break;
+    case "gym":
+      alongTop("rack", 1.6, 0.5, 2.4);
+      grid("mat", 2, 1, 3, 2.4, false, 1.4);
+      break;
+    case "canteen":
+      alongTop("counter", Math.min(w - 2 * m, 6), 0.7, 99);
+      grid("table", 2, 0.8, 3, 2.4, false, 1.6);
+      for (const table of out.filter((f) => f.kind === "table")) {
+        add("bench", table.x, table.y - 0.5, 2, 0.4);
+        add("bench", table.x, table.y + 0.9, 2, 0.4);
+      }
+      break;
+    case "machine-hall":
+      grid("machine", 2.4, 1.6, 4, 3.4, false, 1.2);
+      alongTop("crate", 0.9, 0.9, 1.2);
+      break;
+    case "boiler-room":
+    case "generator":
+      add("generator", x + m, y + m, Math.min(2.4, w - 1), Math.min(1.8, h - 1));
+      if (w > 6) add("generator", x + m + 3, y + m, 2.4, 1.8);
+      grid("barrel", 0.8, 0.8, 1.2, 1.2, true, 1.2);
+      break;
+    case "vault":
+      alongTop("locker", 0.9, 0.5, 1);
+      grid("chest", 1, 0.6, 1.6, 1.3, false, 1.4);
+      break;
+    case "ticket-hall":
+      alongTop("counter", Math.min(w * 0.5, 8), 0.7, 99);
+      grid("bench", 2.4, 0.5, 3.6, 2.2, false, 2);
+      break;
+    case "platform":
+      for (let px = x + 1.5; px + 2.4 <= x + w - 1.5; px += 5) add("bench", px, y + h / 2 - 0.25, 2.4, 0.5);
+      for (let px = x + 3; px < x + w - 2; px += 6) add("pillar", px, y + h - 1.2, 0.6, 0.6, true);
+      break;
+    case "airlock":
+    case "changing-room":
+      alongTop("locker", 0.6, 0.5, 0.7);
+      add("bench", x + m, y + h / 2, w - 2 * m, 0.45);
+      break;
+    case "grow-room":
+      grid("vat", 1.2, 3, 2, 4, false, 1);
+      break;
+    case "lab":
+      alongTop("table", 2.4, 0.8, 2.8);
+      add("table", x + w / 2 - 1.5, y + h / 2 - 0.5, 3, 1);
+      add("screen", x + m, y + h - m - 0.4, 1.4, 0.4);
+      add("shelf", x + w - m - 1.6, y + h - m - 0.5, 1.6, 0.5);
+      break;
+    case "capsules":
+      grid("pod", 1.1, 2.2, 1.35, 2.5, false, 0.4);
+      break;
+    case "pool-room":
+      add("pool", x + 1.2, y + 1.2, w - 2.4, h - 2.4);
+      for (const [px, py] of [[x + 0.3, y + 0.3], [x + w - 0.9, y + 0.3], [x + 0.3, y + h - 0.9], [x + w - 0.9, y + h - 0.9]]) add("pillar", px, py, 0.6, 0.6, true);
+      break;
+    case "furnace":
+      add("forge", x + m, y + m, Math.min(2.4, w - 1), Math.min(1.6, h - 1));
+      grid("log", 1.6, 0.4, 2, 0.8, false, 1.2);
+      break;
+    case "garage":
+      alongTop("table", 2, 0.8, 2.4);
+      add("rack", x + w - m - 0.5, y + h - m - 2, 0.5, 2);
+      grid("crate", 0.9, 0.9, 2.2, 2.2, false, 1.6);
+      break;
     default:
       break;
   }
@@ -431,13 +692,13 @@ export function buildingParams(input: Partial<BuildingParams> = {}): BuildingPar
   return {
     seed,
     type,
-    era: input.era ?? (["apartment", "office", "clinic", "club"].includes(type) ? "modern" : type === "hut" ? "stone" : "medieval"),
+    era: input.era ?? TYPE_ERA[type] ?? "medieval",
     name: "",
     width: Math.round(rng.float(w0, w1)),
     depth: Math.round(rng.float(d0, d1)),
     floors: rng.int(f0, f1),
-    cellar: type !== "temple" && type !== "hut" && rng.chance(0.6),
-    yard: ["house", "manor", "tavern", "smithy", "shop", "clinic", "hut"].includes(type),
+    cellar: !["temple", "hut", "longhouse", "shelter", "bathhouse", "station", "store", "hab", "hydroponics", "domus"].includes(type) && rng.chance(type === "bunker" ? 1 : 0.6),
+    yard: ["house", "manor", "tavern", "smithy", "shop", "clinic", "hut", "longhouse", "shelter", "trading-post"].includes(type),
     ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)),
   };
 }
@@ -504,7 +765,7 @@ export function generateBuilding(input: Partial<BuildingParams> = {}): BuildingP
     }
     if (level === 0) {
       const front = rooms.filter((room) => Math.abs(room.y + room.h - D) < 0.01 && room.kind !== "stairs").sort((a, b) => Number(CIRCULATION.has(b.kind)) - Number(CIRCULATION.has(a.kind)) || b.w - a.w)[0];
-      if (front) doors.push({ at: [front.x + front.w / 2, D], horizontal: true, width: params.type === "temple" || params.type === "keep" || params.type === "warehouse" ? 2.4 : 1.2, rooms: [front.id, -1] });
+      if (front) doors.push({ at: [front.x + front.w / 2, D], horizontal: true, width: ["temple", "keep", "warehouse", "factory", "station", "store", "bathhouse", "hydroponics", "bunker"].includes(params.type) ? 2.4 : 1.2, rooms: [front.id, -1] });
       const kitchen = rooms.find((room) => room.kind === "kitchen" && room.y < 0.01);
       if (kitchen) doors.push({ at: [kitchen.x + kitchen.w / 2, 0], horizontal: true, width: 0.9, rooms: [kitchen.id, -1] });
     }
@@ -513,7 +774,7 @@ export function generateBuilding(input: Partial<BuildingParams> = {}): BuildingP
     const windows: Opening[] = [];
     if (level >= 0) {
       for (const room of rooms) {
-        if (["storage", "cellar", "stairs", "corridor", "server-room", "cell", "pantry", "toilet"].includes(room.kind)) continue;
+        if (["storage", "cellar", "stairs", "corridor", "server-room", "cell", "pantry", "toilet", "vault", "generator", "boiler-room", "furnace", "capsules", "airlock"].includes(room.kind) || params.type === "bunker") continue;
         const sides: [Point, Point, boolean][] = [];
         if (room.y < 0.01) sides.push([[room.x, 0], [room.x + room.w, 0], true]);
         if (Math.abs(room.y + room.h - D) < 0.01) sides.push([[room.x, D], [room.x + room.w, D], true]);
