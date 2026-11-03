@@ -1,17 +1,18 @@
 // The underworld level: the caverns beneath the planet, opened from the planet's settings.
 import { useMemo, useState } from "react";
-import { generateUnderworld, renameUnderworld, renderUnderworld, type Planet, type Underworld, underworldLegend } from "../../core/index";
+import { generateUnderworld, mapKeyOf, renameUnderworld, renderUnderworld, type Planet, type Underworld, underworldLegend } from "../../core/index";
 import type { Level, LevelContext } from "./types";
 
-export function useUnderworldLevel(ctx: LevelContext, openCave: (world: Underworld, cavern: number) => void, back: (() => void) | null): Level & { open: (planet: Planet) => void } {
+export function useUnderworldLevel(ctx: LevelContext, openCave: (world: Underworld, cavern: number) => void, back: (() => void) | null): Level & { open: (planet: Planet) => void; of: Planet | null } {
   const { t, nm } = ctx;
   const [state, setState] = useState<{ world: Underworld; planet: Planet } | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
-  const mapKey = state ? `underworld:${state.world.seed}` : null;
+  // The underworld is its planet's: its key follows the planet's own (its settings' print) and the GM's relief strokes.
+  const mapKey = state ? `underworld:${mapKeyOf("planet", state.planet.params as unknown as Record<string, unknown>).slice("planet:".length)}/underworld${state.planet.relief ? `~${state.planet.relief}` : ""}` : null;
   const names = ctx.names(mapKey);
   const world = useMemo(() => (state ? renameUnderworld(state.world, names) : null), [state, names]);
   const svg = useMemo(() => (state && world ? renderUnderworld(world, state.planet, { script: ctx.script, highlight: picked }) : ""), [state, world, ctx.script, picked]);
-  const legend = useMemo(() => (world ? underworldLegend(world) : undefined), [world]);
+  const legend = useMemo(() => (world && state ? underworldLegend(world, state.planet) : undefined), [world, state]);
   const cavern = world && picked !== null ? world.caverns[picked] : null;
   return {
     id: "underworld",
@@ -22,6 +23,7 @@ export function useUnderworldLevel(ctx: LevelContext, openCave: (world: Underwor
     setSeed: () => undefined,
     generate: () => undefined,
     ensure: () => undefined,
+    of: state?.planet ?? null,
     open: (planet) => {
       ctx.run(() => {
         setState({ world: generateUnderworld(planet), planet });
@@ -92,7 +94,16 @@ export function useUnderworldLevel(ctx: LevelContext, openCave: (world: Underwor
         <h4 className="muted">{t("underworld.peoples")}</h4>
         <ul className="list">
           {world.peoples.map((people) => (
-            <li key={people.id}>
+            <li
+              key={people.id}
+              onClick={() => {
+                // A people is shown by its first settlement.
+                const home = world.caverns.find((c) => c.people === people.id && c.kind === "settlement");
+                if (!home) return;
+                setPicked(home.id);
+                ctx.focus(home.x, home.y);
+              }}
+            >
               <span className="swatch" style={{ background: people.color }} />
               <span className="grow">{nm(people.name)}</span>
               <small>{world.caverns.filter((c) => c.people === people.id && c.kind === "settlement").length}</small>

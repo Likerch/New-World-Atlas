@@ -4,6 +4,9 @@
 import type { City } from "../city/model";
 import type { Language } from "../language";
 import type { Planet } from "../planet/model";
+import type { Underworld } from "../planet/underworld";
+import { hashString } from "../random";
+import { ageOf, settingOf } from "../setting";
 import type { Galaxy } from "../space/galaxy";
 import type { LocalParams } from "./local";
 
@@ -59,19 +62,36 @@ export function localFromMarker(planet: Planet, markerId: number): LocalLink | n
   };
   const params = by[marker.kind];
   const dweller = typeof marker.facts.dweller === "string" ? marker.facts.dweller.replace(/ /gu, "-") : undefined;
-  return params ? { params: { seed, danger, ...params, ...(dweller ? { boss: dweller } : {}) }, language } : null;
+  // The place keeps its name and its world's age; a dweller of the legend waits on its last level, one to three down.
+  const levels = params?.kind === "wilderness" ? 1 : 1 + (hashString(seed) % 3);
+  return params ? { params: { seed, danger, ...params, levels, age: ageOf(settingOf(planet.params.setting)), ...(marker.name ? { name: marker.name } : {}), ...(dweller ? { boss: dweller } : {}) }, language } : null;
 }
 
 export function localFromLandmark(city: City, landmarkId: number): LocalLink | null {
   const landmark = city.landmarks.find((item) => item.id === landmarkId);
   if (!landmark || (landmark.kind !== "undercity" && landmark.kind !== "vault-door")) return null;
-  const future = ["modern", "cyberpunk", "far-future", "post-apocalypse"].includes(city.params.era);
-  return { params: { seed: `${city.params.seed}/landmark-${landmarkId}`, kind: "dungeon", theme: future ? "bunker" : "sewer", danger: 3 }, language: city.language };
+  const era = city.params.era;
+  const future = ["modern", "cyberpunk", "far-future", "post-apocalypse"].includes(era);
+  // A vault's door opens on the vault; the undercity is sewers in old towns, the metro later, a bunker after the fall.
+  const theme = landmark.kind === "vault-door" ? "vault" : !future ? "sewer" : era === "post-apocalypse" ? "bunker" : "metro";
+  return { params: { seed: `${city.params.seed}/landmark-${landmarkId}`, kind: "dungeon", theme, danger: 3, age: era, ...(landmark.name ? { name: landmark.name } : {}) }, language: city.language };
 }
 
 export function localFromStar(galaxy: Galaxy, starId: number): LocalLink | null {
   const star = galaxy.stars[starId];
   const theme = star.feature === "derelict" ? "derelict" : star.feature === "ruins" ? "temple" : star.feature === "station" || star.feature === "pirate-base" || star.feature === "research" || star.feature === "quarantine" ? "bunker" : null;
   if (!theme) return null;
-  return { params: { seed: `${galaxy.params.seed}/star-${starId}/site`, kind: "dungeon", theme, danger: star.feature === "quarantine" ? 3 : 2 }, language: star.empire ? galaxy.empires[star.empire].language : null };
+  // Out among the stars even a ruin is haunted by machines and strange life, not goblins.
+  return { params: { seed: `${galaxy.params.seed}/star-${starId}/site`, kind: "dungeon", theme, danger: star.feature === "quarantine" ? 3 : 2, age: "far-future", name: star.name }, language: star.empire ? galaxy.empires[star.empire].language : null };
+}
+
+/** A cavern of the underworld as a local map: a deep people's hold, a cave of its kind, or the age's built places. */
+export function localFromCavern(world: Underworld, cavernId: number, age?: string): LocalLink | null {
+  const cavern = world.caverns[cavernId];
+  if (!cavern) return null;
+  const built: Partial<Record<string, LocalParams["theme"]>> = { metro: "metro", undercity: "metro", bunker: "bunker", vault: "vault", ruins: "crypt" };
+  const theme = built[cavern.kind] ?? (cavern.kind === "settlement" ? "hold" : cavern.kind === "crystal" ? "mine" : "lair");
+  const danger = cavern.kind === "settlement" ? 1 : ["magma", "abyss", "ruins"].includes(cavern.kind) ? 3 : 2;
+  const language = cavern.people ? world.peoples[cavern.people - 1].language : null;
+  return { params: { seed: `${world.seed}/cavern-${cavernId}`, kind: built[cavern.kind] ? "dungeon" : "cave", theme, danger, name: cavern.name, ...(age ? { age } : {}) }, language };
 }

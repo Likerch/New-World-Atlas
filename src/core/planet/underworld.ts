@@ -142,20 +142,40 @@ export function generateUnderworld(planet: Planet): Underworld {
   }
   for (const marker of planet.markers.slice(1)) {
     if (marker.kind !== "base" && marker.kind !== "bunker") continue;
+    // (Bunkers and vaults are joined to the caves below with the stations, further down.)
     const vault = marker.kind === "bunker";
     caverns.push({ id: caverns.length, x: marker.x, y: marker.y, r: spacing * own.float(0.12, 0.2), kind: vault ? "vault" : "bunker", name: marker.name, people: 0, population: vault ? Math.round((Number(marker.facts.dwellers) || 0) / 100) / 10 : 0 });
     stations.push({ cavern: caverns.length - 1, x: marker.x, y: marker.y });
   }
 
-  // Ways down: the planet's caves, mines and volcanoes over the nearest cavern; the age's stations, bunkers and vaults.
+  // The age's stations, bunkers and vaults are dug down to the nearest natural cave, so the dark is one web.
+  const BUILT: CavernKind[] = ["metro", "undercity", "bunker", "vault"];
+  const landOf = (x: number, y: number) => planet.feature[mesh.find(x, y)];
+  const natural = () => caverns.filter((c) => !BUILT.includes(c.kind));
+  const nearestOf = (list: Cavern[], x: number, y: number) => list.reduce<Cavern | null>((best, c) => (!best || Math.hypot(c.x - x, c.y - y) < Math.hypot(best.x - x, best.y - y) ? c : best), null);
+  for (const station of stations) {
+    const below = nearestOf(natural(), station.x, station.y);
+    if (below) tunnels.push([below.id, station.cavern, "passage"]);
+  }
+  // Ways down: the planet's caves, mines and volcanoes, and portals that open on the underworld, each over a cave of
+  // its own landmass close beneath it; where there is none, a cave is there below it, dug through to the rest.
+  const dug = rng.fork("ways-down");
+  const wildTongue = createLanguage(rng.fork("wild-deep"));
   const entrances = planet.markers
     .slice(1)
-    .filter((m) => m.kind === "cave" || m.kind === "mine" || m.kind === "volcano" || m.kind === "portal")
+    .filter((m) => m.kind === "cave" || m.kind === "mine" || m.kind === "volcano" || (m.kind === "portal" && m.facts.leadsTo === "underworld"))
     .map((m) => {
-      const cavern = caverns.reduce((best, c) => (Math.hypot(c.x - m.x, c.y - m.y) < Math.hypot(best.x - m.x, best.y - m.y) ? c : best), caverns[0]);
-      return { x: m.x, y: m.y, cavern: cavern?.id ?? 0, marker: m.id };
+      const land = landOf(m.x, m.y);
+      let cavern = nearestOf(natural().filter((c) => landOf(c.x, c.y) === land), m.x, m.y);
+      if (!cavern || Math.hypot(cavern.x - m.x, cavern.y - m.y) > spacing * 1.6) {
+        const near = nearestOf(natural(), m.x, m.y);
+        cavern = { id: caverns.length, x: m.x, y: m.y, r: spacing * dug.float(0.15, 0.25), kind: m.kind === "volcano" ? "magma" : "cavern", name: name(wildTongue, dug, "plain"), people: 0, population: 0 };
+        caverns.push(cavern);
+        if (near) tunnels.push([near.id, cavern.id, "passage"]);
+      }
+      return { x: m.x, y: m.y, cavern: cavern.id, marker: m.id };
     })
-    .filter((e) => caverns.length > 0);
+    .filter(() => caverns.length > 0);
   for (const station of stations) entrances.push({ x: station.x, y: station.y, cavern: station.cavern, marker: 0 });
   return { seed, name: name(peoples[0]?.language ?? createLanguage(rng.fork("n")), rng.fork("name"), "land"), width: W, height: H, caverns, tunnels, entrances, peoples };
 }

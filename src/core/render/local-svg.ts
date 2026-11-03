@@ -47,6 +47,8 @@ export interface LocalRenderOptions {
   style?: LocalThemeId;
   grid?: boolean;
   highlight?: number | null;
+  /** The players' view: no secret doors, traps or GM's key numbers. */
+  players?: boolean;
 }
 
 export function localPixels(map: LocalMap): number {
@@ -94,15 +96,22 @@ export function renderLocal(map: LocalMap, options: LocalRenderOptions = {}): st
     out.push(`<path d="${d}" fill="${fill}" stroke="${fill}" stroke-width="0.5"/>`);
   }
   if (!wild && map.params.kind === "dungeon") {
-    // Walls along every edge between open ground and rock.
+    // Walls along every edge between open ground and rock, and between a room and a corridor beside it but for its door.
+    const passage = (t: number) => t === TILE.corridor || t === TILE.rubble;
+    const doors = new Set(map.features.filter((f) => f.kind === "door" || f.kind === "locked-door" || f.kind === "secret-door").map((f) => at(f.x, f.y)));
+    const shut = (x: number, y: number, nx: number, ny: number) => {
+      const t = map.tiles[at(x, y)];
+      const n = map.tiles[at(nx, ny)];
+      return !open(n) || (passage(t) !== passage(n) && !doors.has(at(x, y)) && !doors.has(at(nx, ny)));
+    };
     let d = "";
     for (let y = 0; y < H; y++)
       for (let x = 0; x < W; x++) {
         if (!open(map.tiles[at(x, y)])) continue;
-        if (y === 0 || !open(map.tiles[at(x, y - 1)])) d += `M${x * S},${y * S}h${S}`;
-        if (y === H - 1 || !open(map.tiles[at(x, y + 1)])) d += `M${x * S},${(y + 1) * S}h${S}`;
-        if (x === 0 || !open(map.tiles[at(x - 1, y)])) d += `M${x * S},${y * S}v${S}`;
-        if (x === W - 1 || !open(map.tiles[at(x + 1, y)])) d += `M${(x + 1) * S},${y * S}v${S}`;
+        if (y === 0 || shut(x, y, x, y - 1)) d += `M${x * S},${y * S}h${S}`;
+        if (y === H - 1 || shut(x, y, x, y + 1)) d += `M${x * S},${(y + 1) * S}h${S}`;
+        if (x === 0 || shut(x, y, x - 1, y)) d += `M${x * S},${y * S}v${S}`;
+        if (x === W - 1 || shut(x, y, x + 1, y)) d += `M${(x + 1) * S},${y * S}v${S}`;
       }
     out.push(`<path d="${d}" stroke="${st.wall}" stroke-width="3" stroke-linecap="square"/>`);
   }
@@ -110,21 +119,26 @@ export function renderLocal(map: LocalMap, options: LocalRenderOptions = {}): st
     if (map.stream.length > 1) out.push(`<path d="${pathData(smooth(map.stream.map(([x, y]): Point => [(x + 0.5) * S, (y + 0.5) * S]), false, 2), false)}" fill="none" stroke="${WILD[TILE.deep]}" stroke-width="${S * 0.7}" stroke-linecap="round"/>`);
     if (map.trail.length > 1) out.push(`<path d="${pathData(smooth(map.trail.map(([x, y]): Point => [(x + 0.5) * S, (y + 0.5) * S]), false, 2), false)}" fill="none" stroke="#8a6a3a" stroke-width="${S * 0.35}" stroke-dasharray="${S * 0.6} ${S * 0.4}"/>`);
   }
-  if (options.grid !== false && !wild) {
+  if (options.grid !== false) {
     let g = "";
     for (let x = 0; x <= W; x++) g += `M${x * S},0V${H * S}`;
     for (let y = 0; y <= H; y++) g += `M0,${y * S}H${W * S}`;
-    out.push(`<path d="${g}" stroke="${st.grid}" stroke-width="1"/>`);
+    out.push(`<path d="${g}" stroke="${wild ? "rgba(60,50,30,0.16)" : st.grid}" stroke-width="1"/>`);
   }
   if (options.highlight !== null && options.highlight !== undefined) {
     const keyed = map.keyed.find((k) => k.id === options.highlight);
     if (keyed) out.push(`<path d="${keyed.cells.map((c) => `M${(c % W) * S},${Math.floor(c / W) * S}h${S}v${S}h${-S}Z`).join("")}" fill="#ffd34d" fill-opacity="0.3"/>`);
   }
 
-  // Features.
+  // Features; the players see no traps, and a secret door is only wall to them.
   for (const f of map.features) {
     const cx = (f.x + 0.5) * S,
       cy = (f.y + 0.5) * S;
+    if (options.players && f.kind === "trap") continue;
+    if (options.players && f.kind === "secret-door") {
+      out.push(`<rect x="${f.x * S}" y="${f.y * S}" width="${S}" height="${S}" fill="${st.rock}"/>`);
+      continue;
+    }
     if (f.kind === "tree") out.push(`<circle cx="${cx}" cy="${cy}" r="${S * 0.6}" fill="#4f7d3a" stroke="#2f4f22" stroke-width="1"/>`);
     else if (f.kind === "rock") out.push(`<path d="M${cx - S * 0.45},${cy + S * 0.35}L${cx - S * 0.2},${cy - S * 0.4}L${cx + S * 0.4},${cy - S * 0.2}L${cx + S * 0.45},${cy + S * 0.4}Z" fill="#9a9284" stroke="#5e584d" stroke-width="1"/>`);
     else if (f.kind === "pillar" || f.kind === "stalagmite") out.push(`<circle cx="${cx}" cy="${cy}" r="${S * 0.32}" fill="${wild ? "#bdb6a6" : st.wall}"/>`);
@@ -141,10 +155,13 @@ export function renderLocal(map: LocalMap, options: LocalRenderOptions = {}): st
       out.push(`<text x="${cx}" y="${cy + S * 0.3}" text-anchor="middle" font-size="${S * 0.85}" fill="${f.kind === "fire" ? "#e0602a" : f.kind === "pool" ? st.deep : wild ? "#3a2c1c" : st.ink}" font-family="'Segoe UI Symbol', sans-serif">${glyph}</text>`);
     }
   }
-  // Keys.
-  for (const k of map.keyed) {
-    const cx = k.x * S + (map.params.kind === "dungeon" ? 0 : S / 2),
-      cy = k.y * S + (map.params.kind === "dungeon" ? 0 : S / 2);
+  // Keys, for the GM: each on a free tile of its room nearest the middle, never over the room's altar or chest.
+  const busy = new Set(map.features.map((f) => at(f.x, f.y)));
+  for (const k of options.players ? [] : map.keyed) {
+    const free = k.cells.filter((c) => !busy.has(c) && open(map.tiles[c]));
+    const c = free.length ? free.reduce((best, c2) => (Math.hypot((c2 % W) + 0.5 - k.x, Math.floor(c2 / W) + 0.5 - k.y) < Math.hypot((best % W) + 0.5 - k.x, Math.floor(best / W) + 0.5 - k.y) ? c2 : best)) : -1;
+    const cx = c >= 0 ? ((c % W) + 0.5) * S : k.x * S + (map.params.kind === "dungeon" ? 0 : S / 2),
+      cy = c >= 0 ? (Math.floor(c / W) + 0.5) * S : k.y * S + (map.params.kind === "dungeon" ? 0 : S / 2);
     out.push(`<circle cx="${cx}" cy="${cy}" r="${S * 0.55}" fill="${st.key}" stroke="#fff" stroke-width="1.5"/><text x="${cx}" y="${cy + S * 0.22}" text-anchor="middle" font-size="${S * 0.6}" font-weight="700" fill="${st.keyText}">${k.id}</text>`);
   }
   // Scale: ten squares (or tiles) with their length.

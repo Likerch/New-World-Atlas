@@ -26,6 +26,7 @@ export type LocalTheme =
   | "vault"
   | "starship"
   | "lair"
+  | "hold"
   | "forest"
   | "taiga"
   | "swamp"
@@ -35,7 +36,7 @@ export type LocalTheme =
   | "wasteland";
 export const LOCAL_THEMES: Record<LocalKind, LocalTheme[]> = {
   dungeon: ["crypt", "temple", "mine", "sewer", "bunker", "derelict", "factory", "metro", "lab", "mall", "vault", "starship"],
-  cave: ["lair", "mine"],
+  cave: ["lair", "mine", "hold"],
   wilderness: ["forest", "taiga", "swamp", "desert", "mountain", "coast", "wasteland"],
 };
 
@@ -117,6 +118,12 @@ export interface LocalParams {
   boss?: string;
   /** Which level down this is; 1 is the way in from the surface. */
   depth?: number;
+  /** How many levels the place goes down; whoever rules it waits on the last. */
+  levels?: number;
+  /** The place's own name, when the map it was opened from gives it one. */
+  name?: string;
+  /** The age of the world it lies in: what lurks there follows it (no goblins in a precursor ruin). */
+  age?: string;
 }
 
 export interface LocalMap {
@@ -139,6 +146,7 @@ const MONSTERS: Record<string, string[]> = {
   scifiBoss: ["xenomorph", "rogue-ai", "war-mech"],
   wild: ["wolves", "bear", "bandits", "boars", "giant-eagle", "trolls", "harpies"],
   waste: ["raiders", "mutants", "feral-dogs", "scavengers", "giant-rats"],
+  hold: ["deep-folk"],
 };
 const TREASURE: Record<string, string[]> = { fantasy: ["coins", "gems", "magic-item", "scroll", "potions", "fine-weapon", "relic"], scifi: ["credits", "chip", "cyberware", "prototype-weapon", "data-shard", "medkits"] };
 const TRAPS: Record<string, string[]> = { fantasy: ["pit", "darts", "gas", "falling-block", "glyph", "net"], scifi: ["laser-grid", "mines", "turret", "nerve-gas"] };
@@ -155,19 +163,49 @@ export function localParams(input: Partial<LocalParams> = {}): LocalParams {
     height: kind === "wilderness" ? 64 : 44,
     rooms: kind === "dungeon" ? rng.int(9, 16) : 2,
     danger: 2,
+    levels: kind === "wilderness" ? 1 : rng.int(1, 3),
     ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined && value !== "")),
   };
 }
 
 const scifiTheme = (theme: LocalTheme) => ["bunker", "derelict", "factory", "metro", "lab", "mall", "vault", "starship"].includes(theme);
 
-function stock(rng: Rng, purpose: Purpose, theme: LocalTheme, danger: number, boss?: string): Pick<Keyed, "monsters" | "treasure" | "trap"> {
-  const sf = scifiTheme(theme);
-  const pool = theme === "wasteland" ? MONSTERS.waste : theme === "forest" || theme === "taiga" || theme === "swamp" || theme === "desert" || theme === "mountain" || theme === "coast" ? MONSTERS.wild : sf ? MONSTERS.scifi : MONSTERS.fantasy;
+/** What lurks in a place: its theme's sort, in its world's age (beasts in the stone age, raiders after the fall,
+ * machines and gangs in the ages of screens). */
+function poolsOf(params: LocalParams): { pool: string[]; lords: string[]; sf: boolean } {
+  const { theme, age } = params;
+  const sf = scifiTheme(theme) || age === "modern" || age === "cyberpunk" || age === "far-future";
+  if (theme === "hold") return { pool: MONSTERS.hold, lords: MONSTERS.hold, sf };
+  if (theme === "wasteland" || age === "post-apocalypse") return { pool: MONSTERS.waste, lords: ["war-mech", "mutants", "raiders"], sf };
+  if (theme === "forest" || theme === "taiga" || theme === "swamp" || theme === "desert" || theme === "mountain" || theme === "coast" || age === "stone") return { pool: MONSTERS.wild, lords: ["bear", "trolls", "giant-eagle"], sf };
+  return sf ? { pool: MONSTERS.scifi, lords: MONSTERS.scifiBoss, sf } : { pool: MONSTERS.fantasy, lords: MONSTERS.boss, sf };
+}
+
+/** Steps from a tile to every other over open ground (Infinity where none lead). */
+function walkFrom(tiles: Uint8Array, W: number, start: number): Float64Array {
+  const dist = new Float64Array(tiles.length).fill(Infinity);
+  dist[start] = 0;
+  const queue = [start];
+  for (let k = 0; k < queue.length; k++) {
+    const c = queue[k];
+    const x = c % W;
+    for (const n of [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, c - W, c + W]) {
+      if (n < 0 || n >= tiles.length || tiles[n] === TILE.rock || dist[n] !== Infinity) continue;
+      dist[n] = dist[c] + 1;
+      queue.push(n);
+    }
+  }
+  return dist;
+}
+
+/** `lord` is whoever rules the place, on its last level only; above it the lair holds the strongest of the common sort. */
+function stock(rng: Rng, purpose: Purpose, params: LocalParams, lord: string | null): Pick<Keyed, "monsters" | "treasure" | "trap"> {
+  const { danger } = params;
+  const { pool, sf } = poolsOf(params);
   const final = purpose === "lair" || purpose === "tomb";
   const monsters: string[] = [];
   const crowd = purpose === "barracks" || purpose === "guard-room" || purpose === "camp" || purpose === "nest" ? 1 : 0;
-  if (final) monsters.push(boss ?? rng.pick(sf ? MONSTERS.scifiBoss : pool === MONSTERS.waste ? ["war-mech", "mutants", "raiders"] : pool === MONSTERS.wild ? ["bear", "trolls", "giant-eagle"] : MONSTERS.boss));
+  if (final) monsters.push(lord ?? rng.pick(pool));
   else if (rng.chance(0.25 + danger * 0.12 + crowd * 0.4)) monsters.push(rng.pick(pool));
   const rich = purpose === "treasury" || final;
   const treasure = rich || rng.chance(0.2) ? rng.pick(sf ? TREASURE.scifi : TREASURE.fantasy) : null;
@@ -175,7 +213,7 @@ function stock(rng: Rng, purpose: Purpose, theme: LocalTheme, danger: number, bo
   return { monsters, treasure, trap };
 }
 
-function dungeon(params: LocalParams, rng: Rng, tiles: Uint8Array, keyed: Keyed[], features: LocalFeature[]) {
+function dungeon(params: LocalParams, rng: Rng, tiles: Uint8Array, keyed: Keyed[], features: LocalFeature[], lord: string | null) {
   const { width: W, height: H } = params;
   const at = (x: number, y: number) => x + y * W;
   type Box = { x: number; y: number; w: number; h: number };
@@ -219,23 +257,55 @@ function dungeon(params: LocalParams, rng: Rng, tiles: Uint8Array, keyed: Keyed[
       for (let x = Math.min(ax, bx); x <= Math.max(ax, bx); x++) carve(x, by);
     }
   }
-  // Doors where a corridor meets a room's edge.
+  // Doors where a corridor meets a room's edge: one for each run of corridor along a side, so a corridor running beside
+  // a room is walled off from it but for that door.
+  const doorKind = (): LocalFeatureKind => {
+    const roll = rng.next();
+    return roll < 0.08 ? "secret-door" : roll < 0.2 ? "locked-door" : "door";
+  };
   for (const b of boxes) {
-    for (let x = b.x; x < b.x + b.w; x++)
-      for (const y of [b.y - 1, b.y + b.h]) {
-        if (tiles[at(x, y)] !== TILE.corridor) continue;
-        const roll = rng.next();
-        features.push({ x, y, kind: roll < 0.08 ? "secret-door" : roll < 0.2 ? "locked-door" : "door" });
+    const sides: [number, number][][] = [
+      Array.from({ length: b.w }, (_, k): [number, number] => [b.x + k, b.y - 1]),
+      Array.from({ length: b.w }, (_, k): [number, number] => [b.x + k, b.y + b.h]),
+      Array.from({ length: b.h }, (_, k): [number, number] => [b.x - 1, b.y + k]),
+      Array.from({ length: b.h }, (_, k): [number, number] => [b.x + b.w, b.y + k]),
+    ];
+    for (const side of sides) {
+      let run: [number, number][] = [];
+      const close = () => {
+        if (run.length) {
+          const [x, y] = run[Math.floor(run.length / 2)];
+          features.push({ x, y, kind: doorKind() });
+        }
+        run = [];
+      };
+      for (const [x, y] of side) {
+        if (tiles[at(x, y)] === TILE.corridor) run.push([x, y]);
+        else close();
       }
-    for (let y = b.y; y < b.y + b.h; y++)
-      for (const x of [b.x - 1, b.x + b.w]) {
-        if (tiles[at(x, y)] !== TILE.corridor) continue;
-        const roll = rng.next();
-        features.push({ x, y, kind: roll < 0.08 ? "secret-door" : roll < 0.2 ? "locked-door" : "door" });
-      }
+      close();
+    }
   }
-  // Purposes: the entrance nearest the map's edge, the lair farthest from it, the rest by theme.
-  const order = boxes.map((_, k) => k).sort((a, b) => Math.min(centers[a][0], W - centers[a][0], centers[a][1], H - centers[a][1]) - Math.min(centers[b][0], W - centers[b][0], centers[b][1], H - centers[b][1]));
+  if (!boxes.length) return;
+  // Purposes: the way in is the room nearest the map's edge; the rest rank by how far one walks from it, the lair last.
+  const edge = (k: number) => Math.min(centers[k][0], W - centers[k][0], centers[k][1], H - centers[k][1]);
+  const entry = boxes.map((_, k) => k).reduce((best, k) => (edge(k) < edge(best) ? k : best), 0);
+  const walk = walkFrom(tiles, W, at(centers[entry][0], centers[entry][1]));
+  const steps = (k: number) => (k === entry ? -1 : Math.min(1e9, walk[at(centers[k][0], centers[k][1])]));
+  const order = boxes.map((_, k) => k).sort((a, b) => steps(a) - steps(b));
+  const taken = (x: number, y: number) => features.some((f) => f.x === x && f.y === y);
+  /** The dry, empty floor tile of a room nearest a wish: stairs and chests never stand in water or on a crate. */
+  const spot = (b: { x: number; y: number; w: number; h: number }, wx: number, wy: number): [number, number] => {
+    let found: [number, number] = [wx, wy];
+    let d0 = Infinity;
+    for (let y = b.y; y < b.y + b.h; y++)
+      for (let x = b.x; x < b.x + b.w; x++) {
+        if (tiles[at(x, y)] !== TILE.floor || taken(x, y)) continue;
+        const d = Math.hypot(x - wx, y - wy);
+        if (d < d0) [d0, found] = [d, [x, y]];
+      }
+    return found;
+  };
   const pool: Purpose[] =
     params.theme === "crypt"
       ? ["shrine", "trap-room", "storage", "prison", "library"]
@@ -259,7 +329,7 @@ function dungeon(params: LocalParams, rng: Rng, tiles: Uint8Array, keyed: Keyed[
     const purpose: Purpose = rank === 0 ? "entrance" : rank === order.length - 1 ? (params.theme === "crypt" ? "tomb" : "lair") : rank === 1 ? "guard-room" : rng.pick(pool);
     const cells: number[] = [];
     for (let y = b.y; y < b.y + b.h; y++) for (let x = b.x; x < b.x + b.w; x++) cells.push(at(x, y));
-    keyed.push({ id: keyed.length + 1, cells, x: b.x + b.w / 2, y: b.y + b.h / 2, purpose, ...stock(rng, purpose, params.theme, params.danger, params.boss), secret: features.some((f) => f.kind === "secret-door" && Math.abs(f.x - (b.x + b.w / 2)) <= b.w / 2 + 1 && Math.abs(f.y - (b.y + b.h / 2)) <= b.h / 2 + 1), name: "" });
+    keyed.push({ id: keyed.length + 1, cells, x: b.x + b.w / 2, y: b.y + b.h / 2, purpose, ...stock(rng, purpose, params, lord), secret: features.some((f) => f.kind === "secret-door" && Math.abs(f.x - (b.x + b.w / 2)) <= b.w / 2 + 1 && Math.abs(f.y - (b.y + b.h / 2)) <= b.h / 2 + 1), name: "" });
     // Furnishings by purpose.
     const cx = b.x + Math.floor(b.w / 2),
       cy = b.y + Math.floor(b.h / 2);
@@ -268,14 +338,25 @@ function dungeon(params: LocalParams, rng: Rng, tiles: Uint8Array, keyed: Keyed[
     if (purpose === "shrine") features.push({ x: cx, y: b.y + 1, kind: "altar" }, { x: cx - 1, y: cy + 1, kind: "statue" });
     if (purpose === "treasury") features.push({ x: cx, y: cy, kind: "chest" });
     if (purpose === "flooded") for (let y = b.y + 1; y < b.y + b.h - 1; y++) for (let x = b.x + 1; x < b.x + b.w - 1; x++) tiles[at(x, y)] = rng.chance(0.3) ? TILE.deep : TILE.water;
-    if (purpose === "storage") for (let k = 0; k < 4; k++) features.push({ x: b.x + rng.int(0, b.w - 1), y: b.y + rng.int(0, b.h - 1), kind: "crate" });
+    if (purpose === "storage")
+      for (let k = 0; k < 4; k++) {
+        const [x, y] = spot(b, b.x + rng.int(0, b.w - 1), b.y + rng.int(0, b.h - 1));
+        features.push({ x, y, kind: "crate" });
+      }
     if (purpose === "server-room" || purpose === "laboratory") for (let x = b.x + 1; x < b.x + b.w - 1; x += 2) features.push({ x, y: b.y, kind: "terminal" });
     if (b.w >= 7 && b.h >= 6 && (purpose === "shrine" || purpose === "tomb" || purpose === "guard-room")) for (const [px, py] of [[b.x + 1, b.y + 1], [b.x + b.w - 2, b.y + 1], [b.x + 1, b.y + b.h - 2], [b.x + b.w - 2, b.y + b.h - 2]]) features.push({ x: px, y: py, kind: "pillar" });
     const last = keyed[keyed.length - 1];
-    if (last.trap) features.push({ x: cx + 1, y: cy, kind: "trap" });
+    if (last.trap) {
+      const [x, y] = spot(b, cx + 1, cy);
+      features.push({ x, y, kind: "trap" });
+    }
   });
+  // A way further down, in the room before the lair, unless this is the last level.
   const deepest = boxes[order[order.length - 2] ?? order[0]];
-  if (deepest) features.push({ x: deepest.x + deepest.w - 2, y: deepest.y + deepest.h - 2, kind: "stairs-down" });
+  if (deepest && !lord && (params.depth ?? 1) < (params.levels ?? 1)) {
+    const [x, y] = spot(deepest, deepest.x + deepest.w - 2, deepest.y + deepest.h - 2);
+    features.push({ x, y, kind: "stairs-down" });
+  }
   // Rubble and scattered rubbish in derelicts and mines.
   if (params.theme === "derelict" || params.theme === "mine" || params.theme === "metro" || params.theme === "factory" || params.theme === "mall") for (let k = 0; k < W * H * 0.01; k++) {
     const i = rng.int(0, W * H - 1);
@@ -283,7 +364,7 @@ function dungeon(params: LocalParams, rng: Rng, tiles: Uint8Array, keyed: Keyed[
   }
 }
 
-function cave(params: LocalParams, rng: Rng, tiles: Uint8Array, keyed: Keyed[], features: LocalFeature[]) {
+function cave(params: LocalParams, rng: Rng, tiles: Uint8Array, keyed: Keyed[], features: LocalFeature[], lord: string | null) {
   const { width: W, height: H } = params;
   const at = (x: number, y: number) => x + y * W;
   let open = new Uint8Array(W * H);
@@ -336,22 +417,58 @@ function cave(params: LocalParams, rng: Rng, tiles: Uint8Array, keyed: Keyed[], 
     chosen.push(i);
   }
   const edgeDistance = (i: number) => Math.min(i % W, W - (i % W), Math.floor(i / W), H - Math.floor(i / W));
+  // The way in is the chamber nearest the edge; the rest rank by the walk from it, the lair (or a hold's hoard) last.
   chosen.sort((a, b) => edgeDistance(a) - edgeDistance(b));
+  if (chosen.length) {
+    const walk = walkFrom(tiles, W, chosen[0]);
+    const entry = chosen[0];
+    chosen.sort((a, b) => (a === entry ? -1 : b === entry ? 1 : Math.min(1e9, walk[a]) - Math.min(1e9, walk[b])));
+  }
+  // Each spot of open ground belongs to the nearest chamber whose reach it lies in: chambers never share ground.
+  const home = new Map<number, number>();
+  for (const c of best) {
+    let near = -1;
+    let d0 = Infinity;
+    for (const i of chosen) {
+      const d = Math.hypot((c % W) - (i % W), Math.floor(c / W) - Math.floor(i / W));
+      if (d < width[i] + 1 && d < d0) [d0, near] = [d, i];
+    }
+    if (near >= 0) home.set(c, near);
+  }
+  const taken = (x: number, y: number) => features.some((f) => f.x === x && f.y === y);
+  /** The dry, empty tile of a chamber nearest its middle and a wish. */
+  const spot = (cells: number[], wx: number, wy: number): [number, number] => {
+    const dry = cells.filter((c) => tiles[c] === TILE.floor && !taken(c % W, Math.floor(c / W)));
+    if (!dry.length) return [wx, wy];
+    const c = dry.reduce((bestCell, c2) => (Math.hypot((c2 % W) - wx, Math.floor(c2 / W) - wy) < Math.hypot((bestCell % W) - wx, Math.floor(bestCell / W) - wy) ? c2 : bestCell));
+    return [c % W, Math.floor(c / W)];
+  };
+  const hold = params.theme === "hold";
   chosen.forEach((i, rank) => {
     const x = i % W,
       y = Math.floor(i / W);
-    const purpose: Purpose = rank === 0 ? "entrance" : rank === chosen.length - 1 ? "lair" : rng.pick<Purpose>(params.theme === "mine" ? ["storage", "workshop", "flooded", "trap-room"] : ["nest", "spring", "storage", "trap-room", "shrine"]);
-    const cells = best.filter((c) => Math.hypot((c % W) - x, Math.floor(c / W) - y) < width[i] + 1);
-    keyed.push({ id: keyed.length + 1, cells, x, y, purpose, ...stock(rng, purpose, params.theme, params.danger, params.boss), secret: false, name: "" });
+    const purpose: Purpose = rank === 0 ? "entrance" : rank === chosen.length - 1 ? (hold ? "treasury" : "lair") : rng.pick<Purpose>(params.theme === "mine" ? ["storage", "workshop", "flooded", "trap-room"] : hold ? ["workshop", "storage", "shrine", "spring", "barracks", "camp"] : ["nest", "spring", "storage", "trap-room", "shrine"]);
+    const cells = best.filter((c) => home.get(c) === i);
+    keyed.push({ id: keyed.length + 1, cells, x, y, purpose, ...stock(rng, purpose, params, lord), secret: false, name: "" });
     if (purpose === "lair" || purpose === "nest") features.push({ x, y, kind: "bones" });
     if (purpose === "spring") features.push({ x, y, kind: "pool" });
+    if (purpose === "treasury") features.push({ x, y, kind: "chest" });
+    if (purpose === "camp") features.push({ x, y, kind: "fire" });
     if (purpose === "entrance") features.push({ x, y, kind: "stairs-up" });
-    // A shaft further down, in the chamber before the lair.
-    if (rank === chosen.length - 2) features.push({ x: x + 1, y, kind: "stairs-down" });
+    const last = keyed[keyed.length - 1];
+    if (last.trap) {
+      const [tx, ty] = spot(cells, x + 1, y);
+      features.push({ x: tx, y: ty, kind: "trap" });
+    }
+    // A shaft further down, in the chamber before the lair, unless this is the last level.
+    if (rank === chosen.length - 2 && !lord && (params.depth ?? 1) < (params.levels ?? 1)) {
+      const [sx, sy] = spot(cells, x + 1, y);
+      features.push({ x: sx, y: sy, kind: "stairs-down" });
+    }
   });
 }
 
-function wilderness(params: LocalParams, rng: Rng, tiles: Uint8Array, keyed: Keyed[], features: LocalFeature[], language: Language) {
+function wilderness(params: LocalParams, rng: Rng, tiles: Uint8Array, keyed: Keyed[], features: LocalFeature[], language: Language, lord: string | null) {
   const { width: W, height: H } = params;
   const at = (x: number, y: number) => x + y * W;
   const relief = noise2(rng.fork("relief"));
@@ -440,7 +557,10 @@ function wilderness(params: LocalParams, rng: Rng, tiles: Uint8Array, keyed: Key
     }
   const sites: Purpose[] = ["camp", "clearing", "ruin", "lair", "spring", "shrine"];
   const placed: [number, number][] = [];
-  for (const purpose of rng.shuffle([...sites]).slice(0, 3 + params.rooms)) {
+  // As many sites as asked: each kind once, then any kind again.
+  const once = rng.shuffle([...sites]);
+  const wanted = Array.from({ length: 3 + params.rooms }, (_, k) => (k < once.length ? once[k] : rng.pick(sites)));
+  for (const purpose of wanted) {
     for (let attempt = 0; attempt < 60; attempt++) {
       const x = rng.int(4, W - 5),
         y = rng.int(4, H - 5);
@@ -449,7 +569,8 @@ function wilderness(params: LocalParams, rng: Rng, tiles: Uint8Array, keyed: Key
       const cells: number[] = [];
       for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) if (dx * dx + dy * dy <= 9) cells.push(at(x + dx, y + dy));
       for (const c of cells) if (tiles[c] === TILE.forest || tiles[c] === TILE.thicket) tiles[c] = TILE.grass;
-      keyed.push({ id: keyed.length + 1, cells, x, y, purpose, ...stock(rng, purpose, theme, params.danger, params.boss), secret: false, name: purpose === "ruin" || purpose === "shrine" ? name(language, rng, "plain") : "" });
+      keyed.push({ id: keyed.length + 1, cells, x, y, purpose, ...stock(rng, purpose, params, lord), secret: false, name: purpose === "ruin" || purpose === "shrine" ? name(language, rng, "plain") : "" });
+      if (keyed[keyed.length - 1].trap) features.push({ x: x - 1, y: y - 2, kind: "trap" });
       if (purpose === "camp") features.push({ x, y, kind: "fire" }, { x: x + 2, y: y - 1, kind: "tent" }, { x: x - 2, y: y + 1, kind: "tent" });
       if (purpose === "ruin") for (let k = 0; k < 5; k++) features.push({ x: x + rng.int(-3, 3), y: y + rng.int(-3, 3), kind: "pillar" });
       if (purpose === "shrine") features.push({ x, y, kind: "statue" });
@@ -472,8 +593,11 @@ export function generateLocal(input: Partial<LocalParams> = {}, language?: Langu
   const features: LocalFeature[] = [];
   let stream: [number, number][] = [];
   let trail: [number, number][] = [];
-  if (params.kind === "dungeon") dungeon(params, rng.fork("dungeon"), tiles, keyed, features);
-  else if (params.kind === "cave") cave(params, rng.fork("cave"), tiles, keyed, features);
-  else ({ stream, trail } = wilderness(params, rng.fork("wild"), tiles, keyed, features, tongue));
-  return { params, name: name(tongue, rng.fork("name"), "plain"), cell: params.kind === "wilderness" ? 5 : 1.5, tiles, keyed, features, stream, trail };
+  // Whoever rules the place waits on its last level, the same whichever level one starts from.
+  const last = (params.depth ?? 1) >= (params.levels ?? 1);
+  const lord = last ? params.boss ?? createRng(params.seed.replace(/\/depth-\d+$/u, "")).fork("lord").pick(poolsOf(params).lords) : null;
+  if (params.kind === "dungeon") dungeon(params, rng.fork("dungeon"), tiles, keyed, features, lord);
+  else if (params.kind === "cave") cave(params, rng.fork("cave"), tiles, keyed, features, lord);
+  else ({ stream, trail } = wilderness(params, rng.fork("wild"), tiles, keyed, features, tongue, lord));
+  return { params, name: params.name || name(tongue, rng.fork("name"), "plain"), cell: params.kind === "wilderness" ? 5 : 1.5, tiles, keyed, features, stream, trail };
 }

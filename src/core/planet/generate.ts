@@ -2,7 +2,7 @@
 // and provinces → roads → points of interest. Each step draws from its own random stream of the seed.
 import { name } from "../language";
 import { buildMesh, type Mesh } from "../mesh";
-import { createRng, randomSeed } from "../random";
+import { createRng, hashString, randomSeed } from "../random";
 import { isClassic, peopleOf, settingOf } from "../setting";
 import { settleAge } from "./age";
 import { biomeOf } from "./biomes";
@@ -126,7 +126,7 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   const routes = buildRoutes(ground, burgs, states);
   const markers = placeMarkers(ground, culture, cultures, state, states, burgs, burg, routes, rng.fork("markers"));
   const worldName = params.name || name((cultures[1] ?? cultures[0]).language, names, "land");
-  return { ...ground, name: worldName, population, culture, cultures, religion, religions, ...(secular ? { secular } : {}), burg, burgs, state, states, province, provinces, routes, markers };
+  return { ...ground, ...(terrain?.length ? { relief: hashString(JSON.stringify(terrain)).toString(36) } : {}), name: worldName, population, culture, cultures, religion, religions, ...(secular ? { secular } : {}), burg, burgs, state, states, province, provinces, routes, markers };
 }
 
 /** A map of the whole planet: its longitudes go all the way round, so its left and right edges are one meridian. */

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ageOf,
   buildingFromCity,
+  localFromCavern,
   cityFromBurg,
   editPlanet,
   ERA_BUILDINGS,
@@ -223,11 +224,8 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   const underworld = useUnderworldLevel(
     ctx,
     (made, cavern) => {
-      // The age's underground opens as built places; the rest as caves.
-      const built: Partial<Record<string, "metro" | "bunker" | "vault">> = { metro: "metro", undercity: "metro", bunker: "bunker", vault: "vault" };
-      const theme = built[made.caverns[cavern].kind];
-      const people = made.caverns[cavern].people ? made.peoples[made.caverns[cavern].people - 1].language : null;
-      openLocal(underworld, { params: { seed: `${made.seed}/cavern-${cavern}`, kind: theme ? "dungeon" : "cave", theme: theme ?? "lair", danger: 3 }, language: people }, `cavern:${cavern}`);
+      const link = localFromCavern(made, cavern, underworld.of ? ageOf(settingOf(underworld.of.params.setting)) : undefined);
+      if (link) openLocal(underworld, link, `cavern:${cavern}`);
     },
     back("underworld"),
   );
@@ -388,6 +386,12 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     else if (world.top === "city") city.restore!({ ...params, era: ageOf(setting) }, root[1].language);
     else if (world.top === "building") building.restore!({ ...params, era: ageOf(setting) });
   };
+
+  // The underworld is cut from its planet: when that planet is regrown or edited, the underworld shown follows it.
+  useEffect(() => {
+    const below = underworld.of;
+    if (view === "underworld" && below && planet.planet && below !== planet.planet && below.params.seed === planet.planet.params.seed) underworld.open(planet.planet);
+  }, [view, planet.planet]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const here = levelKey(level.id);
   const trail = here && world.maps[here] ? pathTo(world, here) : [];

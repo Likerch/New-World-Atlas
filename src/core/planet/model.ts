@@ -253,6 +253,8 @@ export interface Marker {
 
 export interface Planet {
   params: PlanetParams;
+  /** A print of the GM's relief strokes when the world was regrown under them. */
+  relief?: string;
   /** The world's own name, in the tongue of its first people. */
   name: string;
   mesh: Mesh;

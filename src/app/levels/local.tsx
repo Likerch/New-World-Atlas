@@ -30,12 +30,19 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null): Lev
     });
   };
   const set = <K extends keyof LocalParams>(key: K, value: LocalParams[K]) => setInput((current) => ({ ...current, [key]: value }));
-  const svg = useMemo(() => (map ? renderLocal(map, { style, grid, highlight: keyed }) : ""), [map, style, grid, keyed]);
+  const svg = useMemo(() => (map ? renderLocal(map, { style, grid, highlight: keyed, players: ctx.players }) : ""), [map, style, grid, keyed, ctx.players]);
+  // A dweller of the age (cave bears, a rogue AI) is named as the planet's legend names it.
+  const monster = (id: string) => {
+    const own = t(`monster.${id}`);
+    if (own !== `monster.${id}`) return own;
+    const told = t(`fact.${id.replace(/-/gu, " ")}`);
+    return told !== `fact.${id.replace(/-/gu, " ")}` ? told : id.replace(/-/gu, " ");
+  };
   const mapLegend = useMemo(() => (map ? localLegend(map, { style }) : undefined), [map, style]);
   const S = map ? localPixels(map) : 20;
   const legend = (k: LocalMap["keyed"][number]) =>
     [
-      k.monsters.length ? `${t("local.monsters")}: ${k.monsters.map((m) => t(`monster.${m}`)).join(", ")}` : "",
+      k.monsters.length ? `${t("local.monsters")}: ${k.monsters.map(monster).join(", ")}` : "",
       k.treasure ? `${t("local.treasure")}: ${t(`treasure.${k.treasure}`)}` : "",
       k.trap ? `${t("local.trap")}: ${t(`trap.${k.trap}`)}` : "",
       k.secret ? t("local.secret") : "",
@@ -48,7 +55,8 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null): Lev
     title: map ? nm(map.name) : null,
     seed: input.seed,
     setSeed: (seed) => set("seed", seed),
-    generate: (seed) => build(localParams({ ...input, seed: seed ?? input.seed }), language),
+    // A new seed is a new place: it starts at its way in, not on the level the old one was seen at.
+    generate: (seed) => build(localParams({ ...input, seed: seed ?? input.seed, ...(seed && seed !== input.seed ? { depth: 1 } : {}) }), language),
     ensure: () => {
       if (!map && !pending.current) build(input, language);
     },
@@ -88,7 +96,8 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null): Lev
             onClick={() => {
               const depth = (raw.params.depth ?? 1) + 1;
               setAbove([...above, raw]);
-              build(localParams({ ...raw.params, seed: `${raw.params.seed.replace(/\/depth-\d+$/u, "")}/depth-${depth}`, depth, danger: Math.min(3, raw.params.danger + 1), boss: undefined, rooms: raw.params.rooms + 2 }), language);
+              // The same place one level deeper: its name, its ruler (who waits on the last level) and how deep it goes.
+              build(localParams({ ...raw.params, seed: `${raw.params.seed.replace(/\/depth-\d+$/u, "")}/depth-${depth}`, depth, danger: Math.min(3, raw.params.danger + 1), rooms: raw.params.rooms + 2, name: raw.name }), language);
             }}
           >
             ⬇ {t("local.down")}
@@ -121,7 +130,8 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null): Lev
             value={input.kind}
             onChange={(event) => {
               const kind = event.target.value as LocalParams["kind"];
-              setInput(localParams({ seed: input.seed, kind }));
+              // Another kind of place keeps its danger, its ruler, its name and its age.
+              setInput(localParams({ seed: input.seed, kind, danger: input.danger, boss: input.boss, name: input.name, age: input.age }));
             }}
           >
             {LOCAL_KINDS.map((kind) => (

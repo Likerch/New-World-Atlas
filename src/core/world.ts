@@ -155,7 +155,7 @@ export function resolve(world: WorldDoc, key: string, derived: Record<string, un
  * the world it is part of, the age the whole world shares, the GM's own kinds of thing, a dungeon's danger. */
 const SHAPED: Partial<Record<MapLevel, [(seed: string) => object, string[]]>> = {
   planet: [(seed) => planetParams({ seed }), ["setting"]],
-  local: [(seed) => localParams({ seed }), ["danger", "boss"]],
+  local: [(seed) => localParams({ seed }), ["danger", "boss", "levels", "age"]],
   galaxy: [(seed) => galaxyParams({ seed }), ["custom"]],
   universe: [(seed) => universeParams({ seed }), ["custom"]],
 };

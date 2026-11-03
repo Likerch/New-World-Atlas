@@ -54,26 +54,37 @@ export function renderUnderworld(world: Underworld, planet: Planet, options: { s
     const people = cavern.people ? world.peoples[cavern.people - 1] : null;
     if (cavern.kind === "settlement") out.push(`<circle cx="${r1(cavern.x)}" cy="${r1(cavern.y)}" r="4" fill="${people?.color ?? "#e0b35a"}" stroke="#121116" stroke-width="1.2"/>`);
   }
-  for (const entrance of world.entrances) out.push(`<path d="M${r1(entrance.x - 4)},${r1(entrance.y - 3)}L${r1(entrance.x + 4)},${r1(entrance.y - 3)}L${r1(entrance.x)},${r1(entrance.y + 4)}Z" fill="#c9a227"/>`);
+  // Ways down, coloured by what they are: a cave, a mine, a volcano's throat, a portal, a station or a bunker's shaft.
+  for (const entrance of world.entrances) out.push(`<path d="M${r1(entrance.x - 4)},${r1(entrance.y - 3)}L${r1(entrance.x + 4)},${r1(entrance.y - 3)}L${r1(entrance.x)},${r1(entrance.y + 4)}Z" fill="${DESCENT[descentOf(world, planet, entrance)]}" stroke="#121116" stroke-width="0.6"/>`);
   out.push(`<g text-anchor="middle" font-size="9" fill="#cfc6b0">`);
-  for (const cavern of world.caverns) if (cavern.kind === "settlement" || cavern.kind === "ruins" || cavern.kind === "metro" || cavern.kind === "undercity" || cavern.kind === "vault" || cavern.r > 22) out.push(`<text x="${r1(cavern.x)}" y="${r1(cavern.y + cavern.r + 10)}"${cavern.kind === "settlement" ? ` font-weight="700"` : ` font-style="italic" fill="${EDGE[cavern.kind]}"`}>${text(cavern.name)}</text>`);
+  for (const cavern of world.caverns) if (cavern.kind === "settlement" || cavern.kind === "ruins" || cavern.kind === "metro" || cavern.kind === "undercity" || cavern.kind === "vault" || cavern.kind === "bunker" || cavern.r > 22) out.push(`<text x="${r1(cavern.x)}" y="${r1(cavern.y + cavern.r + 10)}"${cavern.kind === "settlement" ? ` font-weight="700"` : ` font-style="italic" fill="${EDGE[cavern.kind]}"`}>${text(cavern.name)}</text>`);
   out.push(`</g><text x="20" y="34" font-size="20" letter-spacing="3" fill="#d8c79a" font-weight="600">${text(world.name.toUpperCase())}</text></svg>`);
   return out.join("");
 }
 
-/** What the underworld map shows, for its legend. */
-export function underworldLegend(world: Underworld): LegendSection[] {
+/** How each kind of way down is coloured. */
+const DESCENT: Record<string, string> = { cave: "#c9a227", mine: "#b8b8c0", volcano: "#ff6a2b", portal: "#c27bff", metro: "#d9d36a", undercity: "#38c6e8", bunker: "#9aa4ad", vault: "#7fd8a0" };
+function descentOf(world: Underworld, planet: Planet | null, entrance: Underworld["entrances"][number]): string {
+  const kind = entrance.marker && planet ? planet.markers[entrance.marker]?.kind : world.caverns[entrance.cavern]?.kind;
+  return kind && DESCENT[kind] ? kind : "cave";
+}
+
+/** What the underworld map shows, for its legend. `planet` tells the ways down apart. */
+export function underworldLegend(world: Underworld, planet: Planet | null = null): LegendSection[] {
   const caverns: LegendEntry[] = present(world.caverns.map((c) => c.kind)).map((kind) => ({ key: `cavern.${kind}`, swatch: { fill: FILL[kind], stroke: EDGE[kind], round: true } }));
   const look: Record<string, Swatch> = {
     passage: { line: "#3a3744", width: 5 },
     river: { line: "#2a6a9a", width: 4 },
     chasm: { line: "#000000", width: 6, over: "#5a5666", overWidth: 1, overDash: "2 3" },
-    line: { line: "#d9d36a", width: 3 },
+    // Lines run in the colour of their stations: the metro's, or the undercity's.
+    line: { line: world.caverns.some((c) => c.kind === "undercity") ? EDGE.undercity : EDGE.metro, width: 3 },
   };
   const ways: LegendEntry[] = present(world.tunnels.map(([, , kind]) => kind)).map((kind) => ({ key: `tunnel.${kind}`, swatch: look[kind] }));
-  if (world.entrances.length) ways.push({ key: "legend.entrance", swatch: { svg: `<path d="M7,4H17L12,13Z" fill="#c9a227"/>` } });
+  for (const kind of present(world.entrances.map((entrance) => descentOf(world, planet, entrance)))) ways.push({ key: `descent.${kind}`, swatch: { svg: `<path d="M7,4H17L12,13Z" fill="${DESCENT[kind]}"/>` } });
+  const peoples: LegendEntry[] = world.peoples.map((people) => ({ label: people.name, swatch: { fill: people.color, round: true } }));
   return [
     { key: "legend.caverns", entries: caverns },
     { key: "legend.ways", entries: ways },
+    { key: "underworld.peoples", entries: peoples },
   ].filter((section) => section.entries.length);
 }
