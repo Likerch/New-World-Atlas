@@ -49,6 +49,8 @@ export interface Level {
   status: string;
   /** Data for the JSON export. */
   data: () => unknown;
+  /** A map cut wholly from its parent (a region, the underworld): it has no seed or settings of its own to make anew. */
+  fixed?: boolean;
   /** Opens the level for the first time (generates if nothing exists yet). */
   ensure: () => void;
   /** Identity of the map shown, for the GM's patch. */

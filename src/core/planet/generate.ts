@@ -46,11 +46,11 @@ export function planetParams(input: Partial<PlanetParams> = {}): PlanetParams {
 }
 
 /** A world from its settings; `terrain` replays the GM's relief brush before anything grows on it. */
-export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: PlanetEdits["terrain"]): Planet {
+export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: PlanetEdits["terrain"], plain?: Planet): Planet {
   const params = planetParams(input);
   // Relief strokes regrow the world, but its towns and peoples are anchored where they stood on the untouched world,
   // so their numbers, names and the GM's notes stay with them.
-  const anchors = terrain?.length ? anchorsOf(params) : undefined;
+  const anchors = terrain?.length ? anchorsOf(params, plain) : undefined;
   const rng = createRng(params.seed);
   const mesh = buildMesh(params.width, params.height, params.cells, rng.fork("mesh"));
   const height = generateHeights(mesh, params.template, rng.fork("relief"));
@@ -153,11 +153,11 @@ export interface Anchors {
   burgs: [number, number, boolean][];
 }
 const anchorCache = new Map<string, Anchors>();
-function anchorsOf(params: PlanetParams): Anchors {
+function anchorsOf(params: PlanetParams, untouched?: Planet): Anchors {
   const key = JSON.stringify(params);
   const hit = anchorCache.get(key);
   if (hit) return hit;
-  const plain = generatePlanet(params);
+  const plain = untouched ?? generatePlanet(params);
   const made: Anchors = {
     cultures: plain.cultures.slice(1).map((culture) => [plain.mesh.x[culture.center], plain.mesh.y[culture.center]]),
     burgs: plain.burgs.slice(1).map((town) => [town.x, town.y, town.capital]),

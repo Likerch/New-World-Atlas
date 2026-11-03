@@ -7,6 +7,7 @@ import { emblemOf } from "../planet/arms";
 import { BIOMES } from "../planet/biomes";
 import { oceanCurrents, windAt } from "../planet/currents";
 import { raiseArmies } from "../planet/military";
+import { wrapsRound } from "../planet/generate";
 import type { MarkerKind, Planet } from "../planet/model";
 import { ageOf, settingOf } from "../setting";
 import { renderEmblem } from "./heraldry-svg";
@@ -19,6 +20,8 @@ export interface RenderOptions {
   script?: "latin" | "cyrillic";
   /** A region drawn with an emphasis outline. */
   highlight?: { kind: "state" | "province" | "culture" | "religion"; id: number } | null;
+  /** The map's own words in the reader's language: the unit of the scale bar and where a world map's scale holds. */
+  words?: { km?: string; atEquator?: string };
 }
 
 const SEA = 20;
@@ -436,6 +439,19 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
       out.push(`<text x="${r1(mesh.x[best])}" y="${r1(mesh.y[best])}" font-size="${r1(size)}" letter-spacing="${lake ? 0.5 : 3}" ${lake ? `fill="${theme.coast}"` : ""}>${text(feature.name)}</text>`);
     }
     out.push(`</g>`);
+    // Continents and islands: wide-spaced over their heartland, the cell farthest from any shore.
+    if (layers.landmasses) {
+      out.push(`<g text-anchor="middle" fill="${theme.label}" fill-opacity="0.55" font-weight="600" ${halo}>`);
+      for (const feature of planet.features.slice(1)) {
+        if (!feature.land || !feature.name || feature.cells < 30) continue;
+        let best = -1;
+        for (let cell = 0; cell < mesh.cells; cell++) if (planet.feature[cell] === feature.id && (best < 0 || coast[cell] > coast[best])) best = cell;
+        if (best < 0) continue;
+        const size = Math.max(10, Math.min(26, 6 + Math.sqrt(feature.cells) * 0.5));
+        out.push(`<text x="${r1(mesh.x[best])}" y="${r1(mesh.y[best])}" font-size="${r1(size)}" letter-spacing="${r1(size * 0.4)}">${text(feature.name.toUpperCase())}</text>`);
+      }
+      out.push(`</g>`);
+    }
     // Rivers: the largest ones, along their course.
     const big = planet.rivers.slice(1).filter((river) => river.cells.length > 8).sort((a, b) => b.discharge - a.discharge).slice(0, 14);
     if (layers.rivers && big.length) {
@@ -514,34 +530,38 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
     const north = params.latitudeNorth;
     const south = params.latitudeSouth;
     const lines: string[] = [];
-    for (let lat = Math.ceil(south / 10) * 10; lat <= north; lat += 10) {
+    // A round step that suits the map's span: every 15° on a whole world, every degree or two on a province.
+    const degrees = [1, 2, 5, 10, 15, 30].find((d) => (north - south) / d <= 12) ?? 30;
+    for (let lat = Math.ceil(south / degrees) * degrees; lat <= north; lat += degrees) {
       const y = ((north - lat) / (north - south)) * H;
       lines.push(`M0,${r1(y)}H${W}`);
     }
-    const step = (10 * 111) / planet.scale;
+    // A whole world is drawn plate carrée; a smaller map is true to scale, so its meridians close up away from the equator.
+    const narrow = wrapsRound(params) ? 1 : Math.max(0.1, Math.cos((((north + south) / 2) * Math.PI) / 180));
+    const step = (degrees * 111 * narrow) / planet.scale;
     for (let x = step; x < W; x += step) lines.push(`M${r1(x)},0V${H}`);
     out.push(`<path d="${lines.join("")}" stroke="${theme.grid}" stroke-width="0.6" fill="none"/>`);
   }
   out.push(`</g>`);
-  const legend = (["temperature", "precipitation", "population"] as const).find((id) => layers[id]);
-  if (legend) out.push(climateLegend(legend, W, theme));
-  if (layers.frame) out.push(frame(planet, theme, text));
+  // A key for each heat map shown, one under another.
+  (["temperature", "precipitation", "population"] as const).filter((id) => layers[id]).forEach((id, k) => out.push(climateLegend(id, W, theme, 16 + k * 52)));
+  if (layers.frame) out.push(frame(planet, theme, text, options.words ?? {}));
   out.push(`</svg>`);
   return out.join("");
 }
 
-/** The key to the first heat map shown: its colours and the floor of each band, in the top right corner. */
-function climateLegend(id: keyof typeof CLIMATE, W: number, theme: Theme): string {
+/** The key to a heat map: its colours and the floor of each band, in the top right corner (`top` stacks several). */
+function climateLegend(id: keyof typeof CLIMATE, W: number, theme: Theme, top = 16): string {
   const { unit, levels, colors } = CLIMATE[id];
   const step = 30;
   const x0 = W - 16 - levels.length * step - 16;
-  const parts = [`<rect x="${x0}" y="16" width="${levels.length * step + 16}" height="44" rx="3" fill="${theme.halo}" fill-opacity="0.88" stroke="${theme.ink}" stroke-width="1"/>`];
+  const parts = [`<rect x="${x0}" y="${top}" width="${levels.length * step + 16}" height="44" rx="3" fill="${theme.halo}" fill-opacity="0.88" stroke="${theme.ink}" stroke-width="1"/>`];
   levels.forEach((level, k) => {
     const x = x0 + 8 + k * step;
-    parts.push(`<rect x="${x}" y="24" width="${step}" height="10" fill="${colors[k]}"/>`);
-    if (k) parts.push(`<text x="${x}" y="46" text-anchor="middle" font-size="8" fill="${theme.ink}">${level}</text>`);
+    parts.push(`<rect x="${x}" y="${top + 8}" width="${step}" height="10" fill="${colors[k]}"/>`);
+    if (k) parts.push(`<text x="${x}" y="${top + 30}" text-anchor="middle" font-size="8" fill="${theme.ink}">${level}</text>`);
   });
-  parts.push(`<text x="${x0 + levels.length * step + 8}" y="56" text-anchor="end" font-size="8" fill="${theme.ink}">${unit}</text>`);
+  parts.push(`<text x="${x0 + levels.length * step + 8}" y="${top + 40}" text-anchor="end" font-size="8" fill="${theme.ink}">${unit}</text>`);
   return `<g>${parts.join("")}</g>`;
 }
 
@@ -577,7 +597,7 @@ export function routeStyles(age: string, theme: Theme): { style: Record<string, 
 }
 
 /** Border, title, compass rose and scale bar. */
-function frame(planet: Planet, theme: Theme, text: (value: string) => string): string {
+function frame(planet: Planet, theme: Theme, text: (value: string) => string, words: NonNullable<RenderOptions["words"]>): string {
   const { width: W, height: H } = planet.params;
   const parts: string[] = [`<rect x="1" y="1" width="${W - 2}" height="${H - 2}" fill="none" stroke="${theme.ink}" stroke-width="2"/>`];
   // Title cartouche.
@@ -605,7 +625,7 @@ function frame(planet: Planet, theme: Theme, text: (value: string) => string): s
   const length = km / planet.scale;
   const x0 = W - length - 30;
   const y0 = H - 30;
-  parts.push(`<g fill="${theme.ink}" font-size="10" text-anchor="middle"><rect x="${r1(x0)}" y="${y0}" width="${r1(length / 2)}" height="5" fill="${theme.ink}"/><rect x="${r1(x0 + length / 2)}" y="${y0}" width="${r1(length / 2)}" height="5" fill="${theme.halo}" stroke="${theme.ink}" stroke-width="0.8"/><text x="${r1(x0)}" y="${y0 - 5}">0</text><text x="${r1(x0 + length)}" y="${y0 - 5}">${km} km</text></g>`);
+  parts.push(`<g fill="${theme.ink}" font-size="10" text-anchor="middle"><rect x="${r1(x0)}" y="${y0}" width="${r1(length / 2)}" height="5" fill="${theme.ink}"/><rect x="${r1(x0 + length / 2)}" y="${y0}" width="${r1(length / 2)}" height="5" fill="${theme.halo}" stroke="${theme.ink}" stroke-width="0.8"/><text x="${r1(x0)}" y="${y0 - 5}">0</text><text x="${r1(x0 + length)}" y="${y0 - 5}" text-anchor="end">${km} ${esc(words.km ?? "km")}${wrapsRound(planet.params) ? ` · ${esc(words.atEquator ?? "at the equator")}` : ""}</text></g>`);
   return parts.join("");
 }
 

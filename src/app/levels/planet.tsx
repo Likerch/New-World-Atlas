@@ -1,10 +1,12 @@
 // The planet level: world settings, the world map and its inspector.
-import { useMemo, useRef, useState } from "react";
-import { createRng, defaultLayers, editPlanet, mapKeyOf, eraTheme, emptyEdits, foundedSize, generatePlanet, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createRng, editPlanet, mapKeyOf, eraTheme, emptyEdits, foundedSize, generatePlanet, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { SettingPanel } from "../SettingPanel";
 import { WorldForm, type ZoomRange } from "../WorldForm";
 import { WorldEditor, type EditTool } from "../WorldEditor";
+import type { T } from "../i18n";
+import { useLayers } from "./layers";
 import type { Level, LevelContext } from "./types";
 
 const NUMBER_FIELDS: { key: keyof PlanetParams; min: number; max: number; step: number }[] = [
@@ -29,13 +31,28 @@ function markOf(planet: Planet, selection: Selection | null): [number, number] |
   return null;
 }
 
-/** The selected thing's patch key and name; the world itself when nothing (or only a spot) is selected. */
-export function selectedOf(planet: Planet | null, selection: Selection | null): { key: string; label: string } | null {
+/** The selected thing's patch key and name, as the reader sees it (in the chosen script, a realm with its form of
+ * rule); the world itself when nothing (or only a spot) is selected. */
+export function selectedOf(planet: Planet | null, selection: Selection | null, t: T, nm: (name: string) => string): { key: string; label: string } | null {
   if (!planet) return null;
-  if (!selection || selection.kind === "cell") return { key: "world", label: planet.name };
-  const lists = { state: planet.states, province: planet.provinces, culture: planet.cultures, religion: planet.religions, burg: planet.burgs, river: planet.rivers, marker: planet.markers } as const;
-  const item = lists[selection.kind as keyof typeof lists]?.[selection.id];
-  return item ? { key: `${selection.kind}:${selection.id}`, label: item.name || selection.kind } : null;
+  if (!selection || selection.kind === "cell") return { key: "world", label: nm(planet.name) };
+  const { kind, id } = selection;
+  const lists = { state: planet.states, province: planet.provinces, culture: planet.cultures, religion: planet.religions, burg: planet.burgs, river: planet.rivers, marker: planet.markers, feature: planet.features } as const;
+  const item = lists[kind as keyof typeof lists]?.[id];
+  if (!item) return null;
+  const label =
+    kind === "state"
+      ? id
+        ? t(`form.${planet.states[id].formKey}`, { name: nm(item.name) })
+        : t("form.wild")
+      : kind === "province"
+        ? t(`province.${planet.provinces[id].formKey}`, { name: nm(item.name) })
+        : kind === "feature"
+          ? `${t(`feature.${planet.features[id].kind}`)} ${nm(item.name)}`.trim()
+          : kind === "marker"
+            ? `${t(`marker.${planet.markers[id].kind}`)} ${nm(item.name)}`.trim()
+            : nm(item.name) || kind;
+  return { key: `${kind}:${id}`, label };
 }
 
 export interface PlanetLinks {
@@ -47,7 +64,7 @@ export interface PlanetLinks {
   back: (() => void) | null;
 }
 
-export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, initialSetting: Partial<Setting> | undefined, { openCity, openRegion, openLocal, openCountry, openUnderworld, back }: PlanetLinks): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void } {
+export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, initialSetting: Partial<Setting> | undefined, { openCity, openRegion, openLocal, openCountry, openUnderworld, back }: PlanetLinks): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void; theme: ThemeId } {
   const { t } = ctx;
   const [params, setParams] = useState<PlanetParams>(() => planetParams({ seed: initialSeed, setting: initialSetting }));
   const [raw, setPlanet] = useState<Planet | null>(null);
@@ -56,7 +73,19 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   // The GM's edits: relief strokes regrow the whole world from the new ground; realms and towns are laid over it.
   const edits = ctx.patch(mapKey).edits ?? null;
   const terrainKey = JSON.stringify(edits?.terrain ?? []);
-  const shaped = useMemo(() => (raw && edits?.terrain.length ? generatePlanet(raw.params, edits.terrain) : raw), [raw, terrainKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Relief strokes regrow the whole world: that runs like any generation, with the busy sign up and the old shape on
+  // screen meanwhile; when strokes come faster than the world grows, only the last is grown.
+  const [regrown, setRegrown] = useState<{ raw: Planet; key: string; planet: Planet } | null>(null);
+  const latest = useRef("");
+  useEffect(() => {
+    latest.current = terrainKey;
+    if (!raw || !edits?.terrain.length || (regrown?.raw === raw && regrown.key === terrainKey)) return;
+    const terrain = edits.terrain;
+    ctx.run(() => {
+      if (latest.current === terrainKey) setRegrown({ raw, key: terrainKey, planet: generatePlanet(raw.params, terrain, raw) });
+    });
+  }, [raw, terrainKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const shaped = !raw ? null : !edits?.terrain.length ? raw : regrown?.raw === raw ? regrown.planet : null;
   const planet = useMemo(() => (shaped ? renamePlanet(editPlanet(shaped, edits), names) : null), [shaped, edits, names]);
   const [tool, setTool] = useState<EditTool | null>(null);
   const [brush, setBrush] = useState({ radius: 60, strength: 12 });
@@ -65,7 +94,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   const [history, setHistory] = useState<PlanetEdits[]>([]);
   const [time, setTime] = useState(0);
   const [theme, setTheme] = useState<ThemeId>(() => (initialSetting ? eraTheme(settingOf(initialSetting)) : "atlas"));
-  const [layers, setLayers] = useState<Record<LayerId, boolean>>(() => defaultLayers(initialSetting ? eraTheme(settingOf(initialSetting)) : "atlas"));
+  const { layers, restyle, toggle } = useLayers(initialSetting ? eraTheme(settingOf(initialSetting)) : "atlas");
   const [selection, setSelection] = useState<Selection | null>(null);
   const [tab, setTab] = useState<Tab>("place");
   // The globe view: where it is turned to, or null for the flat map.
@@ -115,7 +144,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   };
   const set = <K extends keyof PlanetParams>(key: K, value: PlanetParams[K]) => setParams((current) => ({ ...current, [key]: value }));
   const highlight = selection && (selection.kind === "state" || selection.kind === "province" || selection.kind === "culture" || selection.kind === "religion") ? { kind: selection.kind, id: selection.id } : null;
-  const svg = useMemo(() => (!planet ? "" : globe ? renderGlobe(planet, { theme, layers, script: ctx.script, ...globe, mark: markOf(planet, selection), unknown, quick: turning }) : renderPlanet(planet, { theme, layers, script: ctx.script, highlight })), [planet, theme, layers, ctx.script, highlight?.kind, highlight?.id, globe, globe && selection, unknown, turning]); // eslint-disable-line react-hooks/exhaustive-deps
+  const svg = useMemo(() => (!planet ? "" : globe ? renderGlobe(planet, { theme, layers, script: ctx.script, ...globe, mark: markOf(planet, selection), unknown, quick: turning }) : renderPlanet(planet, { theme, layers, script: ctx.script, highlight, words: { km: t("unit.km"), atEquator: t("scale.equator") } })), [planet, theme, layers, ctx.script, highlight?.kind, highlight?.id, globe, globe && selection, unknown, turning, t]); // eslint-disable-line react-hooks/exhaustive-deps
   const legend = useMemo(() => (planet ? planetLegend(planet, { theme, layers }) : undefined), [planet, theme, layers]);
   const pick = (x: number, y: number) => {
     if (!planet) return;
@@ -184,7 +213,8 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     mapKey,
     // Pins and fog are laid on the flat map; the globe shows the world without them, its names and notes still at hand.
     sheetKey: globe ? null : mapKey,
-    selected: selectedOf(planet, selection),
+    selected: selectedOf(planet, selection, t, ctx.nm),
+    theme,
     map: planet
       ? {
           svg,
@@ -226,7 +256,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
               }
               const style = eraTheme(settingOf(next.setting));
               setTheme(style);
-              setLayers(defaultLayers(style));
+              restyle(style);
               setGlobe(null);
               load(next);
             }}
@@ -271,7 +301,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
             // A new age brings the style that suits it; the GM can still pick another.
             const next = eraTheme(setting);
             setTheme(next);
-            setLayers(defaultLayers(next));
+            restyle(next);
             load({ setting });
           }}
         />
@@ -308,7 +338,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
             onChange={(event) => {
               const next = event.target.value as ThemeId;
               setTheme(next);
-              setLayers(defaultLayers(next));
+              restyle(next);
             }}
           >
             {THEMES.map((id) => (
@@ -347,7 +377,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
         <h2>{t("panel.layers")}</h2>
         {LAYERS.map((id) => (
           <label key={id} className="check">
-            <input type="checkbox" checked={layers[id]} onChange={(event) => setLayers({ ...layers, [id]: event.target.checked })} />
+            <input type="checkbox" checked={layers[id]} onChange={(event) => toggle(id, event.target.checked)} />
             {t(`layer.${id}`)}
           </label>
         ))}

@@ -1,11 +1,12 @@
 // The region level: one province of the planet up close, with its villages, roads and local places.
 import { useMemo, useState } from "react";
-import { defaultLayers, generateCountry, generateRegion, LAYERS, planetToJson, renamePlanet, renderPlanet, THEMES, type LayerId, type Planet, type ThemeId, planetLegend } from "../../core/index";
+import { eraTheme, generateCountry, generateRegion, settingOf, LAYERS, planetToJson, renamePlanet, renderPlanet, THEMES, type Planet, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { selectedOf } from "./planet";
+import { useLayers } from "./layers";
 import type { Level, LevelContext } from "./types";
 
-export function useRegionLevel(ctx: LevelContext, links: { openCity: (region: Planet, burg: number) => void; openLocal: (region: Planet, marker: number) => void; back: (() => void) | null }): Level & { open: (planet: Planet, province: number) => void; openCountry: (planet: Planet, state: number) => void } {
+export function useRegionLevel(ctx: LevelContext, links: { openCity: (region: Planet, burg: number) => void; openLocal: (region: Planet, marker: number) => void; back: (() => void) | null }): Level & { open: (planet: Planet, province: number, style?: ThemeId) => void; openCountry: (planet: Planet, state: number, style?: ThemeId) => void } {
   const { t } = ctx;
   const [raw, setRegion] = useState<Planet | null>(null);
   const [of, setOf] = useState<{ of: "province" | "state"; id: number } | null>(null);
@@ -13,12 +14,18 @@ export function useRegionLevel(ctx: LevelContext, links: { openCity: (region: Pl
   const names = ctx.names(mapKey);
   const region = useMemo(() => (raw ? renamePlanet(raw, names) : null), [raw, names]);
   const [theme, setTheme] = useState<ThemeId>("atlas");
-  const [layers, setLayers] = useState<Record<LayerId, boolean>>({ ...defaultLayers("atlas"), provinces: true });
+  const { layers, restyle, toggle } = useLayers("atlas", { provinces: true });
+  // A close-up is drawn in its planet's style: the one the GM has on the planet, else the one its age suggests.
+  const styleOf = (planet: Planet, style?: ThemeId) => {
+    const next = style ?? eraTheme(settingOf(planet.params.setting));
+    setTheme(next);
+    restyle(next);
+  };
   const [selection, setSelection] = useState<Selection | null>(null);
   const [tab, setTab] = useState<Tab>("place");
   const [time, setTime] = useState(0);
   const highlight = selection && (selection.kind === "state" || selection.kind === "province" || selection.kind === "culture") ? { kind: selection.kind, id: selection.id } : null;
-  const svg = useMemo(() => (region ? renderPlanet(region, { theme, layers, script: ctx.script, highlight }) : ""), [region, theme, layers, ctx.script, highlight?.kind, highlight?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const svg = useMemo(() => (region ? renderPlanet(region, { theme, layers, script: ctx.script, highlight, words: { km: t("unit.km"), atEquator: t("scale.equator") } }) : ""), [region, theme, layers, ctx.script, highlight?.kind, highlight?.id, t]); // eslint-disable-line react-hooks/exhaustive-deps
   const legend = useMemo(() => (region ? planetLegend(region, { theme, layers }) : undefined), [region, theme, layers]);
 
   return {
@@ -32,8 +39,10 @@ export function useRegionLevel(ctx: LevelContext, links: { openCity: (region: Pl
     ensure: () => undefined,
     mapKey,
     params: of,
-    selected: selectedOf(region, selection),
-    openCountry: (planet, state) => {
+    selected: selectedOf(region, selection, t, ctx.nm),
+    fixed: true,
+    openCountry: (planet, state, style) => {
+      styleOf(planet, style);
       ctx.run(() => {
         const started = performance.now();
         setRegion(generateCountry(planet, state));
@@ -43,7 +52,8 @@ export function useRegionLevel(ctx: LevelContext, links: { openCity: (region: Pl
       });
       ctx.show("region");
     },
-    open: (planet, province) => {
+    open: (planet, province, style) => {
+      styleOf(planet, style);
       ctx.run(() => {
         const started = performance.now();
         setRegion(generateRegion(planet, province));
@@ -83,7 +93,7 @@ export function useRegionLevel(ctx: LevelContext, links: { openCity: (region: Pl
             onChange={(event) => {
               const next = event.target.value as ThemeId;
               setTheme(next);
-              setLayers({ ...defaultLayers(next), provinces: true });
+              restyle(next);
             }}
           >
             {THEMES.map((id) => (
@@ -96,7 +106,7 @@ export function useRegionLevel(ctx: LevelContext, links: { openCity: (region: Pl
         <h2>{t("panel.layers")}</h2>
         {LAYERS.map((id) => (
           <label key={id} className="check">
-            <input type="checkbox" checked={layers[id]} onChange={(event) => setLayers({ ...layers, [id]: event.target.checked })} />
+            <input type="checkbox" checked={layers[id]} onChange={(event) => toggle(id, event.target.checked)} />
             {t(`layer.${id}`)}
           </label>
         ))}

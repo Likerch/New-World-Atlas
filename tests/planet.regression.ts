@@ -246,6 +246,16 @@ test("a town moved to the sea becomes a port; a founded town is the size of its 
   assert.ok(!camp.walls && !camp.citadel && !camp.market, "and has no walls, citadel or market");
 });
 
+test("the map names its continents, keys every heat map shown and speaks the reader's units", () => {
+  const svg = renderPlanet(planet, { layers: { landmasses: true, temperature: true, precipitation: true }, words: { km: "км" } });
+  const land = planet.features.find((f) => f.land && f.name && f.cells >= 30)!;
+  assert.ok(svg.includes(`>${land.name.toUpperCase()}<`), "a continent is named");
+  assert.ok(svg.includes(">°C<") && svg.includes(">mm<"), "both heat maps have their key");
+  assert.match(svg, /\d+ км</u);
+  const whole = generatePlanet({ seed: "regression", cells: 3000, width: 2000, height: 1000, latitudeNorth: 90, latitudeSouth: -90 });
+  assert.match(renderPlanet(whole, { words: { atEquator: "на экваторе" } }), /на экваторе/u, "a world map's scale holds at the equator");
+});
+
 test("the world's age reshapes towns, realms, roads, places, armies and banners, and the medieval age is the classic world", () => {
   const classic = generatePlanet({ seed: "regression", template: "continents", cells: 6000, setting: SETTINGS.medieval });
   assert.equal(JSON.stringify(planetToJson({ ...classic, params: planet.params })), JSON.stringify(planetToJson(planet)), "the medieval preset changes nothing");

@@ -241,7 +241,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     openLocal: (made, marker) => openLocal(planet, localFromMarker(made, marker), `marker:${marker}`),
     openRegion: (made, province) => {
       linkTo("region", planet, `province:${province}`, null);
-      region.open(made, province);
+      region.open(made, province, planet.theme);
     },
     openUnderworld: (made) => {
       linkTo("underworld", planet, "underworld", null);
@@ -249,7 +249,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     },
     openCountry: (made, state) => {
       linkTo("region", planet, `state:${state}`, null);
-      region.openCountry(made, state);
+      region.openCountry(made, state, planet.theme);
     },
     back: back("planet"),
   });
@@ -448,18 +448,22 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
               </button>
             ))}
         </nav>
-        <label className="seed">
-          {t("field.seed")}
-          <input value={level.seed} readOnly={!isTop} title={isTop ? t("seed.copy") : t("worlds.seedDerived")} onChange={(event) => level.setSeed(event.target.value)} onKeyDown={(event) => event.key === "Enter" && isTop && generate()} />
-        </label>
+        {level.fixed ? null : (
+          <label className="seed">
+            {t("field.seed")}
+            <input value={level.seed} readOnly={!isTop} title={isTop ? t("seed.copy") : t("worlds.seedDerived")} onChange={(event) => level.setSeed(event.target.value)} onKeyDown={(event) => event.key === "Enter" && isTop && generate()} />
+          </label>
+        )}
         {isTop ? (
           <button type="button" onClick={() => generate(randomSeed())} title={t("action.random")}>
             🎲
           </button>
         ) : null}
-        <button type="button" className="primary" onClick={() => generate()} disabled={busy || (!isTop && !map)}>
-          {t("action.generate")}
-        </button>
+        {level.fixed ? null : (
+          <button type="button" className="primary" onClick={() => generate()} disabled={busy || (!isTop && !map)}>
+            {t("action.generate")}
+          </button>
+        )}
         <span className="grow" />
         {worlds.saveFailed ? <span className="warning" title={t("worlds.saveFailedHint")}>⚠ {t("worlds.saveFailed")}</span> : null}
         <select value={script} aria-label={t("field.script")} onChange={(event) => worlds.update((current) => ({ ...current, script: event.target.value as "latin" | "cyrillic", updated: Date.now() }))}>
