@@ -10,7 +10,9 @@
 // - the game master may override any of them on a map, and the override reaches that map's descendants (a city
 //   shown in another age opens its houses in that age).
 // When a parent changes, its children are derived afresh on the next visit and their overrides laid back on top.
+import { buildingParams } from "./building/plan";
 import { cleanPatch, type MapPatch } from "./campaign";
+import { cityParams } from "./city/generate";
 import type { Page } from "./handbook";
 import type { Language } from "./language";
 import { localParams } from "./local/local";
@@ -165,18 +167,27 @@ export function resolve(world: WorldDoc, key: string, derived: Record<string, un
 }
 
 /** What each kind of map grows from besides its seed. Settings that do not reshape it stay out of its key: its name,
- * the world it is part of, the age the whole world shares, the GM's own kinds of thing, a dungeon's danger. */
+ * the world it is part of, the age the whole world shares, the GM's own kinds of thing, a dungeon's danger, a house's
+ * address and owner. A town's age, size, coast or walls, a house's type, size or floors do reshape it: the same seed
+ * grown so is another map, with notes and edits of its own. */
 const SHAPED: Partial<Record<MapLevel, [(seed: string) => object, string[]]>> = {
   planet: [(seed) => planetParams({ seed }), ["setting"]],
   local: [(seed) => localParams({ seed }), ["danger", "boss", "levels", "age"]],
   galaxy: [(seed) => galaxyParams({ seed }), ["custom"]],
   universe: [(seed) => universeParams({ seed }), ["custom"]],
+  city: [(seed) => cityParams({ seed }), ["custom"]],
+  building: [(seed) => buildingParams({ seed }), ["street", "house", "owner"]],
 };
 
-/** What a key leaves out of the parameters it prints: names handed down (a gate's far galaxy, a far power), which the
- * GM may rename without the map becoming another. */
+/** What a key leaves out of the parameters it prints: names handed down (a gate's far galaxy, a far power, the towns a
+ * city's roads lead to, its church and god, the name of the GM's own kind of house), which the GM may rename without
+ * the map becoming another. */
 const unnamed = (level: MapLevel, field: string, value: unknown): unknown => {
-  if (level !== "galaxy" || field !== "origin" || !value || typeof value !== "object") return value;
+  if (!value || typeof value !== "object") return value;
+  if (level === "city" && field === "roads" && Array.isArray(value)) return value.map((road: Record<string, unknown>) => ({ ...road, to: undefined }));
+  if (level === "city" && field === "faith") return { ...value, name: undefined, deity: undefined };
+  if (level === "building" && field === "customType") return { ...value, name: undefined, description: undefined };
+  if (level !== "galaxy" || field !== "origin") return value;
   const origin = value as { gate?: unknown; power?: Record<string, unknown> };
   return { ...origin, ...(origin.gate !== undefined ? { gate: true } : {}), ...(origin.power ? { power: { ...origin.power, name: undefined } } : {}) };
 };
@@ -231,12 +242,15 @@ export function rekey(world: WorldDoc): WorldDoc {
   if (sites) world = { ...world, maps: steps };
   if (!moves.size) return world;
   // Keys derived from a moved one follow it: its underworld (`underworld:<body>/…`), a room's scene
-  // (`local:<body>/room-4`), its handbook pages (`<key>|<entity>`).
+  // (`local:<body>/room-4`), a quarter of a city up close (`city:<body>/ward-3`), a floor's or a room's sheet of a house
+  // (`<key>#floor-1`), its handbook pages (`<key>|<entity>`, the entity too when it names a close-up's thing).
   const bodies = [...moves].map(([from, next]) => [from.slice(0, from.indexOf(":")), from.slice(from.indexOf(":") + 1), next.slice(next.indexOf(":") + 1)] as const);
   const derived = (key: string): string => {
     if (moves.has(key)) return moves.get(key)!;
     const bar = key.indexOf("|");
-    if (bar > 0 && moves.has(key.slice(0, bar))) return `${moves.get(key.slice(0, bar))}${key.slice(bar)}`;
+    if (bar > 0) return `${derived(key.slice(0, bar))}|${derived(key.slice(bar + 1))}`;
+    const sheet = key.indexOf("#");
+    if (sheet > 0) return `${derived(key.slice(0, sheet))}${key.slice(sheet)}`;
     const colon = key.indexOf(":");
     const body = key.slice(colon + 1);
     // Only keys made from the moved key itself (a city's is made from its planet's seed alone, and stays).
@@ -252,7 +266,7 @@ export function rekey(world: WorldDoc): WorldDoc {
     if (next === key || !world.patches[next]) patches[next] = patch;
     else patches[key] = patch;
   }
-  const pages = world.pages ? Object.fromEntries(Object.entries(world.pages).map(([key, page]) => [to(key)!, { ...page, map: to(page.map)! }])) : undefined;
+  const pages = world.pages ? Object.fromEntries(Object.entries(world.pages).map(([key, page]) => [to(key)!, { ...page, map: to(page.map)!, entity: derived(page.entity) }])) : undefined;
   const byLevel = Object.fromEntries(Object.entries(world.last.byLevel).map(([level, key]) => [level, to(key ?? null)]));
   return { ...world, maps, patches, ...(pages ? { pages } : {}), last: { key: to(world.last.key), byLevel } };
 }

@@ -94,6 +94,18 @@ test("a town opened from a region is the town opened from the planet; a hamlet s
   assert.equal(generateCity(fromRegion.params, fromRegion.language).name, generateCity(fromPlanet.params, fromPlanet.language).name);
   const hamlet = region.burgs.slice(1).find((burg) => burg.origin === undefined && burg.population < 0.5);
   if (hamlet) assert.ok(cityFromBurg(region, hamlet.id, "medieval").params.population < 0.5, "a hamlet opened as a town");
+  // Every town of the planet is exactly the planet's city from the region, in its own age or another: coast, river,
+  // roads, faith and land as the planet has them.
+  const country = generateCountry(planet, town.state, 4000);
+  for (const close of [region, country])
+    for (const copy of close.burgs.filter((burg) => burg.origin !== undefined))
+      for (const era of [undefined, "industrial"] as const) assert.deepEqual(cityFromBurg(close, copy.id, era).params, cityFromBurg(planet, copy.origin!, era).params, `${copy.name} is another city from ${close.params.seed}`);
+  // A close-up's own village is keyed under the close-up, never as the planet's town of the same number.
+  const towns = new Set(planet.burgs.filter((burg) => burg.id && !burg.removed).map((burg) => cityFromBurg(planet, burg.id).params.seed));
+  for (const village of region.burgs.filter((burg) => burg.id && burg.origin === undefined)) {
+    const seed = cityFromBurg(region, village.id).params.seed;
+    assert.ok(seed.startsWith(`${region.params.seed}/`) && !towns.has(seed), `${village.name} wears a planet town's key`);
+  }
 });
 
 test("a close-up counts airports and airways by the realms in its frame", () => {

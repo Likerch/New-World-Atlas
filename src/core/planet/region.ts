@@ -18,6 +18,7 @@ import { evaporationOf, SEA_LEVEL, type Burg, type Ground, type Planet } from ".
 import { hydrology } from "./rivers";
 import { buildRoutes } from "./routes";
 import { carveRivers, fiefsOf, landformsOf, landUseOf, planetRoads, rankVillages } from "./countryside";
+import { townSite } from "../city/generate";
 import { cellKm2 } from "./geo";
 
 export function generateRegion(planet: Planet, provinceId: number, cells?: number): Planet {
@@ -180,7 +181,8 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
     }
     if (water[cell] || burg[cell]) continue;
     const id = burgs.length;
-    burgs.push({ ...town, id, cell, x, y, origin: town.origin ?? town.id });
+    // The town keeps the coast, river, roads, faith and land it has on the planet: its city is the planet's city.
+    burgs.push({ ...town, id, cell, x, y, origin: town.origin ?? town.id, site: town.site ?? townSite(planet, town.id) });
     burg[cell] = id;
   }
   const scores = new Float32Array(n);

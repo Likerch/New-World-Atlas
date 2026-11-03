@@ -1,6 +1,6 @@
 // Worlds: the tree of maps, parameters handed down with the GM's overrides on top, names flowing up. Run with `npm test`.
 import assert from "node:assert/strict";
-import { GENERATOR, generateRegion, generateGalaxy, generateLocal, planetToJson, hashString, emptyPage, handbookMarkdown, markdown, pageKey, searchWorld, mergeWorlds, mapKeyOf, rekey, planetParams, generateUniverse, renameUniverse, generateUnderworld, renameUnderworld, generateDistrict, buildingFromCity, cityFromBurg, emptyPatch, emptyWorld, generateCity, generatePlanet, levelsOf, nameUp, overridesOf, pathTo, readWorld, resolve, rootOf, settingAt, SETTINGS, visit, type WorldDoc } from "../src/core/index";
+import { GENERATOR, generateRegion, generateGalaxy, generateLocal, planetToJson, hashString, emptyPage, handbookMarkdown, markdown, pageKey, searchWorld, mergeWorlds, mapKeyOf, rekey, planetParams, generateUniverse, renameUniverse, generateUnderworld, renameUnderworld, generateDistrict, buildingFromCity, cityFromBurg, cityParams, generateBuilding, emptyPatch, emptyWorld, generateCity, generatePlanet, levelsOf, nameUp, overridesOf, pathTo, readWorld, resolve, rootOf, settingAt, SETTINGS, visit, type WorldDoc } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -18,11 +18,12 @@ const burg = planet.burgs.find((b) => b.id && !b.removed)!;
 const city = cityFromBurg(planet, burg.id);
 const asRecord = (value: unknown) => value as Record<string, unknown>;
 const PLANET = mapKeyOf("planet", asRecord(planet.params));
+const CITY = mapKeyOf("city", asRecord(city.params));
 
 function planetWorld(): WorldDoc {
   let world = emptyWorld({ id: "w1", name: "Test", top: "planet", now: 1 });
   world = visit(world, PLANET, { level: "planet", parent: null, step: null, title: planet.name, base: null, params: asRecord(planet.params) }, 2);
-  world = visit(world, `city:${city.params.seed}`, { level: "city", parent: PLANET, step: { entity: `burg:${burg.id}` }, title: burg.name, base: asRecord(city.params), params: asRecord(city.params), language: city.language }, 3);
+  world = visit(world, CITY, { level: "city", parent: PLANET, step: { entity: `burg:${burg.id}` }, title: burg.name, base: asRecord(city.params), params: asRecord(city.params), language: city.language }, 3);
   return world;
 }
 
@@ -39,13 +40,13 @@ test("a world shows its top map and everything reachable below it, nothing above
 test("maps hang in a tree from the top; the path down is the breadcrumb", () => {
   const world = planetWorld();
   assert.equal(rootOf(world)![0], PLANET);
-  assert.deepEqual(pathTo(world, `city:${city.params.seed}`).map(([key]) => key), [PLANET, `city:${city.params.seed}`]);
-  assert.equal(world.last.byLevel.city, `city:${city.params.seed}`);
+  assert.deepEqual(pathTo(world, CITY).map(([key]) => key), [PLANET, CITY]);
+  assert.equal(world.last.byLevel.city, CITY);
 });
 
 test("the GM's overrides survive a new hand-down from the parent and reach the map's children", () => {
   let world = planetWorld();
-  const key = `city:${city.params.seed}`;
+  const key = CITY;
   // The GM shows the city in another age.
   world = visit(world, key, { level: "city", parent: null, step: null, title: burg.name, base: null, params: { ...asRecord(city.params), era: "industrial" } }, 4);
   assert.deepEqual(overridesOf(world.maps[key]), { era: "industrial" });
@@ -77,7 +78,7 @@ test("a new top map makes a new world: the maps under the old one go", () => {
 
 test("a map's new name names the thing it was opened from on the parent map", () => {
   const world = planetWorld();
-  const key = `city:${city.params.seed}`;
+  const key = CITY;
   const renamed = { ...world, patches: { ...world.patches, [key]: { ...emptyPatch(), names: { world: "Newport" } } } };
   assert.equal(nameUp(renamed, key, undefined).patches[PLANET].names[`burg:${burg.id}`], "Newport");
 });
@@ -112,6 +113,45 @@ test("the same seed grown another way keys its own notes; old worlds move to the
   assert.equal(moved.last.byLevel.city, "city:keyed/burg-3");
   assert.equal(rekey(moved), moved, "a moved world stays put");
   assert.deepEqual(resolve(moved, "planet:keyed", { seed: "keyed" }), { seed: "keyed" }, "a top map has no overrides");
+});
+
+test("a town or a house grown another way keys its own notes; old worlds move them, their close-ups, sheets and pages", () => {
+  const own = cityParams({ seed: "town" });
+  assert.equal(mapKeyOf("city", asRecord(own)), "city:town", "a seed's own town keeps the plain key");
+  const other = mapKeyOf("city", asRecord({ ...own, era: own.era === "medieval" ? "industrial" : "medieval" }));
+  assert.match(other, /^city:town~/u, "another age is another town");
+  assert.notEqual(mapKeyOf("city", asRecord({ ...own, population: own.population * 2 })), "city:town", "so is another size");
+  assert.equal(mapKeyOf("city", asRecord({ ...own, name: "Elsewhere", custom: { wards: [], places: [] } })), "city:town", "a name or the GM's kinds are not");
+  const town = cityFromBurg(planet, burg.id).params;
+  const renamed = { ...town, roads: (town.roads ?? []).map((road) => ({ ...road, to: "Renamed" })), ...(town.faith ? { faith: { ...town.faith, name: "Renamed", deity: "Renamed" } } : {}) };
+  assert.equal(mapKeyOf("city", asRecord(renamed)), CITY, "renaming the towns a road leads to, or the church, keeps the town's key");
+  const house = generateBuilding({ seed: "house", type: "manor" }).params;
+  const BUILDING = mapKeyOf("building", asRecord(house));
+  assert.equal(mapKeyOf("building", asRecord({ ...house, name: "Hall", street: "Elm", house: 3, owner: { key: "k", role: "noble" } })), BUILDING, "an address or an owner is not another house");
+  assert.notEqual(mapKeyOf("building", asRecord({ ...house, floors: house.floors + 1 })), BUILDING, "another floor is");
+
+  // A world saved when towns and houses were keyed by their seeds alone.
+  const params = asRecord(town);
+  let world = emptyWorld({ id: "w4", name: "Old towns", top: "planet", now: 1 });
+  world = visit(world, PLANET, { level: "planet", parent: null, step: null, title: "P", base: null, params: asRecord(planet.params) }, 2);
+  world = visit(world, `city:${town.seed}`, { level: "city", parent: PLANET, step: { entity: `burg:${burg.id}` }, title: "T", base: params, params }, 3);
+  world = visit(world, `building:${house.seed}`, { level: "building", parent: `city:${town.seed}`, step: { entity: "building:5" }, title: "H", base: asRecord(house), params: asRecord(house) }, 4);
+  world = {
+    ...world,
+    patches: { [`city:${town.seed}`]: { ...emptyPatch(), names: { "ward:2": "Old Quay" } }, [`city:${town.seed}/ward-2`]: { ...emptyPatch(), notes: { "building:block-0-1": "a forger" } }, [`building:${house.seed}#floor-1`]: { ...emptyPatch(), notes: { "room:1:2": "a ghost" } }, [`building:${house.seed}`]: { ...emptyPatch(), names: { world: "Hall" } } },
+    pages: { [`city:${town.seed}|city:${town.seed}/ward-2/building:block-0-1`]: { ...emptyPage(`city:${town.seed}`, `city:${town.seed}/ward-2/building:block-0-1`, "Forge"), text: "Coins" } },
+  };
+  const moved = rekey(world);
+  assert.ok(moved.maps[CITY] && !moved.maps[`city:${town.seed}`], "the town moved to its printed key");
+  assert.equal(moved.maps[BUILDING]?.parent, CITY, "and the house under it, hanging from it");
+  assert.equal(moved.patches[CITY].names["ward:2"], "Old Quay");
+  assert.equal(moved.patches[`${CITY}/ward-2`]?.notes["building:block-0-1"], "a forger", "a quarter up close follows its town");
+  assert.equal(moved.patches[`${BUILDING}#floor-1`]?.notes["room:1:2"], "a ghost", "a floor's sheet follows its house");
+  assert.equal(moved.patches[BUILDING].names.world, "Hall");
+  const page = moved.pages![`${CITY}|${CITY}/ward-2/building:block-0-1`];
+  assert.equal(page?.text, "Coins", "a page on a close-up's house follows its town");
+  assert.equal(page.entity, `${CITY}/ward-2/building:block-0-1`);
+  assert.equal(rekey(moved), moved, "a moved world stays put");
 });
 
 test("a link meets again the child it opened last, whatever its key's print", () => {
@@ -158,7 +198,7 @@ test("two copies of one world merge: names and notes of both, pins of both, fog 
 
 test("a place has one handbook page at every scale; pages are safe Markdown, found by the search", () => {
   const world = planetWorld();
-  const cityKey = `city:${city.params.seed}`;
+  const cityKey = CITY;
   assert.equal(pageKey(world, cityKey, "world"), `${PLANET}|burg:${burg.id}`, "a city's page is its town's page on the planet");
   assert.equal(pageKey(world, cityKey, "ward:3"), `${cityKey}|ward:3`);
   const html = markdown(["# Port", "The **old** quay, see [[Harbour Gate]].", "- <script>alert(1)</script>"].join("\n"));
@@ -178,7 +218,7 @@ test("a place has one handbook page at every scale; pages are safe Markdown, fou
 test("golden prints: the generator draws the same maps until its version says otherwise", () => {
   // A change to what the generator draws must come with a new GENERATOR (the app then tells the GM the old maps were
   // made by an older one) and new prints here.
-  const golden = { generator: "2026.11.3", planet: 572519043, region: 81653941, galaxy: 2739417600, local: 4248020585 };
+  const golden = { generator: "2026.11.3", planet: 572519043, region: 3247591320, galaxy: 2739417600, local: 4248020585 };
   const planet = generatePlanet({ seed: "golden", template: "continents", cells: 4000 });
   const region = generateRegion(planet, planet.provinces.slice(1).sort((a, b) => b.cells - a.cells)[0].id, 4000);
   const galaxy = generateGalaxy({ seed: "golden" });

@@ -22,6 +22,7 @@ import {
   generateRoom,
   localFromHatch,
   localFromCellar,
+  mapKeyOf,
   materialOf,
   neighbours,
   PX,
@@ -78,7 +79,8 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null, o
     });
   };
   const set = <K extends keyof BuildingParams>(key: K, value: BuildingParams[K]) => setInput((current) => ({ ...current, [key]: value }));
-  const mapKey = raw ? `building:${raw.params.seed}` : null;
+  // A house's key: its seed and a print of what it was built as (another type, size or floors is another plan).
+  const mapKey = raw ? mapKeyOf("building", raw.params as unknown as Record<string, unknown>) : null;
   const patch = ctx.patch(mapKey);
   const edits = (patch.changes?.building ?? null) as BuildingEdits | null;
   const setEdits = (change: (edits: BuildingEdits) => BuildingEdits) => ctx.update(mapKey, (p) => ({ ...p, changes: { ...p.changes, building: change((p.changes?.building ?? {}) as BuildingEdits) } }));
@@ -162,7 +164,11 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null, o
     selected: !plan || !current ? null : room !== null ? { key: `room:${current.level}:${room}`, label: roomLabel(room, current.rooms.find((r) => r.id === room)?.kind) } : { key: "world", label: plan.params.name || typeName(plan.params.type, plan.params) },
     seed: input.seed,
     setSeed: (seed) => set("seed", seed),
-    generate: (seed) => build(seed ? { ...input, seed } : input),
+    generate: (seed) => {
+      const next = seed ? { ...input, seed } : input;
+      // The same house built another way is another map: the maps opened from it go, so the GM is asked first.
+      if (!raw || next.seed !== raw.params.seed || ctx.regrow(mapKey, mapKeyOf("building", generateBuilding(next).params as unknown as Record<string, unknown>))) build(next);
+    },
     ensure: () => {
       // Only when nothing is on its way: an opened building or city must not be replaced by a fresh one.
       if (!plan && !pending.current) build(input);

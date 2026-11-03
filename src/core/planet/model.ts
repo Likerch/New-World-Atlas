@@ -1,6 +1,7 @@
 // The planet level's data: a world map of thousands of Voronoi cells with relief, climate, water, life and peoples.
 // Index 0 of every entity list is a placeholder for "none" (open sea, wild lands, no culture), so typed arrays can
 // hold ids directly.
+import type { CityFaith, CityRoad } from "../city/model";
 import type { Point } from "../geometry";
 import type { Language } from "../language";
 import type { Mesh } from "../mesh";
@@ -129,6 +130,9 @@ export interface Burg {
   removed?: boolean;
   /** In a close-up: a village or a hamlet rather than one of the planet's towns. */
   tier?: "village" | "hamlet";
+  /** In a close-up, one of the planet's towns: what its city takes from where it stands on the planet, so it opens as
+   * the same city from either map. */
+  site?: TownSite;
   /** Thousands of people. */
   population: number;
   walls: boolean;
@@ -137,6 +141,16 @@ export interface Burg {
   market: boolean;
   shanty: boolean;
   kind: CultureKind;
+}
+
+/** What a town's city takes from the map round it: the way to the sea and the way the river runs (radians, null for
+ * none), the roads of the world leaving it, the faith of its land, and its biome. */
+export interface TownSite {
+  coast: number | null;
+  river: number | null;
+  roads: CityRoad[];
+  faith?: CityFaith;
+  biome?: string;
 }
 
 export type StateForm = "monarchy" | "republic" | "theocracy" | "union" | "tribal" | "horde" | "free-city" | "magocracy" | "dictatorship" | "corporate" | "machine" | "colony" | "warlord";
