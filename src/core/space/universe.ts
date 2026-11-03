@@ -1,12 +1,32 @@
 // The universe at the largest scale: galaxies strung along the walls of great voids — the cosmic web — gathered into
-// superclusters, joined by filaments. Each galaxy opens as a galaxy of its own shape.
+// superclusters, joined by filaments. Each galaxy opens as a galaxy of its own shape. Among them, the strange: great
+// attractors, cosmic strings, lensing rings, white holes, dark flows, relics of whoever came first; and the game
+// master's own kinds of thing.
 import Delaunator from "delaunator";
 import { paletteColor } from "../color";
 import { createLanguage, name } from "../language";
 import { createRng, randomSeed } from "../random";
+import { cleanKind, type CustomKind } from "./custom";
 import type { GalaxyShape } from "./galaxy";
 
-export type GalaxyKind = "spiral" | "barred" | "elliptical" | "ring" | "irregular" | "dwarf" | "quasar";
+export type GalaxyKind = "spiral" | "barred" | "elliptical" | "ring" | "irregular" | "dwarf" | "quasar" | "lenticular" | "starburst" | "colliding" | "ghost";
+
+export type AnomalyKind = "great-attractor" | "cosmic-string" | "lens" | "white-hole" | "dark-flow" | "relic" | "supermassive" | "bubble-wall";
+export const ANOMALY_KINDS: AnomalyKind[] = ["great-attractor", "cosmic-string", "lens", "white-hole", "dark-flow", "relic", "supermassive", "bubble-wall"];
+
+export interface Anomaly {
+  id: number;
+  /** A built-in kind, or "custom" with the game master's kind id. */
+  kind: AnomalyKind | "custom";
+  custom?: string;
+  x: number;
+  y: number;
+  /** Direction (a string's line, a flow's heading), radians. */
+  angle: number;
+  /** Reach in map units. */
+  size: number;
+  name: string;
+}
 
 export interface GalaxyNode {
   id: number;
@@ -39,6 +59,10 @@ export interface UniverseParams {
   galaxies: number;
   width: number;
   height: number;
+  /** How much strangeness: 0 none, 1 the usual, up to 3. */
+  anomalies: number;
+  /** The game master's own kinds of thing. */
+  custom: CustomKind[];
 }
 
 export interface Universe {
@@ -48,15 +72,16 @@ export interface Universe {
   filaments: [number, number][];
   clusters: Supercluster[];
   voids: Void[];
+  anomalies: Anomaly[];
 }
 
 export function universeParams(input: Partial<UniverseParams> = {}): UniverseParams {
-  return { seed: input.seed || randomSeed(), galaxies: input.galaxies ?? 320, width: 1600, height: 1000, ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined && v !== "")) };
+  return { seed: input.seed || randomSeed(), galaxies: input.galaxies ?? 320, width: 1600, height: 1000, anomalies: 1, custom: [], ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined && v !== "")) };
 }
 
 /** The galaxy-map shape a galaxy of a kind is drawn with. */
 export function shapeOf(kind: GalaxyKind): GalaxyShape {
-  return kind === "barred" ? "barred" : kind === "elliptical" || kind === "dwarf" || kind === "quasar" ? "elliptical" : kind === "ring" ? "ring" : kind === "irregular" ? "clusters" : "spiral";
+  return kind === "barred" ? "barred" : kind === "elliptical" || kind === "dwarf" || kind === "quasar" || kind === "lenticular" || kind === "ghost" ? "elliptical" : kind === "ring" ? "ring" : kind === "irregular" || kind === "starburst" || kind === "colliding" ? "clusters" : "spiral";
 }
 
 export function generateUniverse(input: Partial<UniverseParams> = {}): Universe {
@@ -110,5 +135,54 @@ export function generateUniverse(input: Partial<UniverseParams> = {}): Universe 
       filaments.push([a, b]);
     }
   }
-  return { params, name: name(tongue, rng.fork("name"), "land"), galaxies, filaments, clusters, voids };
+  // Rarer kinds of galaxy, from a stream of their own so the old ones keep their kinds.
+  const strange = Math.max(0, Math.min(3, params.anomalies));
+  const odd = rng.fork("odd-galaxies");
+  for (const g of galaxies) {
+    if (!odd.chance(0.1 * strange)) continue;
+    g.kind = g.kind === "elliptical" ? "lenticular" : g.kind === "dwarf" ? "ghost" : g.kind === "irregular" ? "starburst" : odd.pick<GalaxyKind>(["lenticular", "starburst", "colliding", "colliding"]);
+    if (g.kind === "ghost") g.civilisations = 0;
+  }
+  // The strange: anywhere but deep in a void, except what belongs to the voids.
+  const weird = rng.fork("anomalies");
+  const anomalies: Anomaly[] = [];
+  const spot = (where: "anywhere" | "core" | "rim" | "void" | "filament") => {
+    for (let attempt = 0; attempt < 200; attempt++) {
+      if (where === "void" && voids.length) {
+        const v = weird.pick(voids);
+        const angle = weird.float(0, Math.PI * 2),
+          r = weird.float(0, v.r * 0.6);
+        return [v.x + Math.cos(angle) * r, v.y + Math.sin(angle) * r] as const;
+      }
+      if (where === "filament" && filaments.length) {
+        const [a, b] = weird.pick(filaments);
+        const t = weird.next();
+        return [galaxies[a].x + (galaxies[b].x - galaxies[a].x) * t, galaxies[a].y + (galaxies[b].y - galaxies[a].y) * t] as const;
+      }
+      const x = weird.float(40, W - 40),
+        y = weird.float(40, H - 40);
+      const d = Math.hypot(x - W / 2, y - H / 2) / (Math.min(W, H) / 2);
+      if (where === "core" && d > 0.45) continue;
+      if (where === "rim" && d < 0.75) continue;
+      if (where === "anywhere" && inside(x, y)) continue;
+      return [x, y] as const;
+    }
+    return [weird.float(40, W - 40), weird.float(40, H - 40)] as const;
+  };
+  const WHERE: Record<AnomalyKind, "anywhere" | "void" | "filament"> = { "great-attractor": "anywhere", "cosmic-string": "anywhere", lens: "filament", "white-hole": "void", "dark-flow": "anywhere", relic: "filament", supermassive: "filament", "bubble-wall": "anywhere" };
+  for (let k = Math.round(weird.int(5, 9) * strange); k > 0; k--) {
+    const kind = weird.weighted<AnomalyKind>([["great-attractor", 1], ["cosmic-string", 2], ["lens", 3], ["white-hole", 1], ["dark-flow", 1.5], ["relic", 2], ["supermassive", 2], ["bubble-wall", 1]]);
+    const [x, y] = spot(WHERE[kind]);
+    const size = kind === "cosmic-string" ? weird.float(180, 420) : kind === "great-attractor" ? weird.float(70, 130) : kind === "bubble-wall" ? weird.float(160, 320) : kind === "dark-flow" ? weird.float(60, 110) : weird.float(8, 18);
+    anomalies.push({ id: anomalies.length, kind, x, y, angle: weird.float(0, Math.PI * 2), size, name: name(tongue, weird, "plain") });
+  }
+  (params.custom ?? []).map(cleanKind).forEach((kind) => {
+    const own = rng.fork(`custom-${kind.id}`);
+    const where = kind.where === "claimed" || kind.where === "unclaimed" || kind.where === "nebula" ? "anywhere" : kind.where;
+    for (let k = 0; k < kind.count; k++) {
+      const [x, y] = spot(where);
+      anomalies.push({ id: anomalies.length, kind: "custom", custom: kind.id, x, y, angle: own.float(0, Math.PI * 2), size: kind.area ? own.float(40, 90) : own.float(8, 14), name: kind.name || name(tongue, own, "plain") });
+    }
+  });
+  return { params, name: name(tongue, rng.fork("name"), "land"), galaxies, filaments, clusters, voids, anomalies };
 }

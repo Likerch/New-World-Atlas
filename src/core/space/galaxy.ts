@@ -1,12 +1,15 @@
 // Galaxies: stars laid out as spirals, bars, ellipses, rings or clusters; spectral classes in real proportions;
 // hyperlanes between neighbours (always one connected network), wormholes between far stars, nebulae, interstellar
-// powers that spread along the lanes, and points of interest for a game master.
+// powers that spread along the lanes, and points of interest for a game master: ruins and stations, megastructures,
+// graveyards of ships and things that live between the stars; regions of trouble (ion storms, dead zones, rifts);
+// and whatever kinds of thing the game master invents.
 import Delaunator from "delaunator";
 import { paletteColor } from "../color";
 import type { Point } from "../geometry";
 import { createLanguage, name, type Language } from "../language";
 import { PriorityQueue } from "../queue";
 import { createRng, randomSeed, type Rng } from "../random";
+import { cleanKind, type CustomKind } from "./custom";
 
 export type GalaxyShape = "spiral" | "barred" | "elliptical" | "ring" | "clusters";
 export const GALAXY_SHAPES: GalaxyShape[] = ["spiral", "barred", "elliptical", "ring", "clusters"];
@@ -27,7 +30,47 @@ export const SPECTRA: Record<SpectralClass, { weight: number; color: string; lum
 };
 
 export type EmpireForm = "empire" | "republic" | "hegemony" | "collective" | "union" | "dominion" | "consortium" | "federation" | "theocracy";
-export type SpaceFeature = "ruins" | "station" | "anomaly" | "derelict" | "pirate-base" | "relay" | "shipyard" | "research" | "quarantine" | "wormhole";
+export type SpaceFeature =
+  | "ruins"
+  | "station"
+  | "anomaly"
+  | "derelict"
+  | "pirate-base"
+  | "relay"
+  | "shipyard"
+  | "research"
+  | "quarantine"
+  | "wormhole"
+  | "dyson-sphere"
+  | "ringworld"
+  | "jump-gate"
+  | "graveyard"
+  | "leviathan"
+  | "time-rift"
+  | "rogue-planet"
+  | "vault"
+  | "trade-hub"
+  | "mining"
+  | "prison"
+  | "beacon";
+
+/** Regions of trouble or wonder between the stars. */
+export type ZoneKind = "ion-storm" | "dead-zone" | "dark-nebula" | "radiation-belt" | "asteroid-field" | "gravity-rift" | "crystal-field" | "plasma-sea";
+export const ZONE_KINDS: ZoneKind[] = ["ion-storm", "dead-zone", "dark-nebula", "radiation-belt", "asteroid-field", "gravity-rift", "crystal-field", "plasma-sea"];
+
+export interface Zone {
+  id: number;
+  /** A built-in kind, or "custom" with the game master's kind id. */
+  kind: ZoneKind | "custom";
+  custom?: string;
+  x: number;
+  y: number;
+  r: number;
+  /** Turn and flattening of its ellipse. */
+  angle: number;
+  squash: number;
+  name: string;
+}
 
 export interface Star {
   id: number;
@@ -40,6 +83,8 @@ export interface Star {
   /** Inhabited by its owners (settled worlds). */
   settled: boolean;
   feature: SpaceFeature | null;
+  /** One of the game master's own kinds of thing found here. */
+  custom?: string;
 }
 
 export interface Empire {
@@ -69,6 +114,10 @@ export interface GalaxyParams {
   empires: number;
   width: number;
   height: number;
+  /** How much strangeness: 0 none, 1 the usual, up to 3. */
+  anomalies: number;
+  /** The game master's own kinds of thing. */
+  custom: CustomKind[];
 }
 
 export interface Galaxy {
@@ -79,6 +128,7 @@ export interface Galaxy {
   wormholes: [number, number][];
   empires: Empire[];
   nebulae: Nebula[];
+  zones: Zone[];
   /** Light years per map unit. */
   scale: number;
 }
@@ -97,9 +147,28 @@ export function galaxyParams(input: Partial<GalaxyParams> = {}): GalaxyParams {
     empires: rng.int(5, 10),
     width: 1600,
     height: 1000,
+    anomalies: 1,
+    custom: [],
     ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined && value !== "")),
   };
 }
+
+/** Wonders past the old points of interest: where each turns up, and how often. */
+const WONDERS: [SpaceFeature, number, (star: Star) => boolean][] = [
+  ["dyson-sphere", 1, (star) => ["O", "B", "A", "F", "G"].includes(star.spectral)],
+  ["ringworld", 0.6, (star) => ["F", "G", "K"].includes(star.spectral)],
+  ["jump-gate", 1.4, (star) => star.empire > 0],
+  ["graveyard", 1.5, () => true],
+  ["leviathan", 1, (star) => star.empire === 0],
+  ["time-rift", 0.7, () => true],
+  ["rogue-planet", 1.4, (star) => star.empire === 0],
+  ["vault", 0.8, () => true],
+  ["trade-hub", 1.6, (star) => star.empire > 0 && star.settled],
+  ["mining", 2, (star) => star.empire > 0],
+  ["prison", 0.9, (star) => star.empire > 0],
+  ["beacon", 1.2, () => true],
+];
+const ZONE_WEIGHTS: [ZoneKind, number][] = [["ion-storm", 3], ["dead-zone", 2], ["dark-nebula", 2], ["radiation-belt", 2], ["asteroid-field", 3], ["gravity-rift", 1], ["crystal-field", 1], ["plasma-sea", 1]];
 
 function place(params: GalaxyParams, rng: Rng): Point[] {
   const { width: W, height: H } = params;
@@ -241,7 +310,8 @@ export function generateGalaxy(input: Partial<GalaxyParams> = {}): Galaxy {
 
   // Points of interest, wormholes and nebulae.
   const features = rng.fork("features");
-  for (const star of stars) if (!star.capital && features.chance(0.08)) star.feature = features.weighted(FEATURES);
+  const strange = Math.max(0, Math.min(3, params.anomalies));
+  for (const star of stars) if (!star.capital && features.chance(0.08 * strange)) star.feature = features.weighted(FEATURES);
   const wormholes: [number, number][] = [];
   for (let k = features.int(1, 3); k > 0; k--) {
     const a = features.int(0, n - 1);
@@ -256,5 +326,34 @@ export function generateGalaxy(input: Partial<GalaxyParams> = {}): Galaxy {
     const star = features.pick(stars);
     return { x: star.x + features.float(-40, 40), y: star.y + features.float(-40, 40), r: features.float(40, 130), color: features.pick(["#ff4fa3", "#3fd6ff", "#7a5cff", "#ff8a3d", "#36e0a0"]), name: name(features.pick(tongues), features, "plain") };
   });
-  return { params, name: name(tongues[0], rng.fork("galaxy-name"), "land"), stars, lanes, wormholes, empires, nebulae, scale: 100_000 / Math.min(params.width, params.height) };
+  // Wonders and regions of trouble, each from a stream of its own, so the older features stay where they were.
+  const wonders = rng.fork("wonders");
+  for (const star of stars) {
+    if (star.capital || star.feature || !wonders.chance(0.035 * strange)) continue;
+    const options = WONDERS.filter(([, , fits]) => fits(star));
+    if (options.length) star.feature = wonders.weighted(options.map(([kind, weight]): [SpaceFeature, number] => [kind, weight]));
+  }
+  const zoneRng = rng.fork("zones");
+  const zones: Zone[] = [];
+  for (let k = Math.round(zoneRng.int(3, 7) * strange); k > 0; k--) {
+    const star = zoneRng.pick(stars);
+    zones.push({ id: zones.length, kind: zoneRng.weighted(ZONE_WEIGHTS), x: star.x + zoneRng.float(-20, 20), y: star.y + zoneRng.float(-20, 20), r: zoneRng.float(30, 95), angle: zoneRng.float(0, Math.PI), squash: zoneRng.float(0.45, 1), name: name(zoneRng.pick(tongues), zoneRng, "plain") });
+  }
+  // The game master's own kinds: points at fitting stars, or regions round them.
+  const cx = params.width / 2,
+    cy = params.height / 2;
+  const R = Math.min(params.width, params.height) * 0.46;
+  (params.custom ?? []).map(cleanKind).forEach((kind) => {
+    const own = rng.fork(`custom-${kind.id}`);
+    const fits = (star: Star) => {
+      const d = Math.hypot(star.x - cx, star.y - cy) / R;
+      return kind.where === "claimed" ? star.empire > 0 : kind.where === "unclaimed" ? star.empire === 0 : kind.where === "core" ? d < 0.35 : kind.where === "rim" ? d > 0.7 : kind.where === "nebula" ? nebulae.some((n) => Math.hypot(n.x - star.x, n.y - star.y) < n.r) : true;
+    };
+    const options = own.shuffle(stars.filter((star) => fits(star) && !star.capital));
+    for (const star of options.slice(0, kind.count)) {
+      if (kind.area) zones.push({ id: zones.length, kind: "custom", custom: kind.id, x: star.x, y: star.y, r: own.float(35, 80), angle: own.float(0, Math.PI), squash: own.float(0.55, 1), name: kind.name || name(own.pick(tongues), own, "plain") });
+      else star.custom = kind.id;
+    }
+  });
+  return { params, name: name(tongues[0], rng.fork("galaxy-name"), "land"), stars, lanes, wormholes, empires, nebulae, zones, scale: 100_000 / Math.min(params.width, params.height) };
 }

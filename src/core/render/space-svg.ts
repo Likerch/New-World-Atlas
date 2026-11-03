@@ -1,22 +1,119 @@
-// Space maps. The galaxy: nebulae, territories of the powers (their stars' Voronoi cells, bordered where powers
-// meet), hyperlanes, wormholes, glowing stars by class, names. A star system: the star, orbits, the habitable zone
-// and the frost line, worlds drawn by kind with bands, rings and moons.
+// Space maps. The galaxy: nebulae, regions of trouble, territories of the powers (their stars' Voronoi cells,
+// bordered where powers meet), hyperlanes, wormholes, glowing stars by class, points of interest, names. A star
+// system: the star, orbits, the habitable zone and the frost line, worlds drawn by kind with bands, rings and moons.
+// The universe: voids, filaments, galaxies by kind and the strange things among them.
 import type { Point } from "../geometry";
 import { toCyrillic } from "../language";
-import { SPECTRA, type Galaxy, type SpaceFeature } from "../space/galaxy";
+import type { CustomKind } from "../space/custom";
+import { SPECTRA, type Galaxy, type SpaceFeature, type Zone, type ZoneKind } from "../space/galaxy";
 import type { BodyKind, StarSystem } from "../space/system";
-import type { Universe } from "../space/universe";
+import type { Anomaly, AnomalyKind, Universe } from "../space/universe";
 import { voronoi } from "../voronoi";
 
 const esc = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
 const r1 = (value: number) => Math.round(value * 10) / 10;
 const ring = (points: Point[]) => `M${points.map(([x, y]) => `${r1(x)},${r1(y)}`).join("L")}Z`;
 
-const FEATURE_GLYPH: Record<SpaceFeature, string> = { ruins: "♜", station: "◇", anomaly: "✷", derelict: "⌬", "pirate-base": "☠", relay: "⌖", shipyard: "⚓", research: "⚗", quarantine: "☣", wormhole: "◎" };
+export const FEATURE_GLYPH: Record<SpaceFeature, string> = {
+  ruins: "♜",
+  station: "◇",
+  anomaly: "✷",
+  derelict: "⌬",
+  "pirate-base": "☠",
+  relay: "⌖",
+  shipyard: "⚓",
+  research: "⚗",
+  quarantine: "☣",
+  wormhole: "◎",
+  "dyson-sphere": "◉",
+  ringworld: "⊚",
+  "jump-gate": "⊗",
+  graveyard: "✝",
+  leviathan: "∿",
+  "time-rift": "∞",
+  "rogue-planet": "●",
+  vault: "⊡",
+  "trade-hub": "⚖",
+  mining: "⛏",
+  prison: "⛓",
+  beacon: "✦",
+};
+
+/** How each region of trouble looks: its fill and its edge. */
+export const ZONE_STYLE: Record<ZoneKind, { fill: string; edge: string }> = {
+  "ion-storm": { fill: "#5fb8ff", edge: "#a8dcff" },
+  "dead-zone": { fill: "#000000", edge: "#ff4d4d" },
+  "dark-nebula": { fill: "#000000", edge: "#3a3550" },
+  "radiation-belt": { fill: "#ffd23f", edge: "#ffd23f" },
+  "asteroid-field": { fill: "#8c8577", edge: "#b3aa98" },
+  "gravity-rift": { fill: "#a46bff", edge: "#d6b8ff" },
+  "crystal-field": { fill: "#4de1ff", edge: "#b8f5ff" },
+  "plasma-sea": { fill: "#ff6a3d", edge: "#ff9fd0" },
+};
+
+/** A small deterministic scatter for a region's texture. */
+const scatterIn = (zone: Zone, count: number) =>
+  Array.from({ length: count }, (_, k) => {
+    const a = (k * 2.399963 + zone.id) % (Math.PI * 2);
+    const r = Math.sqrt(((k * 0.618034 + zone.id * 0.37) % 1)) * zone.r;
+    const x = Math.cos(a) * r,
+      y = Math.sin(a) * r * zone.squash;
+    return [zone.x + x * Math.cos(zone.angle) - y * Math.sin(zone.angle), zone.y + x * Math.sin(zone.angle) + y * Math.cos(zone.angle)] as const;
+  });
+
+function drawZone(zone: Zone, custom: Map<string, CustomKind>, out: string[]) {
+  const t = `rotate(${r1((zone.angle * 180) / Math.PI)} ${r1(zone.x)} ${r1(zone.y)})`;
+  const ellipse = (attrs: string) => `<ellipse cx="${r1(zone.x)}" cy="${r1(zone.y)}" rx="${r1(zone.r)}" ry="${r1(zone.r * zone.squash)}" transform="${t}" ${attrs}/>`;
+  if (zone.kind === "custom") {
+    const kind = custom.get(zone.custom ?? "");
+    const color = kind?.color ?? "#ffd27a";
+    out.push(ellipse(`fill="${color}" fill-opacity="0.1" stroke="${color}" stroke-width="1.2" stroke-dasharray="6 4"`));
+    out.push(`<text x="${r1(zone.x)}" y="${r1(zone.y + 5)}" text-anchor="middle" font-size="14" fill="${color}" font-family="'Segoe UI Symbol', 'Segoe UI Emoji', sans-serif">${esc(kind?.glyph ?? "✦")}</text>`);
+    return;
+  }
+  const style = ZONE_STYLE[zone.kind];
+  switch (zone.kind) {
+    case "ion-storm": {
+      out.push(ellipse(`fill="${style.fill}" opacity="0.14" filter="url(#soft)"`));
+      for (let k = 0; k < 4; k++) {
+        const pts = scatterIn({ ...zone, id: zone.id * 7 + k, r: zone.r * 0.8 }, 5);
+        out.push(`<path d="M${pts.map(([x, y]) => `${r1(x)},${r1(y)}`).join("L")}" fill="none" stroke="${style.edge}" stroke-width="0.9" opacity="0.7"/>`);
+      }
+      break;
+    }
+    case "dead-zone":
+      out.push(ellipse(`fill="#000" fill-opacity="0.45" stroke="${style.edge}" stroke-width="1.2" stroke-dasharray="3 5" opacity="0.8"`));
+      break;
+    case "dark-nebula":
+      out.push(ellipse(`fill="#000" opacity="0.65" filter="url(#soft)"`));
+      break;
+    case "radiation-belt":
+      out.push(ellipse(`fill="${style.fill}" fill-opacity="0.06" stroke="${style.edge}" stroke-width="${r1(zone.r * 0.12)}" stroke-opacity="0.18" stroke-dasharray="2 4"`));
+      break;
+    case "asteroid-field":
+      out.push(`<g fill="${style.edge}" opacity="0.7">${scatterIn(zone, 70).map(([x, y], k) => `<circle cx="${r1(x)}" cy="${r1(y)}" r="${k % 5 ? 0.7 : 1.3}"/>`).join("")}</g>`);
+      break;
+    case "gravity-rift": {
+      const along = [-1, -0.6, -0.2, 0.2, 0.6, 1].map((s, k) => [zone.x + Math.cos(zone.angle) * s * zone.r + Math.sin(zone.angle) * (k % 2 ? 6 : -6), zone.y + Math.sin(zone.angle) * s * zone.r - Math.cos(zone.angle) * (k % 2 ? 6 : -6)]);
+      const d = `M${along.map(([x, y]) => `${r1(x)},${r1(y)}`).join("L")}`;
+      out.push(`<path d="${d}" fill="none" stroke="${style.fill}" stroke-width="7" opacity="0.25" filter="url(#glow)"/><path d="${d}" fill="none" stroke="#05060d" stroke-width="2.4"/><path d="${d}" fill="none" stroke="${style.edge}" stroke-width="0.6"/>`);
+      break;
+    }
+    case "crystal-field":
+      out.push(`<g fill="${style.fill}" fill-opacity="0.7" stroke="${style.edge}" stroke-width="0.3">${scatterIn(zone, 26).map(([x, y]) => `<path d="M${r1(x)},${r1(y - 2.4)}L${r1(x + 1.4)},${r1(y)}L${r1(x)},${r1(y + 2.4)}L${r1(x - 1.4)},${r1(y)}Z"/>`).join("")}</g>`);
+      break;
+    case "plasma-sea":
+      out.push(ellipse(`fill="${style.fill}" opacity="0.2" filter="url(#soft)"`) + ellipse(`fill="none" stroke="${style.edge}" stroke-width="0.8" stroke-dasharray="1 3" opacity="0.6"`));
+      break;
+  }
+}
 
 export interface SpaceRenderOptions {
   script?: "latin" | "cyrillic";
   highlight?: number | null;
+  /** A region (galaxy) or an anomaly (universe) to ring. */
+  highlightZone?: number | null;
+  highlightAnomaly?: number | null;
   territories?: boolean;
   lanes?: boolean;
   labels?: boolean;
@@ -30,6 +127,9 @@ export function renderGalaxy(galaxy: Galaxy, options: SpaceRenderOptions = {}): 
   out.push(`<defs><radialGradient id="core" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#fff3d6" stop-opacity="0.55"/><stop offset="0.35" stop-color="#b98cff" stop-opacity="0.12"/><stop offset="1" stop-color="#05060d" stop-opacity="0"/></radialGradient><filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="18"/></filter><filter id="glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="1.6" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>`);
   out.push(`<rect width="${W}" height="${H}" fill="#05060d"/><ellipse cx="${W / 2}" cy="${H / 2}" rx="${W * 0.36}" ry="${H * 0.36}" fill="url(#core)"/>`);
   for (const nebula of galaxy.nebulae) out.push(`<circle cx="${r1(nebula.x)}" cy="${r1(nebula.y)}" r="${r1(nebula.r)}" fill="${nebula.color}" opacity="0.16" filter="url(#soft)"/>`);
+  const custom = new Map((galaxy.params.custom ?? []).map((kind) => [kind.id, kind]));
+  const zones = galaxy.zones ?? [];
+  for (const zone of zones) if (zone.kind !== "dark-nebula") drawZone(zone, custom, out);
 
   if (options.territories !== false) {
     const diagram = voronoi(galaxy.stars.map((star): Point => [star.x, star.y]), W, H);
@@ -63,7 +163,13 @@ export function renderGalaxy(galaxy: Galaxy, options: SpaceRenderOptions = {}): 
     else out.push(`<circle cx="${r1(star.x)}" cy="${r1(star.y)}" r="${r1(r)}" fill="${spec.color}" filter="url(#glow)"/>`);
     if (star.capital) out.push(`<circle cx="${r1(star.x)}" cy="${r1(star.y)}" r="${r1(r + 3)}" fill="none" stroke="${galaxy.empires[star.empire].color}" stroke-width="1.2"/>`);
     if (star.feature) out.push(`<text x="${r1(star.x + 4)}" y="${r1(star.y - 4)}" font-size="8" fill="#ffd27a" font-family="'Segoe UI Symbol', sans-serif">${FEATURE_GLYPH[star.feature]}</text>`);
+    const own = star.custom ? custom.get(star.custom) : undefined;
+    if (own) out.push(`<text x="${r1(star.x - 4)}" y="${r1(star.y - 4)}" text-anchor="end" font-size="9" fill="${own.color}" font-family="'Segoe UI Symbol', 'Segoe UI Emoji', sans-serif">${esc(own.glyph)}</text>`);
   }
+  // Dark nebulae swallow the starlight behind them.
+  for (const zone of zones) if (zone.kind === "dark-nebula") drawZone(zone, custom, out);
+  const picked = zones.find((zone) => zone.id === options.highlightZone);
+  if (picked) out.push(`<ellipse cx="${r1(picked.x)}" cy="${r1(picked.y)}" rx="${r1(picked.r + 4)}" ry="${r1(picked.r * picked.squash + 4)}" transform="rotate(${r1((picked.angle * 180) / Math.PI)} ${r1(picked.x)} ${r1(picked.y)})" fill="none" stroke="#ffd34d" stroke-width="1.5"/>`);
   if (options.labels !== false) {
     out.push(`<g font-size="7" fill="#cfd9ff" opacity="0.85">`);
     for (const star of galaxy.stars) if (star.capital || star.feature || (star.settled && star.id % 3 === 0)) out.push(`<text x="${r1(star.x + 4)}" y="${r1(star.y + 9)}">${text(star.name)}</text>`);
@@ -77,6 +183,7 @@ export function renderGalaxy(galaxy: Galaxy, options: SpaceRenderOptions = {}): 
     }
     out.push(`</g>`);
     for (const nebula of galaxy.nebulae) out.push(`<text x="${r1(nebula.x)}" y="${r1(nebula.y)}" text-anchor="middle" font-size="9" font-style="italic" fill="${nebula.color}" opacity="0.7">${text(nebula.name)}</text>`);
+    for (const zone of zones) out.push(`<text x="${r1(zone.x)}" y="${r1(zone.y + zone.r * zone.squash + 10)}" text-anchor="middle" font-size="8" font-style="italic" fill="${zone.kind === "custom" ? custom.get(zone.custom ?? "")?.color ?? "#ffd27a" : ZONE_STYLE[zone.kind].edge}" opacity="0.8">${text(zone.name)}</text>`);
   }
   out.push(`<text x="20" y="34" font-size="20" letter-spacing="3" fill="#e6ecff" font-weight="600">${text(galaxy.name.toUpperCase())}</text>`);
   // Scale: ten thousand light years.
@@ -166,12 +273,19 @@ export function renderUniverse(universe: Universe, options: SpaceRenderOptions =
     const tilt = (g.id * 47) % 180;
     const ring = options.highlight === g.id ? `<circle cx="${x}" cy="${y}" r="9" fill="none" stroke="#ffd34d" stroke-width="1.5"/>` : "";
     if (g.kind === "quasar") out.push(`<g filter="url(#u-glow)"><circle cx="${x}" cy="${y}" r="2.4" fill="#ffffff"/><path d="M${x},${r1(g.y - 9)}V${r1(g.y + 9)}" stroke="#9fd8ff" stroke-width="0.8" transform="rotate(${tilt} ${x} ${y})"/></g>${ring}`);
+    else if (g.kind === "lenticular") out.push(`<g transform="rotate(${tilt} ${x} ${y})" filter="url(#u-glow)"><ellipse cx="${x}" cy="${y}" rx="5" ry="1" fill="#ffe7c2" opacity="0.8"/><circle cx="${x}" cy="${y}" r="1.6" fill="#fff4dc"/></g>${ring}`);
+    else if (g.kind === "starburst") out.push(`<g filter="url(#u-glow)"><circle cx="${x}" cy="${y}" r="2" fill="#bfe8ff"/><path d="M${r1(g.x - 4)},${y}H${r1(g.x + 4)}M${x},${r1(g.y - 4)}V${r1(g.y + 4)}" stroke="#ff9fd0" stroke-width="0.6"/></g>${ring}`);
+    else if (g.kind === "colliding") out.push(`<g transform="rotate(${tilt} ${x} ${y})" filter="url(#u-glow)"><ellipse cx="${r1(g.x - 2.2)}" cy="${y}" rx="3.6" ry="1.5" fill="#cfe0ff" opacity="0.6"/><ellipse cx="${r1(g.x + 2.2)}" cy="${r1(g.y + 0.8)}" rx="3.2" ry="1.4" fill="#ffd9a8" opacity="0.6" transform="rotate(40 ${r1(g.x + 2.2)} ${r1(g.y + 0.8)})"/><path d="M${r1(g.x + 4)},${r1(g.y + 1)}Q${r1(g.x + 9)},${r1(g.y + 5)} ${r1(g.x + 12)},${r1(g.y + 2)}" fill="none" stroke="#cfe0ff" stroke-width="0.5" opacity="0.6"/></g>${ring}`);
+    else if (g.kind === "ghost") out.push(`<circle cx="${x}" cy="${y}" r="3.2" fill="none" stroke="#8a8fb8" stroke-width="0.5" stroke-dasharray="1 1.4" opacity="0.7"/>${ring}`);
     else if (g.kind === "dwarf") out.push(`<circle cx="${x}" cy="${y}" r="1.2" fill="#c8c8ff" opacity="0.8"/>${ring}`);
     else if (g.kind === "elliptical") out.push(`<ellipse cx="${x}" cy="${y}" rx="4" ry="2.6" fill="#ffd9a8" opacity="0.85" filter="url(#u-glow)" transform="rotate(${tilt} ${x} ${y})"/>${ring}`);
     else if (g.kind === "irregular") out.push(`<g fill="#bcd2ff" filter="url(#u-glow)"><circle cx="${x}" cy="${y}" r="1.6"/><circle cx="${r1(g.x + 2.4)}" cy="${r1(g.y - 1)}" r="1.1"/><circle cx="${r1(g.x - 1.5)}" cy="${r1(g.y + 2)}" r="0.9"/></g>${ring}`);
     else out.push(`<g transform="rotate(${tilt} ${x} ${y})" filter="url(#u-glow)"><ellipse cx="${x}" cy="${y}" rx="5" ry="1.8" fill="#cfe0ff" opacity="0.55"/><circle cx="${x}" cy="${y}" r="1.4" fill="#fff4dc"/>${g.kind === "ring" ? `<ellipse cx="${x}" cy="${y}" rx="5.5" ry="2.4" fill="none" stroke="#9fd8ff" stroke-width="0.6"/>` : ""}</g>${ring}`);
     if (g.civilisations) out.push(`<circle cx="${r1(g.x + 4)}" cy="${r1(g.y - 4)}" r="1.4" fill="#36e0a0"/>`);
   }
+  const custom = new Map((universe.params.custom ?? []).map((kind) => [kind.id, kind]));
+  for (const anomaly of universe.anomalies ?? []) out.push(drawAnomaly(anomaly, custom, options.highlightAnomaly === anomaly.id));
+  out.push(`<g text-anchor="middle" font-size="8" font-style="italic" fill="#c9b8ff" opacity="0.75">${(universe.anomalies ?? []).map((a) => `<text x="${r1(a.x)}" y="${r1(a.y + (a.kind === "cosmic-string" || a.kind === "bubble-wall" ? 0 : Math.max(a.size, 10) + 9))}">${text(a.name)}</text>`).join("")}</g>`);
   out.push(`<g text-anchor="middle" font-size="9" fill="#5a5f8a" font-style="italic">${universe.voids.map((v) => `<text x="${r1(v.x)}" y="${r1(v.y)}">${text(v.name)}</text>`).join("")}</g>`);
   out.push(`<g text-anchor="middle" font-size="15" letter-spacing="4" font-weight="600">`);
   universe.clusters.forEach((cluster) => {
@@ -183,4 +297,55 @@ export function renderUniverse(universe: Universe, options: SpaceRenderOptions =
   });
   out.push(`</g><text x="20" y="34" font-size="20" letter-spacing="3" fill="#e6ecff" font-weight="600">${text(universe.name.toUpperCase())}</text></svg>`);
   return out.join("");
+}
+
+export const ANOMALY_COLOR: Record<AnomalyKind, string> = {
+  "great-attractor": "#c77dff",
+  "cosmic-string": "#e8f4ff",
+  lens: "#9fd8ff",
+  "white-hole": "#ffffff",
+  "dark-flow": "#7a8cff",
+  relic: "#ffd27a",
+  supermassive: "#ffb35c",
+  "bubble-wall": "#4de1ff",
+};
+
+function drawAnomaly(a: Anomaly, custom: Map<string, CustomKind>, picked: boolean): string {
+  const x = r1(a.x),
+    y = r1(a.y);
+  const ring = picked ? `<circle cx="${x}" cy="${y}" r="${r1(Math.min(a.size, 40) + 6)}" fill="none" stroke="#ffd34d" stroke-width="1.5"/>` : "";
+  if (a.kind === "custom") {
+    const kind = custom.get(a.custom ?? "");
+    const color = kind?.color ?? "#ffd27a";
+    const area = kind?.area ? `<circle cx="${x}" cy="${y}" r="${r1(a.size)}" fill="${color}" fill-opacity="0.08" stroke="${color}" stroke-width="1" stroke-dasharray="5 4"/>` : "";
+    return `${area}<text x="${x}" y="${r1(a.y + 5)}" text-anchor="middle" font-size="14" fill="${color}" font-family="'Segoe UI Symbol', 'Segoe UI Emoji', sans-serif">${esc(kind?.glyph ?? "✦")}</text>${ring}`;
+  }
+  const color = ANOMALY_COLOR[a.kind];
+  const dx = Math.cos(a.angle),
+    dy = Math.sin(a.angle);
+  switch (a.kind) {
+    case "great-attractor":
+      return `<g fill="none" stroke="${color}" opacity="0.5">${[1, 0.7, 0.42, 0.2].map((k) => `<circle cx="${x}" cy="${y}" r="${r1(a.size * k)}" stroke-width="${r1(0.6 + (1 - k))}" stroke-dasharray="${r1(a.size * k * 0.4)} ${r1(a.size * k * 0.25)}"/>`).join("")}</g><circle cx="${x}" cy="${y}" r="2.5" fill="${color}" filter="url(#u-glow)"/>${ring}`;
+    case "cosmic-string":
+      return `<path d="M${r1(a.x - dx * a.size)},${r1(a.y - dy * a.size)}L${r1(a.x + dx * a.size)},${r1(a.y + dy * a.size)}" stroke="#9fd8ff" stroke-width="5" opacity="0.15" filter="url(#u-soft)"/><path d="M${r1(a.x - dx * a.size)},${r1(a.y - dy * a.size)}L${r1(a.x + dx * a.size)},${r1(a.y + dy * a.size)}" stroke="${color}" stroke-width="0.8" opacity="0.9"/>${ring}`;
+    case "lens":
+      return `<circle cx="${x}" cy="${y}" r="${r1(a.size * 0.5)}" fill="none" stroke="${color}" stroke-width="1.6" opacity="0.8" filter="url(#u-glow)" stroke-dasharray="${r1(a.size * 0.9)} ${r1(a.size * 0.25)}"/><circle cx="${x}" cy="${y}" r="1.2" fill="#ffe7c2"/>${ring}`;
+    case "white-hole":
+      return `<g filter="url(#u-glow)"><circle cx="${x}" cy="${y}" r="3.4" fill="#ffffff"/>${Array.from({ length: 8 }, (_, k) => `<path d="M${r1(a.x + Math.cos((k * Math.PI) / 4) * 5)},${r1(a.y + Math.sin((k * Math.PI) / 4) * 5)}L${r1(a.x + Math.cos((k * Math.PI) / 4) * 12)},${r1(a.y + Math.sin((k * Math.PI) / 4) * 12)}" stroke="#ffffff" stroke-width="0.6"/>`).join("")}</g>${ring}`;
+    case "dark-flow":
+      return `<g stroke="${color}" stroke-width="0.8" opacity="0.6">${Array.from({ length: 9 }, (_, k) => {
+        const ox = a.x + ((k % 3) - 1) * a.size * 0.5,
+          oy = a.y + (Math.floor(k / 3) - 1) * a.size * 0.5;
+        return `<path d="M${r1(ox - dx * 7)},${r1(oy - dy * 7)}L${r1(ox + dx * 7)},${r1(oy + dy * 7)}M${r1(ox + dx * 7 - dx * 3 - dy * 2.5)},${r1(oy + dy * 7 - dy * 3 + dx * 2.5)}L${r1(ox + dx * 7)},${r1(oy + dy * 7)}L${r1(ox + dx * 7 - dx * 3 + dy * 2.5)},${r1(oy + dy * 7 - dy * 3 - dx * 2.5)}" fill="none"/>`;
+      }).join("")}</g>${ring}`;
+    case "relic":
+      return `<path d="${Array.from({ length: 6 }, (_, k) => `${k ? "L" : "M"}${r1(a.x + Math.cos((k * Math.PI) / 3) * 6)},${r1(a.y + Math.sin((k * Math.PI) / 3) * 6)}`).join("")}Z" fill="none" stroke="${color}" stroke-width="1.2" filter="url(#u-glow)"/><circle cx="${x}" cy="${y}" r="1.4" fill="${color}"/>${ring}`;
+    case "supermassive":
+      return `<ellipse cx="${x}" cy="${y}" rx="8" ry="3" fill="none" stroke="${color}" stroke-width="1.4" filter="url(#u-glow)" transform="rotate(${r1((a.angle * 180) / Math.PI)} ${x} ${y})"/><circle cx="${x}" cy="${y}" r="3" fill="#000" stroke="${color}" stroke-width="0.6"/>${ring}`;
+    case "bubble-wall": {
+      const from = a.angle - 0.9,
+        to = a.angle + 0.9;
+      return `<path d="M${r1(a.x + Math.cos(from) * a.size)},${r1(a.y + Math.sin(from) * a.size)}A${r1(a.size)},${r1(a.size)} 0 0 1 ${r1(a.x + Math.cos(to) * a.size)},${r1(a.y + Math.sin(to) * a.size)}" fill="none" stroke="${color}" stroke-width="1.2" stroke-dasharray="8 4" opacity="0.55"/>${ring}`;
+    }
+  }
 }

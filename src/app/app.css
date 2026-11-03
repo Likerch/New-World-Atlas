@@ -526,3 +526,44 @@ button.back {
 .editor .floor-tabs {
   margin-bottom: 6px;
 }
+
+/* The game master's own kinds of thing on the space maps. */
+.custom-kinds {
+  margin: 10px 0 6px;
+}
+.custom-kinds summary {
+  display: block;
+}
+.custom-kind {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.custom-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.custom-row input,
+.custom-row select {
+  min-width: 0;
+}
+.custom-row input.glyph {
+  width: 34px;
+  text-align: center;
+}
+.custom-row input[type="color"] {
+  width: 30px;
+  height: 26px;
+  padding: 1px;
+}
+.custom-row input[type="number"] {
+  width: 52px;
+}
+.controls .custom-row label.check {
+  margin: 0;
+}

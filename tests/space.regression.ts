@@ -43,6 +43,27 @@ test("systems are reproducible, orbits widen outwards, living worlds sit in the 
   assert.ok(living > 0, "some worlds are habitable");
 });
 
+test("galaxies and the universe hold wonders and regions of trouble; the game master's own kinds land without moving anything else", () => {
+  const plain = generateGalaxy({ seed: "strange" });
+  assert.ok(plain.zones.length >= 3 && plain.stars.some((s) => s.feature === "graveyard" || s.feature === "mining" || s.feature === "beacon" || s.feature === "jump-gate"), "regions and new wonders by default");
+  const calm = generateGalaxy({ seed: "strange", anomalies: 0 });
+  assert.equal(calm.zones.length, 0);
+  assert.ok(calm.stars.every((s) => !s.feature || s.feature === "wormhole"), "no strangeness asked, none given");
+  const custom = [{ id: "hive", name: "Hive", glyph: "✹", color: "#ff9f1a", count: 5, where: "unclaimed" as const, area: false }, { id: "storm", name: "", glyph: "≈", color: "#7cf6ff", count: 3, where: "anywhere" as const, area: true }];
+  const own = generateGalaxy({ seed: "strange", custom });
+  assert.equal(own.stars.filter((s) => s.custom === "hive").length, 5);
+  assert.ok(own.stars.filter((s) => s.custom === "hive").every((s) => s.empire === 0), "unclaimed means unclaimed");
+  assert.equal(own.zones.filter((z) => z.custom === "storm").length, 3);
+  assert.deepEqual(own.stars.map((s) => s.feature), plain.stars.map((s) => s.feature), "adding kinds moves no wonder");
+  assert.deepEqual(own.zones.filter((z) => z.kind !== "custom"), plain.zones);
+  assert.doesNotMatch(renderGalaxy(own, { highlightZone: 0 }), /NaN|undefined|Infinity/u);
+  const universe = generateUniverse({ seed: "strange", galaxies: 200, custom });
+  assert.ok(universe.anomalies.filter((a) => a.kind !== "custom").length >= 4, "the universe has its strange things");
+  assert.equal(universe.anomalies.filter((a) => a.custom === "hive").length, 5);
+  assert.deepEqual(universe.galaxies, generateUniverse({ seed: "strange", galaxies: 200 }).galaxies, "custom kinds leave the galaxies alone");
+  assert.doesNotMatch(renderUniverse(universe, { highlightAnomaly: 2 }), /NaN|undefined|Infinity/u);
+});
+
 test("a star system of its own comes from its seed and keeps the star and people asked for", () => {
   const made = generateLoneSystem({ seed: "lone", spectral: "K", settled: true });
   assert.equal(JSON.stringify({ ...generateLoneSystem({ seed: "lone", spectral: "K", settled: true }), language: null }), JSON.stringify({ ...made, language: null }));
