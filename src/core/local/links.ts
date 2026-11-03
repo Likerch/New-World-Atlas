@@ -142,10 +142,10 @@ function compass(dx: number, dy: number): number {
 
 /** A cavern of the underworld as a local map: a deep people's hold, a cave of its kind (a lake in an underground sea,
  * lava in a magma chamber, a chasm through an abyss, mushrooms, crystals), or the age's built places; its tunnels leave
- * the map toward the caverns they lead to. */
-export function localFromCavern(world: Underworld, cavernId: number, age?: string): LocalLink | null {
+ * the map toward the caverns they lead to. What lurks there follows the world's age and magic, when it is given. */
+export function localFromCavern(world: Underworld, cavernId: number, setting?: Setting): LocalLink | null {
   const cavern = world.caverns[cavernId];
-  if (!cavern) return null;
+  if (!cavern || cavern.removed) return null;
   const built: Partial<Record<string, LocalTheme>> = { metro: "metro", undercity: "metro", bunker: "bunker", vault: "vault", ruins: "crypt", catacombs: "crypt", sewers: "sewer" };
   const theme = built[cavern.kind] ?? (cavern.kind === "settlement" ? "hold" : cavern.kind === "crystal" ? "mine" : "lair");
   const danger = cavern.kind === "settlement" ? 1 : ["magma", "abyss", "ruins"].includes(cavern.kind) ? 3 : 2;
@@ -159,7 +159,7 @@ export function localFromCavern(world: Underworld, cavernId: number, age?: strin
   // Two tunnels the same way leave by one passage.
   const ways = exits.filter((exit, k) => exits.findIndex((other) => other.dir === exit.dir) === k);
   const facts: Record<string, string | number> = { ...(people ? { people: people.name } : {}), ...(cavern.population ? { population: cavern.population } : {}) };
-  return { params: { seed: `${world.seed}/cavern-${cavernId}`, kind: built[cavern.kind] ? "dungeon" : "cave", theme, danger, name: cavern.name, levels: 1, ...(age ? { age } : {}), origin: { kind: cavern.kind, facts }, ...(ways.length && !built[cavern.kind] ? { exits: ways } : {}) }, language: people?.language ?? null };
+  return { params: { seed: `${world.seed}/cavern-${cavernId}`, kind: built[cavern.kind] ? "dungeon" : "cave", theme, danger, name: cavern.name, levels: 1, ...(setting ? { age: ageOf(setting), ...magicOf(setting) } : {}), origin: { kind: cavern.kind, facts }, ...(ways.length ? { exits: ways } : {}) }, language: people?.language ?? null };
 }
 
 /** The way down from a building's cellar: a crypt under a temple, a castle's or a manor's dungeon, a hatch into the

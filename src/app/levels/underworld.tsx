@@ -29,7 +29,8 @@ export function useUnderworldLevel(ctx: LevelContext, openCave: (world: Underwor
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<CavernKind | "">("");
   // The underworld is its planet's: its key follows the planet's own (its settings' print) and the GM's relief strokes.
-  const mapKey = state ? `underworld:${mapKeyOf("planet", state.planet.params as unknown as Record<string, unknown>).slice("planet:".length)}/underworld${state.planet.relief ? `~${state.planet.relief}` : ""}` : null;
+  const keyOf = (planet: Planet) => `underworld:${mapKeyOf("planet", planet.params as unknown as Record<string, unknown>).slice("planet:".length)}/underworld${planet.relief ? `~${planet.relief}` : ""}`;
+  const mapKey = state ? keyOf(state.planet) : null;
   const patch = ctx.patch(mapKey);
   const changes = patch.changes?.underworld as UnderworldChanges | undefined;
   const world = useMemo(() => (state ? renameUnderworld(editUnderworld(state.world, changes), patch.names) : null), [state, changes, patch.names]);
@@ -42,7 +43,7 @@ export function useUnderworldLevel(ctx: LevelContext, openCave: (world: Underwor
     return renderUnderworld(world, state.planet, { script: ctx.script, highlight: picked, tunnel, surface, lands, km: t("unit.km") });
   }, [state, world, ctx.script, picked, tunnel, view, surface, lands, t]);
   const legend = useMemo(() => (world && state ? underworldLegend(world, state.planet) : undefined), [world, state]);
-  const cavern = world && picked !== null ? world.caverns[picked] ?? null : null;
+  const cavern = world && picked !== null && !world.caverns[picked]?.removed ? world.caverns[picked] ?? null : null;
   const kindOf = (kind: string) => t(`cavern.${kind}`);
   const pick = (id: number | null, focus = false) => {
     setPicked(id);
@@ -108,10 +109,13 @@ export function useUnderworldLevel(ctx: LevelContext, openCave: (world: Underwor
       ctx.run(() => {
         const made = generateUnderworld(planet);
         setState({ world: made, planet });
-        const at = focus?.cavern ?? (focus?.marker ? made.entrances.find((e) => e.marker === focus.marker)?.cavern : undefined);
-        setPicked(at ?? null);
+        // The cavern asked for, as the GM left it: one taken away (or never there) is not picked.
+        const shown = editUnderworld(made, ctx.patch(keyOf(planet)).changes?.underworld as UnderworldChanges | undefined);
+        const at = focus?.cavern ?? (focus?.marker ? shown.entrances.find((e) => e.marker === focus.marker)?.cavern : undefined);
+        const target = at !== undefined && shown.caverns[at] && !shown.caverns[at].removed ? shown.caverns[at] : null;
+        setPicked(target ? target.id : null);
         setTunnel(null);
-        if (at !== undefined) ctx.focus(made.caverns[at].x, made.caverns[at].y);
+        if (target) ctx.focus(target.x, target.y);
       });
       ctx.show("underworld");
     },
@@ -470,12 +474,12 @@ export function useUnderworldLevel(ctx: LevelContext, openCave: (world: Underwor
             </li>
           ))}
         </ul>
-        {editing && world.caverns.some((c) => c.removed) ? (
+        {editing && world.caverns.some((c) => c.removed && changes?.caverns?.[c.id]?.removed) ? (
           <>
             <h4 className="muted">{t("underworld.removed")}</h4>
             <ul className="plain">
               {world.caverns
-                .filter((c) => c.removed)
+                .filter((c) => c.removed && changes?.caverns?.[c.id]?.removed)
                 .map((c) => (
                   <li key={c.id}>
                     {nm(c.name)}{" "}

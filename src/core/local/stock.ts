@@ -121,6 +121,9 @@ const DWELLERS: Dweller[] = [
 
 const BY_ID = new Map(DWELLERS.map((d) => [d.id, d]));
 
+/** Whether a dweller is one of the generator's own kinds (else a legend's, like "a-hermit", or the GM's). */
+export const knownDweller = (id: string) => BY_ID.has(id);
+
 /** How many of a kind come together, by its id; a legend's own dweller ("cave bears", "a hermit") by its words. */
 export function groupSize(id: string): [number, number] {
   const known = BY_ID.get(id);

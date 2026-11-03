@@ -5,7 +5,7 @@
 // (a starship or a derelict) is laid along a spine from its engines to its bridge, with airlocks on its hull.
 import Delaunator from "delaunator";
 import type { Rng } from "../random";
-import { bridgeChasms, cellAt, flood, furnish, keyRoom, linkPoint, lockAndKey, markSecrets, niches, pathBetween, placeDoors, setTraps, startOf, taken, veins, type Build } from "./build";
+import { bridgeChasms, cellAt, edgePoint, flood, furnish, keyRoom, linkPoint, lockAndKey, markSecrets, niches, pathBetween, placeDoors, setTraps, startOf, taken, veins, type Build } from "./build";
 import { doorsOf, TILE, walk, type Keyed, type Purpose } from "./model";
 import { PURPOSES } from "./stock";
 import type { OwnPlan } from "./own";
@@ -123,7 +123,8 @@ export function dungeon(b: Build, own: OwnPlan) {
     for (let e = 0; e < d.triangles.length; e++) {
       const a = d.triangles[e],
         c = d.triangles[e % 3 === 2 ? e - 2 : e + 1];
-      if (a < c) edges.push([a, c, Math.hypot(centres[a][0] - centres[c][0], centres[a][1] - centres[c][1])]);
+      // Each inner edge once (it has a half-edge either way); an edge of the hull has only the one.
+      if (a < c || d.halfedges[e] === -1) edges.push([a, c, Math.hypot(centres[a][0] - centres[c][0], centres[a][1] - centres[c][1])]);
     }
   } else if (centres.length === 2) edges.push([0, 1, 1]);
   edges.sort((p, q) => p[2] - q[2]);
@@ -144,11 +145,31 @@ export function dungeon(b: Build, own: OwnPlan) {
     }
   }
 
+  // A cavern's tunnels to the caverns round it leave by the map's edges, each a passage in from the edge to the room
+  // nearest it; the first is the way in, and such a place has none from the surface.
+  const tunnels = (params.exits ?? []).map((exit) => {
+    const [ex, corner] = edgePoint(W, H, exit.dir);
+    // Off a corner the passage leaves by the side beside it, so it is walked into, not stepped past.
+    const ey = (ex === 0 || ex === W - 1) && (corner === 0 || corner === H - 1) ? (corner ? H - 2 : 1) : corner;
+    const centre = (r: Room) => [r.x + Math.floor(r.w / 2), r.y + Math.floor(r.h / 2)] as const;
+    const room = rooms.reduce((best, r) => (Math.hypot(centre(r)[0] - ex, centre(r)[1] - ey) < Math.hypot(centre(best)[0] - ex, centre(best)[1] - ey) ? r : best));
+    const [cx, cy] = centre(room);
+    if (ey === 0 || ey === H - 1) {
+      leg(ex, ey, ex, cy);
+      leg(ex, cy, cx, cy);
+    } else {
+      leg(ex, ey, cx, ey);
+      leg(cx, ey, cx, cy);
+    }
+    if (b.tiles[cellAt(b, ex, ey)] === TILE.rock) b.tiles[cellAt(b, ex, ey)] = TILE.corridor;
+    b.features.push({ x: ex, y: ey, kind: "exit", to: exit.to || exit.kind });
+    return room;
+  });
   // The way in from the surface: a passage from the room nearest the map's edge out to that edge.
   const edgeOf = (r: Room) => Math.min(r.x, W - r.x - r.w, r.y, H - r.y - r.h);
   const plain = rooms.filter((r) => !r.tag);
-  let entry = up ? rooms.find((r) => r.tag === "up")! : (plain.length ? plain : rooms).reduce((best, r) => (edgeOf(r) < edgeOf(best) ? r : best));
-  if (!up && entry) {
+  let entry = up ? rooms.find((r) => r.tag === "up")! : tunnels[0] ?? (plain.length ? plain : rooms).reduce((best, r) => (edgeOf(r) < edgeOf(best) ? r : best));
+  if (!up && !tunnels.length && entry) {
     const [cx, cy] = [entry.x + Math.floor(entry.w / 2), entry.y + Math.floor(entry.h / 2)];
     const ways: [number, number, number, number][] = [
       [entry.x, cx, -1, 0],
@@ -169,7 +190,7 @@ export function dungeon(b: Build, own: OwnPlan) {
     b.tiles[cellAt(b, ex, ey)] = TILE.corridor;
     b.features.push({ x: ex, y: ey, kind: "exit", to: "" });
   }
-  if (track >= 0) for (const x of [0, W - 1]) b.features.push({ x, y: track, kind: "exit", to: "line" });
+  if (track >= 0) for (const x of [0, W - 1]) if (!taken(b, x, track)) b.features.push({ x, y: track, kind: "exit", to: "line" });
   // Where a canal meets a room the water runs under a grate.
   if (canal)
     for (let c = 0; c < b.tiles.length; c++) {
@@ -255,6 +276,8 @@ export function dungeon(b: Build, own: OwnPlan) {
   const order = [entry, ...open.filter((r) => r !== entry)];
   const final = order.length > 1 ? order.filter((r) => r.tag !== "platform").pop()! : null;
   const pool = own.pool ?? PURPOSES[theme];
+  // The rooms where the levels meet stay dry: their stairs never stand in the water.
+  const dry = pool.filter((p) => p !== "flooded" && p !== "cistern");
   const biggest = order.filter((r) => r !== entry && r !== final && !r.tag).sort((p, q) => q.cells.length - p.cells.length)[0];
   const purposeOf = (r: Room, rank: number): Keyed["purpose"] => {
     if (r === entry) return "entrance";
@@ -263,7 +286,7 @@ export function dungeon(b: Build, own: OwnPlan) {
     if (theme === "sewer" && r.shape === "round") return "cistern";
     if ((theme === "temple" || theme === "vault") && r === biggest) return "great-hall";
     if (rank === 1) return "guard-room";
-    return rng.pick(pool);
+    return rng.pick((r.tag === "up" || r.tag === "down") && dry.length ? dry : pool);
   };
   const keyed: Keyed[] = [];
   order.forEach((r, rank) => {
@@ -278,7 +301,7 @@ export function dungeon(b: Build, own: OwnPlan) {
   for (const room of keyed) {
     if (room.purpose === "flooded") flood(b, room, dress);
     if (room.purpose === "cistern") {
-      const r = rooms[order.indexOf(rooms.find((x) => x.cells === room.cells)!)] ?? null;
+      const r = rooms.find((x) => x.cells === room.cells) ?? null;
       const cx = (r?.x ?? 0) + ((r?.w ?? 1) - 1) / 2,
         cy = (r?.y ?? 0) + ((r?.h ?? 1) - 1) / 2;
       for (const c of room.cells) if (Math.hypot((c % W) - cx, Math.floor(c / W) - cy) < (r?.w ?? 0) / 2 - 1.5) b.tiles[c] = TILE.deep;
@@ -408,6 +431,20 @@ function ship(b: Build, own: OwnPlan) {
     airlocks.push([ax, out]);
     cabin.airlock = true;
   }
+  // A ship too short for cabins is boarded straight from its spine, through the hull where no lift stands.
+  if (!airlocks.length) {
+    const mid = (engineEnd + bridgeStart) / 2;
+    const columns = Array.from({ length: bridgeStart - engineEnd }, (_, k) => engineEnd + k).sort((p, q) => Math.abs(p - mid) - Math.abs(q - mid));
+    const cut = (ax: number, step: number) => {
+      let out = cy + step;
+      while (out > 0 && out < H - 1 && b.tiles[cellAt(b, ax, out)] === TILE.hull) out += step;
+      if (out === cy + step || b.tiles[cellAt(b, ax, out)] !== TILE.rock) return false;
+      for (let y = cy + step; y !== out + step; y += step) b.tiles[cellAt(b, ax, y)] = TILE.corridor;
+      airlocks.push([ax, out]);
+      return true;
+    };
+    if (!columns.some((ax) => cut(ax, -1))) columns.some((ax) => cut(ax, 1));
+  }
   placeDoors(b, rooms.map((r) => r.cells));
   airlocks.forEach(([x, y], k) => b.features.push({ x, y, kind: "airlock", ...(k === 0 && b.depth === 1 ? { to: "" } : {}) }));
   const upLift = lifts.find((l) => l.tag === "up");
@@ -427,7 +464,9 @@ function ship(b: Build, own: OwnPlan) {
   const dist = walk(map, doorsOf(b), start);
   const reach = (r: Room) => Math.min(...r.cells.map((c) => dist[c]));
   const order = [...rooms].sort((p, q) => reach(p) - reach(q));
-  const entry = upLift ?? rooms.find((r) => r.airlock) ?? order[0];
+  // The way aboard: the lift from the deck above, else a cabin with an airlock, else the nearest room that is neither
+  // the engines nor the bridge.
+  const entry = upLift ?? rooms.find((r) => r.airlock) ?? order.find((r) => r !== engines && r !== bridge) ?? order[0];
   const ordered = [entry, ...order.filter((r) => r !== entry)];
   // Whoever holds the ship holds its bridge or its engines, whichever lies farther in.
   const final = reach(bridge) >= reach(engines) ? bridge : engines;

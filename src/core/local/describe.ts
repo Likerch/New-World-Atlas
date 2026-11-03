@@ -5,6 +5,7 @@ import { rumoursOf, type Faction, type FactionKind, type Hearsay, type Npc, type
 import { createRng } from "../random";
 import { canStep, doorsOf, placeSeed, type Keyed, type LocalGroup, type LocalMap } from "./model";
 import { tablesFor } from "./local";
+import { knownDweller } from "./stock";
 
 export interface LocalStory {
   hook: Hearsay;
@@ -16,9 +17,9 @@ export interface LocalStory {
 /** What kind of faction a band of people makes. */
 const FACTION_OF: Partial<Record<string, FactionKind>> = { bandits: "gang", thugs: "gang", gangers: "gang", raiders: "gang", smugglers: "syndicate", pirates: "gang", "void-pirates": "gang", "grave-robbers": "gang", scavengers: "clan", cultists: "cult", "temple-guards": "order", monks: "order", "corp-soldiers": "corporation", "security-guards": "corporation", soldiers: "militia", "deep-folk": "clan", nomads: "clan", "rival-hunters": "clan", survivors: "council", squatters: "clan", miners: "guild", crew: "council", netrunners: "syndicate", lizardfolk: "clan", merfolk: "clan", goblins: "clan", kobolds: "clan", orcs: "clan", wererats: "gang" };
 
-/** A dweller's words: a known one by its dictionary key, a legend's own ("cave-bears") by the planet's words, the game
- * master's own as written. */
-export const whoKey = (who: string) => (/\s/u.test(who) ? who : `@monster.${who}`);
+/** A dweller's words: a known one by its dictionary key, a legend's own ("a-hermit", "bears") by the planet's words, the
+ * game master's own as written. */
+export const whoKey = (who: string) => (/\s/u.test(who) ? who : knownDweller(who) ? `@monster.${who}` : `@fact.${who.replace(/-/gu, " ")}`);
 /** A find's words: loot by key, a ship's cargo by the planet's words. */
 export const lootKey = (what: string) => (what.startsWith("fact:") ? `@fact.${what.slice(5)}` : /\s/u.test(what) ? what : `@treasure.${what}`);
 

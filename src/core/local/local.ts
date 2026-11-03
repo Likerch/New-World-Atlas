@@ -8,7 +8,7 @@ import { makeNpc } from "../people";
 import { fbm, noise2 } from "../noise";
 import { PriorityQueue } from "../queue";
 import { createRng, hashString, randomSeed } from "../random";
-import { boxOf, bridgeChasms, furnish, keyRoom, linkPoint, pathBetween, setTraps, spot, startOf, taken, veins, type Build } from "./build";
+import { boxOf, bridgeChasms, edgePoint, freeFloor, furnish, keyRoom, linkPoint, pathBetween, setTraps, spot, startOf, taken, veins, type Build } from "./build";
 import { dungeon } from "./dungeon";
 import { blocked, LOCAL_KINDS, LOCAL_THEMES, placeSeed, TILE, walk, type Keyed, type LocalFeature, type LocalGroup, type LocalMap, type LocalParams, type Purpose } from "./model";
 import { NO_OWN, ownPlan, ownTables, ownThemeOf, type LocalOwn, type OwnPlan } from "./own";
@@ -20,7 +20,7 @@ export function localParams(input: Partial<LocalParams> = {}): LocalParams {
   const seed = input.seed || randomSeed();
   const rng = createRng(seed).fork("local-params");
   const kind = input.kind ?? rng.pick(LOCAL_KINDS);
-  return {
+  const usual = {
     seed,
     kind,
     theme: input.theme && LOCAL_THEMES[kind].includes(input.theme) ? input.theme : rng.pick(LOCAL_THEMES[kind]),
@@ -29,8 +29,15 @@ export function localParams(input: Partial<LocalParams> = {}): LocalParams {
     rooms: kind === "dungeon" ? rng.int(9, 16) : 2,
     danger: 2,
     levels: kind === "wilderness" ? 1 : rng.int(1, 3),
-    ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined && value !== "")),
   };
+  const params: LocalParams = { ...usual, ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined && value !== "")) };
+  // Whole tiles and rooms, within what the form allows (and the rooms the levels below add): a map half a tile wider
+  // would be walked in whole steps that never reach its edge.
+  const whole = (value: unknown, min: number, max: number, fallback: number) => (typeof value === "number" && Number.isFinite(value) ? Math.max(min, Math.min(max, Math.round(value))) : fallback);
+  params.width = whole(params.width, 24, 160, usual.width);
+  params.height = whole(params.height, 24, 160, usual.height);
+  params.rooms = whole(params.rooms, 1, 50, usual.rooms);
+  return params;
 }
 
 /** Whoever rules a place, the same whichever level one starts from: the dweller its legend names, a tomb's dead ruler
@@ -63,15 +70,6 @@ function residentsOf(params: LocalParams, depth: number, tables: Tables): string
   if (params.theme === "vault" && !kind && createRng(placeSeed(params.seed)).fork("lived-in").chance(0.5)) return "survivors";
   if (params.theme === "starship" && createRng(placeSeed(params.seed)).fork("crewed").chance(0.5)) return "crew";
   return undefined;
-}
-
-/** The point on a map's edge a compass way leaves by (0 north, 2 east, 4 south, 6 west). */
-function edgePoint(W: number, H: number, dir: number): [number, number] {
-  const angle = ((dir % 8) * Math.PI) / 4;
-  const dx = Math.sin(angle),
-    dy = -Math.cos(angle);
-  const t = Math.min(dx ? (dx > 0 ? (W - 1 - W / 2) / dx : -W / 2 / dx) : Infinity, dy ? (dy > 0 ? (H - 1 - H / 2) / dy : -H / 2 / dy) : Infinity);
-  return [Math.max(0, Math.min(W - 1, Math.round(W / 2 + dx * t))), Math.max(0, Math.min(H - 1, Math.round(H / 2 + dy * t)))];
 }
 
 const xy = ([x, y]: [number, number]) => ({ x, y });
@@ -170,9 +168,14 @@ function cave(b: Build, plan: OwnPlan) {
     b.features.push({ x: way.x, y: way.y, kind: "exit", to: way.to });
   }
   if (up) b.features.push({ x: up[0], y: up[1], kind: "stairs-up" });
+  // The way down holds its tile before anything is put about, so it stands where the next level's way up does; on the
+  // last level the tile is kept clear all the same, so how deep a place goes never moves what is in it.
+  const downStairs: LocalFeature = { x: down[0], y: down[1], kind: "stairs-down" };
+  b.features.push(downStairs);
   const start = startOf(b);
 
-  // Water in the low spots (a whole lake in an underground sea), lava in a magma chamber, stalagmites about.
+  // Water in the low spots (a whole lake in an underground sea), lava in a magma chamber, stalagmites about; the ways
+  // off the map keep dry ground.
   const damp = noise2(rng.fork("pools"));
   const sea = cavern === "sea";
   const magma = cavern === "magma";
@@ -180,18 +183,26 @@ function cave(b: Build, plan: OwnPlan) {
   for (const i of best) {
     const x = i % W,
       y = Math.floor(i / W);
-    if (Math.hypot(x - (up?.[0] ?? -99), y - (up?.[1] ?? -99)) < 3 || Math.hypot(x - down[0], y - down[1]) < 3) continue;
+    if (Math.hypot(x - (up?.[0] ?? -99), y - (up?.[1] ?? -99)) < 3 || Math.hypot(x - down[0], y - down[1]) < 3 || ways.some((way) => Math.hypot(x - way.x, y - way.y) < 2)) continue;
     const v = fbm(damp, x / 14, y / 14, 3) + (sea ? 0.32 - Math.hypot(x / W - 0.5, y / H - 0.5) * 0.6 : 0);
     if (v > 0.35) {
       if (magma) pools.push([i]);
       else b.tiles[i] = v > 0.5 ? TILE.deep : TILE.water;
-    } else if (rng.chance(0.015)) b.features.push({ x, y, kind: "stalagmite" });
+    } else if (rng.chance(0.015) && !taken(b, x, y)) b.features.push({ x, y, kind: "stalagmite" });
   }
-  // Lava only where it cuts nothing off.
+  // Lava only where it cuts nothing off: lava beside ground the walk no longer reaches cools to stone, a band of it one
+  // tile at a time, until all is reached again.
   if (magma) {
     for (const [i] of pools) b.tiles[i] = TILE.lava;
-    const dist = walk({ tiles: b.tiles, params }, new Map(), start);
-    for (const [i] of pools) if ([i - 1, i + 1, i - W, i + W].some((n) => n >= 0 && n < W * H && !blocked(b.tiles[n]) && dist[n] === Infinity)) b.tiles[i] = TILE.stone;
+    for (let cooled = true; cooled; ) {
+      const dist = walk({ tiles: b.tiles, params }, new Map(), start);
+      cooled = false;
+      for (const [i] of pools)
+        if (b.tiles[i] === TILE.lava && [i - 1, i + 1, i - W, i + W].some((n) => n >= 0 && n < W * H && !blocked(b.tiles[n]) && dist[n] === Infinity)) {
+          b.tiles[i] = TILE.stone;
+          cooled = true;
+        }
+    }
   }
   // A crack across the cave (a whole abyss in one), bridged where it cuts the way.
   if (cavern === "abyss" || rng.chance(0.3)) {
@@ -235,9 +246,11 @@ function cave(b: Build, plan: OwnPlan) {
   chosen.sort((p, q) => near(p) - near(q));
   const entry = chosen[0];
   chosen.sort((p, q) => (p === entry ? -1 : q === entry ? 1 : Math.min(1e9, dist[p]) - Math.min(1e9, dist[q])));
-  // Each spot of open ground belongs to the nearest chamber whose reach it lies in: chambers never share ground.
+  // Each spot of open ground belongs to the nearest chamber whose reach it lies in: chambers never share ground, nor
+  // take in the chasm or lava laid since.
   const home = new Map<number, number>();
   for (const c of best) {
+    if (blocked(b.tiles[c])) continue;
     let nearest = -1;
     let d0 = Infinity;
     for (const i of chosen) {
@@ -275,11 +288,8 @@ function cave(b: Build, plan: OwnPlan) {
     veins(b, best, 0.025, dress);
     for (const room of b.keyed.filter((k) => k.purpose === "mine-face")) veins(b, room.cells, 0.3, dress);
   }
-  if (b.depth < (params.levels ?? 1)) {
-    const [x, y] = taken(b, down[0], down[1]) || blocked(b.tiles[at(down[0], down[1])]) ? spot(b, best.filter((c) => Math.hypot((c % W) - down[0], Math.floor(c / W) - down[1]) < 5), down[0], down[1]) : down;
-    b.features.push({ x, y, kind: "stairs-down" });
-  }
   setTraps(b);
+  if (b.depth >= (params.levels ?? 1)) b.features.splice(b.features.indexOf(downStairs), 1);
 }
 
 /** A number in [0, 1) from a key, the same wherever it is asked for. */
@@ -475,8 +485,10 @@ function centrepiece(b: Build, object: string, river: [number, number][], trail:
   const cells = discOf(x, y, radius);
   if (object !== "bridge") clear(cells);
   placed.push([x, y]);
+  // What stands up (a pillar, a tent, a tree) stands on dry ground.
   const put = (px: number, py: number, kind: LocalFeature["kind"]) => {
     if (px < 0 || py < 0 || px >= W || py >= H || taken(b, px, py)) return;
+    if ((kind === "pillar" || kind === "tent" || kind === "tree") && !freeFloor(b, at(px, py))) return;
     b.features.push({ x: px, y: py, kind, room: b.keyed.length + 1 });
   };
   const ring = (r: number, count: number, kind: LocalFeature["kind"], gap = -1) => {
@@ -507,6 +519,7 @@ function centrepiece(b: Build, object: string, river: [number, number][], trail:
         x0 = Math.max(1, Math.min(W - L - 2, x - 7)),
         y0 = Math.max(1, Math.min(H - 7, y - 2));
       const holds: number[][] = [[], [], []];
+      const deck: number[] = [];
       for (let dx = 0; dx < L; dx++)
         for (let dy = 0; dy < 5; dy++) {
           const c = at(x0 + dx, y0 + dy);
@@ -516,8 +529,11 @@ function centrepiece(b: Build, object: string, river: [number, number][], trail:
           const door = (dx === 5 || dx === 10) && dy === 2;
           const breach = dx === 7 && dy === 4;
           b.tiles[c] = edge && !door && !breach ? TILE.hull : TILE.floor;
+          deck.push(c);
           if (!edge || door || breach) holds[dx < 5 ? 0 : dx < 10 ? 1 : 2].push(c);
         }
+      // No tree or rock is left standing on the hull, though it reach past the ground cleared for it.
+      clear(deck);
       const cargo = facts.cargo ? String(facts.cargo) : "";
       const ids: [Keyed["purpose"], number][] = [["quarters", 0], ["cargo-hold", 1], ["storage", 2]];
       for (const [p, k] of ids) {
