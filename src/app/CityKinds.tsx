@@ -157,7 +157,7 @@ export function CityPlaceKinds({ t, value, types, onChange }: { t: T; value: Cus
               ))}
             </select>
             {kind.opens === "building" ? (
-              <select className="grow" value={kind.target} onChange={(event) => update(index, { target: event.target.value })}>
+              <select className="grow" value={kind.target} onChange={(event) => update(index, { target: event.target.value, targetType: event.target.value.startsWith("custom:") ? types.find((type) => type.id === event.target.value.slice(7)) : undefined })}>
                 {BUILDING_TYPES.map((type) => (
                   <option key={type} value={type}>
                     {t(`btype.${type}`)}

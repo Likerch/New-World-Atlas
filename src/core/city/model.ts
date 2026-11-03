@@ -2,6 +2,7 @@
 // water, fields beyond the walls, and landmarks a game master can send players to. Lengths are map units; `scale`
 // converts them to metres.
 import type { Point } from "../geometry";
+import type { CustomBuildingType } from "../building/plan";
 import type { CoatOfArms } from "../heraldry";
 import type { Language } from "../language";
 import { ERA_IDS, type EraId } from "../setting";
@@ -87,6 +88,8 @@ export interface CustomPlace {
   opens: "none" | "building" | "local";
   /** A building type (or a custom one's id, "custom:<id>") when it opens as a building; a local map theme otherwise. */
   target: string;
+  /** The GM's own building type it opens as, carried along so the plan can be built anywhere. */
+  targetType?: CustomBuildingType;
   count: number;
   /** Kinds of quarter it turns up in; none means anywhere in town. */
   where: WardKind[];

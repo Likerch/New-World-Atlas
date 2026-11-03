@@ -93,7 +93,8 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null, o
   const numberOf = (level: number, id: number) => key?.rooms.find((entry) => entry.level === level && entry.room === id)?.n ?? null;
   const streetLabel = plan?.params.street ? `${nm(plan.params.street)}${plan.params.house ? `, ${plan.params.house}` : ""}` : undefined;
   const svg = useMemo(() => (plan && current ? renderBuilding(plan, { theme, floor, grid, roof, highlight: room, players: ctx.players, street: streetLabel, numbers: (r) => numberOf(current.level, r.id), label: (kind, item) => roomLabel(item.id, kind) }) : ""), [plan, theme, floor, grid, roof, room, t, names, ctx.players, key, streetLabel]); // eslint-disable-line react-hooks/exhaustive-deps
-  const legend = useMemo(() => (plan ? buildingLegend(plan, { theme, floor, players: ctx.players }) : undefined), [plan, theme, floor, ctx.players]);
+  // The roof seen from above has no furniture to explain.
+  const legend = useMemo(() => (plan && !roof ? buildingLegend(plan, { theme, floor, players: ctx.players }) : undefined), [plan, theme, floor, ctx.players, roof]);
   const roomMap = useMemo(() => (plan && close !== null ? generateRoom(plan, floor, close) : null), [plan, floor, close]);
   const roomSvg = useMemo(() => (roomMap ? renderRoom(roomMap, { theme, grid: true, players: ctx.players, label: roomLabel(close, roomMap.kind) }) : ""), [roomMap, theme, ctx.players, t, era, names]); // eslint-disable-line react-hooks/exhaustive-deps
   const view = plan ? buildingView(plan) : null;

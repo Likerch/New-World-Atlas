@@ -203,6 +203,7 @@ export function buildingFromCity(city: City, index: number): BuildingParams {
     ...(address ? { street: address.name, house: address.number } : {}),
     ...(terrace ? { terrace } : {}),
     ...(dry && ["ancient", "medieval", "renaissance", "stone"].includes(city.params.era) ? { material: "adobe" as const } : {}),
+    ...(type === "custom" && custom?.targetType ? { customType: custom.targetType, width: custom.targetType.width, depth: custom.targetType.depth, floors: custom.targetType.floors, cellar: custom.targetType.cellar.length > 0 } : {}),
     owner: ownerOf(city, index, type),
   });
 }

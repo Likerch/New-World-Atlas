@@ -455,6 +455,8 @@ const TERMS: Record<string, [string, string]> = {
   "edit.pickWall": ["Click the wall where the gate should be.", "Щёлкни по стене, где быть воротам."],
   "gate.n": ["Gate {{n}}", "Ворота {{n}}"],
   "gate.to": ["{{kind}} to {{town}}", "{{kind}} на {{town}}"],
+  "action.copyGuide": ["Copy the town's directory as text", "Скопировать справочник города текстом"],
+  "action.copied": ["Copied", "Скопировано"],
   "directory.count": ["{{n#shop|shops}} in the directory", "В справочнике {{n#лавка|лавки|лавок}}"],
   "ward.camp": ["Nomads' camp", "Стойбище кочевников"],
   "ward.farmstead": ["Farmstead", "Усадьба"],

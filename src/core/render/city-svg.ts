@@ -235,7 +235,10 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
   const byKind = (kind: string) => city.buildings.filter((b) => b.kind === kind);
   if (layers.fields) {
     out.push(`<g stroke="${th.fieldLine}" stroke-width="0.5">`);
-    byKind("field").forEach((b, k) => out.push(`<path d="${poly(b.polygon)}" fill="${th.field[k % 2]}"/>`));
+    // Fields of the dry lands are pale with dust; those of the north are dark and wet.
+    const biome = city.params.biome ?? "";
+    const dry = biome === "hot-desert" || biome === "cold-desert" || biome === "savanna";
+    byKind("field").forEach((b, k) => out.push(`<path d="${poly(b.polygon)}" fill="${th.field[k % 2]}"${dry ? ` fill-opacity="0.55"` : ""}/>`));
     out.push(`</g>`);
     // Courtyards: gardens behind the houses.
     for (const yard of byKind("yard")) out.push(`<path d="${poly(yard.polygon)}" fill="${th.field[1]}" stroke="${th.fieldLine}" stroke-width="0.4"/>`);
@@ -268,11 +271,17 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
   }
 
   if (layers.trees) {
+    // The land the town stands in: firs in the taiga, palms in the hot lands, broadleaves elsewhere.
+    const biome = city.params.biome ?? "";
+    const firs = biome === "taiga" || biome === "tundra" || biome === "temperate-rainforest";
+    const palms = biome === "hot-desert" || biome === "savanna" || biome === "tropical-seasonal-forest" || biome === "tropical-rainforest";
     out.push(`<g fill="${th.tree}" stroke="${th.treeLine}" stroke-width="0.5">`);
     for (const tree of byKind("tree")) {
       const [cx, cy] = centroid(tree.polygon);
       const r = Math.hypot(tree.polygon[0][0] - cx, tree.polygon[0][1] - cy);
-      out.push(`<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r)}"/>`);
+      if (firs) out.push(`<path d="M${r1(cx)},${r1(cy - r * 1.1)}L${r1(cx + r * 0.8)},${r1(cy + r * 0.8)}L${r1(cx - r * 0.8)},${r1(cy + r * 0.8)}Z"/>`);
+      else if (palms) out.push(`<path d="M${r1(cx - r)},${r1(cy)}L${r1(cx + r)},${r1(cy)}M${r1(cx)},${r1(cy - r)}L${r1(cx)},${r1(cy + r)}M${r1(cx - r * 0.7)},${r1(cy - r * 0.7)}L${r1(cx + r * 0.7)},${r1(cy + r * 0.7)}M${r1(cx + r * 0.7)},${r1(cy - r * 0.7)}L${r1(cx - r * 0.7)},${r1(cy + r * 0.7)}" stroke="${th.treeLine}" stroke-width="${r1(Math.max(0.5, r * 0.3))}" stroke-linecap="round"/><circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r * 0.25)}"/>`);
+      else out.push(`<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r)}"/>`);
     }
     out.push(`</g>`);
   }
@@ -493,9 +502,9 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
     out.push(`<rect x="16" y="16" width="${tw}" height="38" rx="3" fill="${th.halo}" fill-opacity="0.9" stroke="${th.label}"/><text x="${16 + tw / 2}" y="42" text-anchor="middle" font-size="20" letter-spacing="2" font-weight="600" fill="${th.label}">${title}</text>`);
     // The town's arms beside its name.
     if (city.params.arms) out.push(renderCoatOfArms(city.params.arms, { at: { x: 22 + tw, y: 12, width: 40 } }));
-    // North, up the map.
-    const nx = W - 40,
-      ny = 44;
+    // North, up the map: under the name, clear of the map's own buttons.
+    const nx = 40,
+      ny = 92;
     out.push(`<g><circle cx="${nx}" cy="${ny}" r="17" fill="${th.halo}" fill-opacity="0.85" stroke="${th.label}" stroke-width="0.8"/><path d="M${nx},${ny - 14}L${nx + 6},${ny + 6}L${nx},${ny + 2}L${nx - 6},${ny + 6}Z" fill="${th.label}"/><text x="${nx}" y="${ny - 19}" text-anchor="middle" font-size="11" font-weight="700" fill="${th.label}">N</text></g>`);
     const target = (W / 6) * city.scale;
     const magnitude = 10 ** Math.floor(Math.log10(target));

@@ -27,7 +27,7 @@ import {
   type ShopInfo,
   type WardKind,
 } from "../core/index";
-import { CityPlaceKinds, CityWardKinds, WARD_KINDS } from "./CityKinds";
+import { CityPlaceKinds, CityWardKinds, loadList, WARD_KINDS } from "./CityKinds";
 import type { T } from "./i18n";
 import { NumberInput } from "./NumberInput";
 import { NpcCard, PeopleList, RumourList, say } from "./People";
@@ -180,7 +180,7 @@ export function CityControls({ params, set, theme, setTheme, layers, setLayers, 
       </label>
       {extra}
       <CityWardKinds t={t} value={wardKinds} onChange={(next) => onKinds(next, placeKinds)} />
-      <CityPlaceKinds t={t} value={placeKinds} types={[]} onChange={(next) => onKinds(wardKinds, next)} />
+      <CityPlaceKinds t={t} value={placeKinds} types={loadList("atlas.kinds.building")} onChange={(next) => onKinds(wardKinds, next)} />
       {placeKinds.length ? <p className="muted">{t("custom.apply")}</p> : null}
     </>
   );
@@ -216,6 +216,7 @@ interface InspectorProps {
 export function CityInspector({ city, society, shops, t, nm, players, selection, onSelect, onOpenBuilding, onOpenLocal, onOpenDistrict, edits, setEdits, pending, setPending, wardKinds, placeKinds }: InspectorProps) {
   const [tab, setTab] = useState<"wards" | "landmarks" | "streets" | "factions" | "directory">("wards");
   const [query, setQuery] = useState("");
+  const [copied, setCopied] = useState(false);
   const era = city.params.era;
   const ownWard = (id?: string) => (id ? city.params.custom?.wards.find((kind) => kind.id === id) : undefined);
   const ownPlace = (id?: string) => (id ? city.params.custom?.places.find((kind) => kind.id === id) : undefined);
@@ -701,6 +702,41 @@ export function CityInspector({ city, society, shops, t, nm, players, selection,
                   ))}
       </ul>
       {tab === "directory" ? <p className="muted">{t("directory.count", { n: directory.length })}</p> : null}
+      {tab === "directory" ? (
+        <button
+          type="button"
+          className="wide"
+          onClick={() => {
+            // The town's directory as text: who governs, the factions, the places and their owners, the shops.
+            const placeLine = (id: number) => {
+              const info = society.places.find((p) => p.landmark === id);
+              const landmark = city.landmarks.find((l) => l.id === id)!;
+              const index = city.buildings.findIndex((b) => b.ward === landmark.ward && !PROPS.includes(b.kind) && b.polygon.length > 2 && pointInPolygon([landmark.x, landmark.y], b.polygon));
+              return `- **${landmarkTitle(id)}** — ${info ? `${nm(info.owner.name)}, ${t(`role.${info.owner.role}@${era}`)}` : ""}${index >= 0 && address(index) ? ` · ${address(index)}` : ""}${info?.faction ? ` · ${factionTitle(info.faction)}` : ""}`;
+            };
+            const text = [
+              `# ${nm(city.name)}`,
+              "",
+              `${t("npc.council")}: ${society.council.map((npc) => `${nm(npc.name)} (${t(`role.${npc.role}@${era}`)})`).join(", ")}`,
+              "",
+              `## ${t("panel.factions")}`,
+              ...society.factions.map((faction) => `- **${factionTitle(faction.id)}** ${"●".repeat(faction.strength)} — ${nm(faction.leader.name)}, ${t(`role.${faction.leader.role}@${era}`)}; ${t("npc.wants", { want: t(`want.${faction.goal}`) })}`),
+              "",
+              `## ${t("panel.landmarks")}`,
+              ...city.landmarks.map((landmark) => placeLine(landmark.id)),
+              "",
+              `## ${t("panel.directory")}`,
+              ...directory.map((shop) => `- ${t(`craft.${shop.craft}@${era}`)} — ${nm(shop.owner.name)}${shop.address ? ` · ${nm(shop.address.name)}, ${shop.address.number}` : ""}`),
+            ].join("\n");
+            void navigator.clipboard?.writeText(text).then(() => {
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            });
+          }}
+        >
+          📋 {copied ? t("action.copied") : t("action.copyGuide")}
+        </button>
+      ) : null}
       {!players && wall && city.params.settlement !== "village" && city.params.settlement !== "hamlet" ? (
         <details className="editor">
           <summary>
