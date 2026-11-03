@@ -27,10 +27,13 @@ function planetWorld(): WorldDoc {
 }
 
 test("a world shows its top map and everything reachable below it, nothing above", () => {
-  assert.deepEqual(levelsOf("planet"), ["planet", "region", "underworld", "city", "building", "local"]);
-  assert.deepEqual(levelsOf("city"), ["city", "building", "local"]);
+  const sorted = (list: string[]) => [...list].sort();
+  assert.deepEqual(sorted(levelsOf("planet")), sorted(["planet", "region", "underworld", "city", "building", "local"]));
+  // A city leads into its buildings and halls; a building's cellar into a dungeon.
+  assert.deepEqual(sorted(levelsOf("city")), sorted(["city", "building", "local"]));
+  assert.deepEqual(sorted(levelsOf("building")), sorted(["building", "local"]));
   assert.equal(levelsOf("universe").length, 9);
-  assert.deepEqual(levelsOf("building"), ["building"]);
+  assert.ok(!levelsOf("building").includes("planet") && !levelsOf("city").includes("region"), "nothing above");
 });
 
 test("maps hang in a tree from the top; the path down is the breadcrumb", () => {

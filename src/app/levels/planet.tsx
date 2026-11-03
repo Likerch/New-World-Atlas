@@ -101,6 +101,7 @@ export interface PlanetLinks {
   /** The local map of a spot of open land, and the underworld below a way down. */
   openHere?: (planet: Planet, cell: number) => void;
   descend?: (planet: Planet, marker: number) => void;
+  openBuilding?: (planet: Planet, marker: number) => void;
   openCountry?: (planet: Planet, state: number) => void;
   openUnderworld?: (planet: Planet) => void;
   /** A close-up of a box the GM marked out on the map. */
@@ -108,7 +109,7 @@ export interface PlanetLinks {
   back: (() => void) | null;
 }
 
-export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, initialSetting: Partial<Setting> | undefined, { openCity, openRegion, openLocal, openCountry, openUnderworld, openArea, openHere, descend, back }: PlanetLinks): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void; theme: ThemeId; layers: Record<LayerId, boolean> } {
+export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, initialSetting: Partial<Setting> | undefined, { openCity, openRegion, openLocal, openCountry, openUnderworld, openArea, openHere, descend, openBuilding, back }: PlanetLinks): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void; theme: ThemeId; layers: Record<LayerId, boolean> } {
   const { t } = ctx;
   const [params, setParams] = useState<PlanetParams>(() => planetParams({ seed: initialSeed, setting: initialSetting }));
   const [raw, setPlanet] = useState<Planet | null>(null);
@@ -218,6 +219,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
             here: openHere && ((cell) => openHere(planet, cell)),
             sheet: openArea && ((cell) => openArea(planet, sheetBox(planet, planet.mesh.x[cell], planet.mesh.y[cell]), t("region.sheet"))),
             descend: descend && ((marker) => descend(planet, marker)),
+            building: openBuilding && ((marker) => openBuilding(planet, marker)),
           })
         : null,
     [planet, t], // eslint-disable-line react-hooks/exhaustive-deps
@@ -592,6 +594,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
         onOpenLocal={openLocal ? (marker) => openLocal(planet, marker) : undefined}
         onOpenHere={openHere ? (cell) => openHere(planet, cell) : undefined}
         onDescend={descend ? (marker) => descend(planet, marker) : undefined}
+        onOpenBuilding={openBuilding ? (marker) => openBuilding(planet, marker) : undefined}
         onOpenCountry={openCountry ? (state) => openCountry(planet, state) : undefined}
         onOpenSheet={openArea ? (cell) => openArea(planet, sheetBox(planet, planet.mesh.x[cell], planet.mesh.y[cell]), t("region.sheet")) : undefined}
         onSelect={(next, at) => {

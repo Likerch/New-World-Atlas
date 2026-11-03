@@ -1,7 +1,7 @@
 // The GM's side panel: what is at the clicked place, and every state, people, town, river and point of interest with
 // its facts. Picking an entry highlights it and moves the map to it.
 import { useMemo, useState } from "react";
-import { featureWord, cellKm2, ageOf, altitude, BIOMES, emblemOf, latitudeOf, localFromMarker, raiseArmies, renderEmblem, SEA_LEVEL, settingOf, techEra, type Emblem, type Marker, type PastEvent, type Planet, type RouteKind } from "../core/index";
+import { buildingOfMarker, featureWord, cellKm2, ageOf, altitude, BIOMES, emblemOf, latitudeOf, localFromMarker, raiseArmies, renderEmblem, SEA_LEVEL, settingOf, techEra, type Emblem, type Marker, type PastEvent, type Planet, type RouteKind } from "../core/index";
 import { Chronicle, eventText, RealmStory, TownStory } from "./Chronicle";
 import { area, km, people } from "./format";
 import type { T } from "./i18n";
@@ -31,6 +31,8 @@ interface Props {
   onOpenHere?: (cell: number) => void;
   /** Down from a way into the deep (a cave, a mine, a volcano, a portal) into the underworld. */
   onDescend?: (marker: number) => void;
+  /** A place that stands as one building (an inn, a lighthouse, a monastery…) opened as its plan. */
+  onOpenBuilding?: (marker: number) => void;
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -66,7 +68,7 @@ export function legendOf(marker: Marker, t: T, nm: (name: string) => string, age
   return t(`legend.${marker.kind}${age ? `@${age}` : ""}`, facts);
 }
 
-export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onOpenCity, onOpenRegion, onOpenLocal, onOpenCountry, onOpenSheet, onOpenHere, onDescend }: Props) {
+export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onOpenCity, onOpenRegion, onOpenLocal, onOpenCountry, onOpenSheet, onOpenHere, onDescend, onOpenBuilding }: Props) {
   const [query, setQuery] = useState("");
   // Long lists of towns come a page at a time.
   const [shown, setShown] = useState(300);
@@ -353,6 +355,11 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
           {onOpenLocal && localFromMarker(planet, marker.id) ? (
             <button type="button" className="primary wide" onClick={() => onOpenLocal(marker.id)}>
               🗺️ {t("action.openLocal")}
+            </button>
+          ) : null}
+          {onOpenBuilding && buildingOfMarker(planet, marker.id) ? (
+            <button type="button" className="primary wide" onClick={() => onOpenBuilding(marker.id)}>
+              🏠 {t("action.openBuilding")}
             </button>
           ) : null}
           {onDescend && (marker.kind === "cave" || marker.kind === "mine" || marker.kind === "volcano" || (marker.kind === "portal" && marker.facts.leadsTo === "underworld")) ? (

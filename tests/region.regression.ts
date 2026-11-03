@@ -1,6 +1,6 @@
 // Region regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { SETTINGS, armsOf, cityFromBurg, editPlanet, emptyEdits, generateArea, generateCity, generateCountry, generatePlanet, generateRegion, generateUnderworld, renderPlanet, renderUnderworld, sheetBox } from "../src/core/index";
+import { buildingOfMarker, generateBuilding, SETTINGS, armsOf, cityFromBurg, editPlanet, emptyEdits, generateArea, generateCity, generateCountry, generatePlanet, generateRegion, generateUnderworld, renderPlanet, renderUnderworld, sheetBox } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -178,6 +178,15 @@ test("a region's village and hamlet open as a village and a hamlet", () => {
     assert.equal(link.params.settlement, tier);
     assert.ok(generateCity(link.params, link.language).name, "it opens");
   }
+});
+
+test("an inn, a lighthouse or a monastery opens as one building, the same from the region as from the planet", () => {
+  const kept = region.markers.find((marker) => marker.origin !== undefined && buildingOfMarker(region, marker.id));
+  const any = planet.markers.find((marker) => buildingOfMarker(planet, marker.id));
+  assert.ok(any, "no place of the planet stands as a building");
+  const params = buildingOfMarker(planet, any!.id)!;
+  assert.ok(generateBuilding(params).floors.length > 0);
+  if (kept) assert.equal(buildingOfMarker(region, kept.id)!.seed, buildingOfMarker(planet, kept.origin!)!.seed);
 });
 
 console.log(`region: ${passed} regressions passed`);

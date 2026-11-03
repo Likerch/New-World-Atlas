@@ -12,6 +12,7 @@ import {
   localFromCavern,
   cityFromBurg,
   editPlanet,
+  buildingOfMarker,
   localAt,
   generateArea,
   generateCountry,
@@ -320,6 +321,15 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     local.restore!(resolve(world, `local:${base.seed}`, base), link.language);
     setView("local");
   };
+  /** A planet's (or a region's) place that stands as one building, opened as its plan. */
+  const openPlace = (from: Level, made: Planet, marker: number) => {
+    const params = buildingOfMarker(made, marker);
+    if (!params) return;
+    const base = buildingParams(params) as unknown as Record<string, unknown>;
+    linkTo("building", from, `marker:${marker}`, base);
+    building.restore!(resolve(world, `building:${base.seed}`, base));
+    setView("building");
+  };
   const building = useBuildingLevel(ctx, back("building"), (link, entity) => openLocal(building, link, entity));
   // "Deeper" from a town: the underworld of the planet it hangs from (set once the planet level exists, below).
   const cityBelow = useRef<(() => void) | null>(null);
@@ -361,6 +371,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     openCity: (made, burg) => openCity(region, made, burg),
     openLocal: (made, marker) => openLocal(region, localFromMarker(made, marker), `marker:${marker}`),
     openHere: (made, cell) => openLocal(region, localAt(made, cell), `cell:${cell}`),
+    openBuilding: (made, marker) => openPlace(region, made, marker),
     openUnderworld: (made, marker) => {
       linkTo("underworld", region, "underworld", null);
       underworld.open(made, marker ? { marker } : undefined);
@@ -388,6 +399,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
       underworld.open(made);
     },
     openHere: (made, cell) => openLocal(planet, localAt(made, cell), `cell:${cell}`),
+    openBuilding: (made, marker) => openPlace(planet, made, marker),
     descend: (made, marker) => {
       linkTo("underworld", planet, "underworld", null);
       underworld.open(made, { marker });

@@ -33,14 +33,16 @@ export const TOP_LEVELS: TopLevel[] = ["universe", "galaxy", "system", "planet",
 /** Which maps can be reached below each kind of map. */
 const BELOW: Record<MapLevel, MapLevel[]> = {
   universe: ["galaxy"],
-  galaxy: ["system", "local"],
-  system: ["planet"],
-  planet: ["region", "underworld", "city", "local"],
-  region: ["city", "local"],
-  underworld: ["local"],
+  galaxy: ["system", "local", "building"],
+  system: ["planet", "city", "building", "local"],
+  planet: ["region", "underworld", "city", "building", "local"],
+  region: ["city", "building", "local", "underworld"],
+  underworld: ["local", "city"],
+  // A city's way to the deep and a cave's to the underworld need a planet above them, which a city or a dungeon at the
+  // top of its world has not.
   city: ["building", "local"],
-  building: [],
-  local: [],
+  building: ["local"],
+  local: ["local"],
 };
 
 /** The levels a world with this top can show: the top and everything reachable under it. */

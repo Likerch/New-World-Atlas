@@ -1,7 +1,7 @@
 // What a planet-shaped map (a planet, a region, a sheet) offers under the cursor: its name in a tooltip, the map a
 // double-click opens, the right-click menu of every map that opens there, and distances in kilometres (great-circle on
 // a whole world, true to scale on a smaller map).
-import { BIOMES, latitudeOf, localAt, localFromMarker, wrapsRound, type Planet } from "../core/index";
+import { buildingOfMarker, BIOMES, latitudeOf, localAt, localFromMarker, wrapsRound, type Planet } from "../core/index";
 import { km, people } from "./format";
 import type { T } from "./i18n";
 import type { MenuItem } from "./MapView";
@@ -14,6 +14,7 @@ export interface PlanetOpeners {
   here?: (cell: number) => void;
   sheet?: (cell: number) => void;
   descend?: (marker: number) => void;
+  building?: (marker: number) => void;
 }
 
 const DEEP = new Set(["cave", "mine", "volcano"]);
@@ -45,6 +46,7 @@ export function planetActions(planet: Planet, t: T, nm: (name: string) => string
     open: (x: number, y: number) => {
       const { cell, marker, burg } = at(x, y);
       if (burg && open.city) return open.city(burg.id);
+      if (marker && open.building && buildingOfMarker(planet, marker.id)) return open.building(marker.id);
       if (marker && open.local && localFromMarker(planet, marker.id)) return open.local(marker.id);
       if (planet.water[cell]) return;
       if (open.region && planet.province[cell]) return open.region(planet.province[cell]);
@@ -55,6 +57,7 @@ export function planetActions(planet: Planet, t: T, nm: (name: string) => string
       const items: MenuItem[] = [];
       if (burg && open.city) items.push({ label: `🏰 ${t("action.openCity")}: ${nm(burg.name)}`, run: () => open.city!(burg.id) });
       if (marker && open.local && localFromMarker(planet, marker.id)) items.push({ label: `🗺️ ${t("action.openLocal")}${marker.name ? `: ${nm(marker.name)}` : ""}`, run: () => open.local!(marker.id) });
+      if (marker && open.building && buildingOfMarker(planet, marker.id)) items.push({ label: `🏠 ${t("action.openBuilding")}${marker.name ? `: ${nm(marker.name)}` : ""}`, run: () => open.building!(marker.id) });
       if (marker && open.descend && deep(marker.kind, marker.facts)) items.push({ label: `🕳 ${t("action.toUnderworld")}`, run: () => open.descend!(marker.id) });
       if (!planet.water[cell]) {
         if (open.region && planet.province[cell]) items.push({ label: `🗺 ${t("action.openRegion")}: ${nm(planet.provinces[planet.province[cell]].name)}`, run: () => open.region!(planet.province[cell]) });

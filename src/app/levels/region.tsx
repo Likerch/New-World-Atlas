@@ -46,7 +46,7 @@ function neighboursOf(planet: Planet, of: "province" | "state", id: number): num
 
 export function useRegionLevel(
   ctx: LevelContext,
-  links: { openCity: (region: Planet, burg: number) => void; openLocal: (region: Planet, marker: number) => void; openHere: (region: Planet, cell: number) => void; openUnderworld: (region: Planet, marker?: number) => void; openProvince: (planet: Planet, province: number) => void; openCountry: (planet: Planet, state: number) => void; back: (() => void) | null },
+  links: { openCity: (region: Planet, burg: number) => void; openLocal: (region: Planet, marker: number) => void; openHere: (region: Planet, cell: number) => void; openUnderworld: (region: Planet, marker?: number) => void; openBuilding: (region: Planet, marker: number) => void; openProvince: (planet: Planet, province: number) => void; openCountry: (planet: Planet, state: number) => void; back: (() => void) | null },
 ): Level & { open: (planet: Planet, province: number, style?: ThemeId, layers?: Record<LayerId, boolean>) => void; openCountry: (planet: Planet, state: number, style?: ThemeId, layers?: Record<LayerId, boolean>) => void; openArea: (planet: Planet, box: [number, number, number, number], style?: ThemeId, layers?: Record<LayerId, boolean>, title?: string) => void } {
   const { t } = ctx;
   const [raw, setRegion] = useState<Planet | null>(null);
@@ -92,6 +92,7 @@ export function useRegionLevel(
             local: (marker) => links.openLocal(region, marker),
             here: (cell) => links.openHere(region, cell),
             descend: (marker) => links.openUnderworld(region, marker),
+            building: (marker) => links.openBuilding(region, marker),
           })
         : null,
     [region, t], // eslint-disable-line react-hooks/exhaustive-deps
@@ -269,6 +270,7 @@ export function useRegionLevel(
         onOpenLocal={(marker) => links.openLocal(region, marker)}
         onOpenHere={(cell) => links.openHere(region, cell)}
         onDescend={(marker) => links.openUnderworld(region, marker)}
+        onOpenBuilding={(marker) => links.openBuilding(region, marker)}
         onSelect={(next, at) => {
           setSelection(next);
           if (at) ctx.focus(at[0], at[1]);

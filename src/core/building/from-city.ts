@@ -9,7 +9,10 @@ import type { Point } from "../geometry";
 import { pointInPolygon } from "../polygon";
 import { hashString } from "../random";
 import { craftFor } from "./crafts";
-import { BUILDING_FLOORS, MAX_FLOORS, buildingParams, type BuildingOwner, type BuildingParams, type BuildingType } from "./plan";
+import { BUILDING_FLOORS, ERA_BUILDINGS, MAX_FLOORS, buildingParams, type BuildingOwner, type BuildingParams, type BuildingType } from "./plan";
+import type { Planet } from "../planet/model";
+import { ageOf, settingOf } from "../setting";
+import type { Era } from "../city/model";
 
 /** Sides of the smallest rectangle around a convex outline (rotating each edge onto the x-axis). */
 export function footprint(polygon: Point[]): [number, number] {
@@ -206,4 +209,18 @@ export function buildingFromCity(city: City, index: number): BuildingParams {
     ...(type === "custom" && custom?.targetType ? { customType: custom.targetType, width: custom.targetType.width, depth: custom.targetType.depth, floors: custom.targetType.floors, cellar: custom.targetType.cellar.length > 0 } : {}),
     owner: ownerOf(city, index, type),
   });
+}
+
+/** The places of a planet (or a region) that stand as one building: an inn, a lighthouse, a monastery, a watchtower, a
+ * wizard's tower, a mill. The same building from any map of it: keyed by the planet's own place. */
+const PLACE_BUILDINGS: Partial<Record<string, BuildingType>> = { inn: "tavern", lighthouse: "lighthouse", monastery: "temple", watchtower: "keep", "wizard-tower": "mage-tower", mill: "mill" };
+
+export function buildingOfMarker(planet: Planet, markerId: number): Partial<BuildingParams> | null {
+  const marker = planet.markers[markerId];
+  const wanted = marker ? PLACE_BUILDINGS[marker.kind] : undefined;
+  if (!marker || !wanted) return null;
+  const era = ageOf(settingOf(planet.params.setting)) as Era;
+  const types = ERA_BUILDINGS[era] ?? ERA_BUILDINGS.medieval;
+  const type = types.includes(wanted) ? wanted : wanted === "tavern" ? types.find((t) => t === "store" || t === "shelter" || t === "trading-post") ?? types[0] : types[0];
+  return { seed: `${planet.params.world ?? planet.params.seed}/marker-${marker.origin ?? markerId}/building`, type, era, ...(marker.name ? { name: marker.name } : {}) };
 }
