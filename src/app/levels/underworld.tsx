@@ -1,15 +1,17 @@
 // The underworld level: the caverns beneath the planet, opened from the planet's settings.
 import { useMemo, useState } from "react";
-import { generateUnderworld, renderUnderworld, type Planet, type Underworld, underworldLegend } from "../../core/index";
+import { generateUnderworld, renameUnderworld, renderUnderworld, type Planet, type Underworld, underworldLegend } from "../../core/index";
 import type { Level, LevelContext } from "./types";
 
 export function useUnderworldLevel(ctx: LevelContext, openCave: (world: Underworld, cavern: number) => void, back: (() => void) | null): Level & { open: (planet: Planet) => void } {
   const { t, nm } = ctx;
   const [state, setState] = useState<{ world: Underworld; planet: Planet } | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
-  const svg = useMemo(() => (state ? renderUnderworld(state.world, state.planet, { script: ctx.script, highlight: picked }) : ""), [state, ctx.script, picked]);
-  const legend = useMemo(() => (state ? underworldLegend(state.world) : undefined), [state]);
-  const world = state?.world ?? null;
+  const mapKey = state ? `underworld:${state.world.seed}` : null;
+  const names = ctx.names(mapKey);
+  const world = useMemo(() => (state ? renameUnderworld(state.world, names) : null), [state, names]);
+  const svg = useMemo(() => (state && world ? renderUnderworld(world, state.planet, { script: ctx.script, highlight: picked }) : ""), [state, world, ctx.script, picked]);
+  const legend = useMemo(() => (world ? underworldLegend(world) : undefined), [world]);
   const cavern = world && picked !== null ? world.caverns[picked] : null;
   return {
     id: "underworld",
@@ -27,7 +29,7 @@ export function useUnderworldLevel(ctx: LevelContext, openCave: (world: Underwor
       });
       ctx.show("underworld");
     },
-    mapKey: world ? `underworld:${world.seed}` : null,
+    mapKey,
     params: world ? {} : null,
     selected: !world ? null : cavern ? { key: `cavern:${cavern.id}`, label: cavern.name } : { key: "world", label: world.name },
     map: world

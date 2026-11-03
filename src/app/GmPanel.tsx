@@ -11,6 +11,8 @@ interface Props {
   t: T;
   store: CampaignStore;
   mapKey: string | null;
+  /** Where pins and fog of the view go; null when the view takes none. */
+  sheetKey: string | null;
   selected: { key: string; label: string } | null;
   mode: GmMode;
   setMode: (mode: GmMode) => void;
@@ -22,12 +24,15 @@ interface Props {
 
 const COLORS = ["#d64545", "#2f7fd0", "#2e9e5b", "#c98a1a", "#8a4fc9", "#1d1d1d"];
 
-export function GmPanel({ t, store, mapKey, selected, mode, setMode, brush, setBrush, players, setPlayers }: Props) {
+export function GmPanel({ t, store, mapKey, sheetKey, selected, mode, setMode, brush, setBrush, players, setPlayers }: Props) {
   const [open, setOpen] = useState(false);
   const file = useRef<HTMLInputElement>(null);
+  // Names and notes belong to the map; pins and fog to the sheet on screen.
   const patch: MapPatch = store.patch(mapKey);
   const update = (change: (p: MapPatch) => MapPatch) => store.update(mapKey, change);
-  const setPin = (id: string, change: Partial<Pin>) => update((p) => ({ ...p, pins: p.pins.map((pin) => (pin.id === id ? { ...pin, ...change } : pin)) }));
+  const sheet: MapPatch = store.patch(sheetKey);
+  const updateSheet = (change: (p: MapPatch) => MapPatch) => store.update(sheetKey, change);
+  const setPin = (id: string, change: Partial<Pin>) => updateSheet((p) => ({ ...p, pins: p.pins.map((pin) => (pin.id === id ? { ...pin, ...change } : pin)) }));
 
   if (players)
     return (
@@ -55,22 +60,23 @@ export function GmPanel({ t, store, mapKey, selected, mode, setMode, brush, setB
       </div>
       <div className="gm-modes">
         {(["inspect", "pin", "reveal", "hide"] as GmMode[]).map((name) => (
-          <button key={name} type="button" aria-pressed={mode === name} onClick={() => setMode(name)} disabled={!mapKey || ((name === "reveal" || name === "hide") && !patch.fog.enabled)}>
+          <button key={name} type="button" aria-pressed={mode === name} onClick={() => setMode(name)} disabled={name !== "inspect" && (!sheetKey || ((name === "reveal" || name === "hide") && !sheet.fog.enabled))}>
             {t(`gm.mode.${name}`)}
           </button>
         ))}
       </div>
       <label className="check">
-        <input type="checkbox" checked={patch.fog.enabled} disabled={!mapKey} onChange={(event) => update((p) => ({ ...p, fog: { ...p.fog, enabled: event.target.checked } }))} />
+        <input type="checkbox" checked={sheet.fog.enabled} disabled={!sheetKey} onChange={(event) => updateSheet((p) => ({ ...p, fog: { ...p.fog, enabled: event.target.checked } }))} />
         {t("gm.fog")}
       </label>
-      {patch.fog.enabled ? (
+      {mapKey && !sheetKey ? <p className="muted">{t("gm.flatOnly")}</p> : null}
+      {sheet.fog.enabled ? (
         <div className="gm-row">
           <label>
             {t("gm.brush")}
             <input type="range" min={10} max={200} value={brush} onChange={(event) => setBrush(Number(event.target.value))} />
           </label>
-          <button type="button" onClick={() => update((p) => ({ ...p, fog: { ...p.fog, revealed: [] } }))}>
+          <button type="button" onClick={() => updateSheet((p) => ({ ...p, fog: { ...p.fog, revealed: [] } }))}>
             {t("gm.resetFog")}
           </button>
         </div>
@@ -100,17 +106,17 @@ export function GmPanel({ t, store, mapKey, selected, mode, setMode, brush, setB
         <p className="muted">{t("gm.selectHint")}</p>
       )}
 
-      {patch.pins.length ? (
+      {sheet.pins.length ? (
         <div className="gm-block">
           <h4>{t("gm.pins")}</h4>
-          {patch.pins.map((pin) => (
+          {sheet.pins.map((pin) => (
             <div key={pin.id} className="gm-pin">
               <span className="swatch" style={{ background: pin.color }} onClick={() => setPin(pin.id, { color: COLORS[(COLORS.indexOf(pin.color) + 1) % COLORS.length] })} title={t("gm.color")} />
               <input value={pin.label} placeholder={t("gm.pinLabel")} onChange={(event) => setPin(pin.id, { label: event.target.value })} />
               <button type="button" className="ghost" title={t("gm.hidden")} aria-pressed={pin.hidden} onClick={() => setPin(pin.id, { hidden: !pin.hidden })}>
                 {pin.hidden ? "🙈" : "👁"}
               </button>
-              <button type="button" className="ghost" title={t("gm.delete")} onClick={() => update((p) => ({ ...p, pins: p.pins.filter((item) => item.id !== pin.id) }))}>
+              <button type="button" className="ghost" title={t("gm.delete")} onClick={() => updateSheet((p) => ({ ...p, pins: p.pins.filter((item) => item.id !== pin.id) }))}>
                 ✕
               </button>
             </div>

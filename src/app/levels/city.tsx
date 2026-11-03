@@ -6,7 +6,7 @@ import type { Level, LevelContext } from "./types";
 
 const allOn = (ids: readonly CityLayerId[]) => Object.fromEntries(ids.map((id) => [id, true])) as Record<CityLayerId, boolean>;
 
-export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined, openBuilding: (city: City, index: number) => void, back: (() => void) | null, openLocal: (city: City, landmark: number) => void): Level & { city: City | null; openFromBurg: (planet: Planet, burg: number) => void } {
+export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined, openBuilding: (city: City, index: number, entity: string, name: string) => void, back: (() => void) | null, openLocal: (city: City, landmark: number) => void): Level & { city: City | null; openFromBurg: (planet: Planet, burg: number) => void } {
   const { t } = ctx;
   const pending = useRef(false);
   const [input, setInput] = useState<CityParams>(() => cityParams({ seed: initialSeed, era: "medieval" }));
@@ -163,7 +163,19 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
         t={t}
         nm={ctx.nm}
         selection={selection}
-        onOpenBuilding={(index) => openBuilding(city, index)}
+        onOpenBuilding={(index) => {
+          // A building a close-up only enlarges opens as the building of the whole city; a lot drawn only up close
+          // is its own, keyed under its quarter.
+          let at = raw!;
+          let id = index;
+          for (let k = parents.length - 1; k >= 0 && at.buildings[id]?.origin !== undefined; k--) {
+            id = at.buildings[id].origin!;
+            at = parents[k];
+          }
+          const top = parents[0] ?? raw!;
+          const entity = at === top ? `building:${id}` : `building:${at.params.seed.slice(top.params.seed.length + 1)}/${id}`;
+          openBuilding(at, id, entity, ctx.names(`city:${top.params.seed}`)[entity] || names[`building:${index}`] || "");
+        }}
         onOpenLocal={(landmark) => openLocal(city, landmark)}
         onOpenDistrict={
           parents.length

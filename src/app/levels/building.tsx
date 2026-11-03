@@ -33,14 +33,16 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): 
   const era = plan?.params.era ?? input.era;
   const roomName = (kind: string | undefined) => t(`room.${kind}@${era}`);
   const typeName = (type: string) => t(`btype.${type}@${era}`);
-  const svg = useMemo(() => (plan ? renderBuilding(plan, { theme, floor, grid, highlight: room, label: (kind) => t(`room.${kind}@${plan.params.era}`) }) : ""), [plan, theme, floor, grid, room, t]);
-  const current = plan?.floors[floor];
-  const legend = useMemo(() => (plan ? buildingLegend(plan, { theme, floor }) : undefined), [plan, theme, floor]);
-  const roomMap = useMemo(() => (plan && close !== null ? generateRoom(plan, floor, close) : null), [plan, floor, close]);
-  const roomSvg = useMemo(() => (roomMap ? renderRoom(roomMap, { theme, grid: true, players: ctx.players, label: roomName(roomMap.kind) }) : ""), [roomMap, theme, ctx.players, t, era]); // eslint-disable-line react-hooks/exhaustive-deps
-  const bounds = plan ? plan.yard?.bounds ?? { x: -2, y: -2, w: plan.params.width + 4, h: plan.params.depth + 4 } : null;
   const mapKey = plan ? `building:${plan.params.seed}` : null;
   const names = ctx.names(mapKey);
+  const current = plan?.floors[floor];
+  // A room's name: the GM's own, else its kind in the building's age.
+  const roomLabel = (id: number | null, kind: string | undefined) => (current && id !== null && names[`room:${current.level}:${id}`]) || roomName(kind);
+  const svg = useMemo(() => (plan ? renderBuilding(plan, { theme, floor, grid, highlight: room, label: (kind, item) => roomLabel(item.id, kind) }) : ""), [plan, theme, floor, grid, room, t, names]); // eslint-disable-line react-hooks/exhaustive-deps
+  const legend = useMemo(() => (plan ? buildingLegend(plan, { theme, floor }) : undefined), [plan, theme, floor]);
+  const roomMap = useMemo(() => (plan && close !== null ? generateRoom(plan, floor, close) : null), [plan, floor, close]);
+  const roomSvg = useMemo(() => (roomMap ? renderRoom(roomMap, { theme, grid: true, players: ctx.players, label: roomLabel(close, roomMap.kind) }) : ""), [roomMap, theme, ctx.players, t, era, names]); // eslint-disable-line react-hooks/exhaustive-deps
+  const bounds = plan ? plan.yard?.bounds ?? { x: -2, y: -2, w: plan.params.width + 4, h: plan.params.depth + 4 } : null;
   const floorName = (level: number) => (level < 0 ? t("floor.cellar") : level === 0 ? t("floor.ground") : t("floor.upper", { n: level + 1 }));
 
   return {
@@ -49,9 +51,11 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): 
     icon: "🏠",
     title: plan ? names.world || plan.params.name || typeName(plan.params.type) : null,
     mapKey,
+    // Each floor and each room up close has its own pins and fog; the ground floor keeps the building's own.
+    sheetKey: !mapKey || !current ? mapKey : close !== null ? `${mapKey}#room-${current.level}-${close}` : current.level === 0 ? mapKey : `${mapKey}#floor-${current.level}`,
     params: plan ? (plan.params as unknown as Record<string, unknown>) : null,
     restore: (saved) => build(saved as unknown as BuildingParams),
-    selected: !plan || !current ? null : room !== null ? { key: `room:${current.level}:${room}`, label: roomName(current.rooms.find((r) => r.id === room)?.kind) } : { key: "world", label: plan.params.name || typeName(plan.params.type) },
+    selected: !plan || !current ? null : room !== null ? { key: `room:${current.level}:${room}`, label: roomLabel(room, current.rooms.find((r) => r.id === room)?.kind) } : { key: "world", label: plan.params.name || typeName(plan.params.type) },
     seed: input.seed,
     setSeed: (seed) => set("seed", seed),
     generate: (seed) => build(seed ? { ...input, seed } : input),

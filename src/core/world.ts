@@ -12,7 +12,12 @@
 // When a parent changes, its children are derived afresh on the next visit and their overrides laid back on top.
 import type { MapPatch } from "./campaign";
 import type { Language } from "./language";
+import { localParams } from "./local/local";
+import { planetParams } from "./planet/generate";
+import { hashString } from "./random";
 import { settingOf, type Setting } from "./setting";
+import { galaxyParams } from "./space/galaxy";
+import { universeParams } from "./space/universe";
 
 /** Every kind of map a world can hold. */
 export type MapLevel = "universe" | "galaxy" | "system" | "planet" | "region" | "underworld" | "city" | "building" | "local";
@@ -138,10 +143,57 @@ export function overridesOf(map: WorldMap): Record<string, unknown> {
   return Object.fromEntries(Object.entries(map.params).filter(([field, value]) => !same(value, map.base![field])));
 }
 
-/** A child's parameters: what the parent hands down now, with the GM's earlier overrides laid on top. */
+/** A child's parameters: what the parent hands down now, with the GM's earlier overrides laid on top. `key` is the
+ * child's plain key (level and seed); of the maps grown from that seed, the one opened last is the one met again. */
 export function resolve(world: WorldDoc, key: string, derived: Record<string, unknown>): Record<string, unknown> {
-  const known = world.maps[key];
+  let known: WorldMap | undefined;
+  for (const [other, map] of Object.entries(world.maps)) if ((other === key || other.startsWith(`${key}~`)) && (!known || map.opened > known.opened)) known = map;
   return known ? { ...derived, ...overridesOf(known) } : derived;
+}
+
+/** What each kind of map grows from besides its seed. Settings that do not reshape it stay out of its key: its name,
+ * the world it is part of, the age the whole world shares, the GM's own kinds of thing, a dungeon's danger. */
+const SHAPED: Partial<Record<MapLevel, [(seed: string) => object, string[]]>> = {
+  planet: [(seed) => planetParams({ seed }), ["setting"]],
+  local: [(seed) => localParams({ seed }), ["danger", "boss"]],
+  galaxy: [(seed) => galaxyParams({ seed }), ["custom"]],
+  universe: [(seed) => universeParams({ seed }), ["custom"]],
+};
+
+/** A map's key for the GM's names, notes, pins and edits: its level and seed, and a short print of the settings it
+ * grew from when they are not its seed's own, so the same seed grown another way does not wear another map's notes. */
+export function mapKeyOf(level: MapLevel, params: Record<string, unknown>): string {
+  const seed = String(params.seed);
+  const plain = `${level}:${seed}`;
+  const shaped = SHAPED[level];
+  if (!shaped) return plain;
+  const own = shaped[0](seed) as Record<string, unknown>;
+  const differs = Object.keys(params)
+    .filter((field) => !["seed", "name", "world", ...shaped[1]].includes(field) && params[field] !== undefined && !same(params[field], own[field]))
+    .sort();
+  return differs.length ? `${plain}~${hashString(differs.map((field) => `${field}=${JSON.stringify(params[field])}`).join("&")).toString(36)}` : plain;
+}
+
+/** A world saved before map keys carried their print: each map, its patch and the links to it move to its key now. */
+export function rekey(world: WorldDoc): WorldDoc {
+  const moves = new Map<string, string>();
+  for (const [key, map] of Object.entries(world.maps)) {
+    // Only a map keyed by its level and seed alone, of a kind whose key now carries a print.
+    if (!SHAPED[map.level] || key !== `${map.level}:${String(map.params.seed)}`) continue;
+    const next = mapKeyOf(map.level, map.params);
+    if (next !== key && !world.maps[next]) moves.set(key, next);
+  }
+  if (!moves.size) return world;
+  const to = (key: string | null) => (key !== null ? moves.get(key) ?? key : null);
+  const maps = Object.fromEntries(Object.entries(world.maps).map(([key, map]) => [to(key)!, { ...map, parent: to(map.parent) }]));
+  const patches = { ...world.patches };
+  for (const [from, next] of moves) {
+    if (!patches[from] || patches[next]) continue;
+    patches[next] = patches[from];
+    delete patches[from];
+  }
+  const byLevel = Object.fromEntries(Object.entries(world.last.byLevel).map(([level, key]) => [level, to(key ?? null)]));
+  return { ...world, maps, patches, last: { key: to(world.last.key), byLevel } };
 }
 
 /** Records a map opened in the world: from a parent (with what it handed down) or as the world's top. */
@@ -183,7 +235,7 @@ export function readWorld(data: unknown): WorldDoc {
   if (!world || world.format !== "new-world-atlas/world") throw new Error("not a world file");
   if (world.version !== 1) throw new Error(`unknown world file version ${String(world.version)}`);
   if (!world.id || !world.top || !TOP_LEVELS.includes(world.top)) throw new Error("the world file has no top map");
-  return { ...emptyWorld({ id: world.id, name: world.name ?? "", top: world.top }), ...world, maps: world.maps ?? {}, patches: world.patches ?? {}, last: world.last ?? { key: null, byLevel: {} } } as WorldDoc;
+  return rekey({ ...emptyWorld({ id: world.id, name: world.name ?? "", top: world.top }), ...world, maps: world.maps ?? {}, patches: world.patches ?? {}, last: world.last ?? { key: null, byLevel: {} } } as WorldDoc);
 }
 
 /** A map's patch changed: a new name for the map itself also names the thing it was opened from on its parent map

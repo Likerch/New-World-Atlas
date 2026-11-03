@@ -93,6 +93,8 @@ export interface Building {
   ward: number;
   kind: BuildingKind;
   floors: number;
+  /** In a close-up: the building of the enlarged map that this one is (absent for lots drawn only up close). */
+  origin?: number;
 }
 
 /** A path is a stone-age footpath: trodden earth between the huts, down to the water and out to the hunting grounds. */

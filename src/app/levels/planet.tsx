@@ -1,6 +1,6 @@
 // The planet level: world settings, the world map and its inspector.
 import { useMemo, useRef, useState } from "react";
-import { createRng, defaultLayers, editPlanet, eraTheme, emptyEdits, foundedSize, generatePlanet, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
+import { createRng, defaultLayers, editPlanet, mapKeyOf, eraTheme, emptyEdits, foundedSize, generatePlanet, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { SettingPanel } from "../SettingPanel";
 import { WorldForm, type ZoomRange } from "../WorldForm";
@@ -51,7 +51,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   const { t } = ctx;
   const [params, setParams] = useState<PlanetParams>(() => planetParams({ seed: initialSeed, setting: initialSetting }));
   const [raw, setPlanet] = useState<Planet | null>(null);
-  const mapKey = raw ? `planet:${raw.params.seed}` : null;
+  const mapKey = raw ? mapKeyOf("planet", raw.params as unknown as Record<string, unknown>) : null;
   const names = ctx.names(mapKey);
   // The GM's edits: relief strokes regrow the whole world from the new ground; realms and towns are laid over it.
   const edits = ctx.patch(mapKey).edits ?? null;
@@ -181,8 +181,9 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     worldKey: mapKey,
     params: raw ? (raw.params as unknown as Record<string, unknown>) : null,
     restore: (saved) => load({ name: undefined, world: undefined, setting: undefined, ...(saved as Partial<PlanetParams>) }),
-    // Pins and fog are laid on the flat map; the globe shows the world without them.
-    mapKey: globe ? null : mapKey,
+    mapKey,
+    // Pins and fog are laid on the flat map; the globe shows the world without them, its names and notes still at hand.
+    sheetKey: globe ? null : mapKey,
     selected: selectedOf(planet, selection),
     map: planet
       ? {

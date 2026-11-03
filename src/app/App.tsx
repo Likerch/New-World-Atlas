@@ -199,10 +199,11 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   const city = useCityLevel(
     ctx,
     undefined,
-    (made, index) => {
+    (made, index, entity, named) => {
       const params = buildingFromCity(made, index);
-      const base = params as unknown as Record<string, unknown>;
-      linkTo("building", city, `building:${index}`, base);
+      // The GM's name for the building on the city map is the plan's name.
+      const base = { ...params, ...(named ? { name: named } : {}) } as unknown as Record<string, unknown>;
+      linkTo("building", city, entity, base);
       building.restore!(resolve(world, `building:${params.seed}`, base));
       setView("building");
     },
@@ -393,7 +394,8 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   const isTop = level.id === world.top;
   const fileName = `${(level.title ?? level.id).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-")}-${level.seed.replace(/\W+/gu, "-")}`;
   const map = level.map;
-  const patch = store.patch(level.mapKey);
+  const sheetKey = level.sheetKey === undefined ? level.mapKey : level.sheetKey;
+  const patch = store.patch(sheetKey);
   // Pins and fog scale with the map, so they stay readable on big and small maps alike.
   const overlayScale = map ? Math.max(0.6, Math.min(3, Math.max(map.width, map.height) / 1600)) : 1;
   const overlay = map ? overlaySvg(patch, map.width, map.height, players, overlayScale) : "";
@@ -411,13 +413,13 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   const exported = map ? withOverlay(map.svg, overlaySvg(patch, map.width, map.height, true, overlayScale) + legendBox, map.width, map.height) : "";
   const pick = (x: number, y: number) => {
     if (!map) return;
-    if (mode === "pin" && level.mapKey) {
+    if (mode === "pin" && sheetKey) {
       const label = prompt(t("gm.pinLabel"));
       if (label === null) return;
-      store.update(level.mapKey, (p) => ({ ...p, pins: [...p.pins, { id: crypto.randomUUID(), x: Math.round(x), y: Math.round(y), label, note: "", color: "#d64545", hidden: false }] }));
-    } else if ((mode === "reveal" || mode === "hide") && level.mapKey) {
+      store.update(sheetKey, (p) => ({ ...p, pins: [...p.pins, { id: crypto.randomUUID(), x: Math.round(x), y: Math.round(y), label, note: "", color: "#d64545", hidden: false }] }));
+    } else if ((mode === "reveal" || mode === "hide") && sheetKey) {
       const r = brush * overlayScale;
-      store.update(level.mapKey, (p) => ({
+      store.update(sheetKey, (p) => ({
         ...p,
         fog: { ...p.fog, revealed: mode === "reveal" ? [...p.fog.revealed, [Math.round(x), Math.round(y), Math.round(r)]] : p.fog.revealed.filter(([cx, cy]) => Math.hypot(cx - x, cy - y) > r) },
       }));
@@ -513,7 +515,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
         ) : null}
         {level.status && !players ? <div className="status">{level.status}</div> : null}
         {map && !players ? <Legend t={t} sections={level.legend} open={legendOpen} setOpen={setLegendOpen} /> : null}
-        <GmPanel t={t} store={store} mapKey={level.mapKey} selected={level.selected} mode={mode} setMode={setMode} brush={brush} setBrush={setBrush} players={players} setPlayers={setPlayers} />
+        <GmPanel t={t} store={store} mapKey={level.mapKey} sheetKey={sheetKey} selected={level.selected} mode={mode} setMode={setMode} brush={brush} setBrush={setBrush} players={players} setPlayers={setPlayers} />
       </main>
       {level.inspector ?? <aside className="inspector" />}
       {library ? <WorldLibrary t={t} worlds={worlds} onClose={() => setLibrary(false)} onWorldSetting={setWorldSetting} /> : null}

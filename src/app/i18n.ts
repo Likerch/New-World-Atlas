@@ -933,6 +933,7 @@ const TERMS: Record<string, [string, string]> = {
   "gm.rename": ["New name", "Новое имя"],
   "gm.note": ["GM notes", "Заметки мастера"],
   "gm.selectHint": ["Select a place or a thing to rename it or make notes.", "Выбери место или объект, чтобы переименовать его или оставить заметку."],
+  "gm.flatOnly": ["Pins and fog go on the flat map: turn the globe off to place them. Names and notes work here too.", "Метки и туман ставятся на плоской карте: выключите глобус. Имена и заметки работают и здесь."],
   "gm.pins": ["Pins", "Метки"],
   "gm.pinLabel": ["Pin label", "Подпись метки"],
   "gm.color": ["Colour", "Цвет"],

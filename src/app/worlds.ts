@@ -1,7 +1,7 @@
 // The game master's worlds: projects kept in this browser (a list, and each world under its own key) and saved to or
 // read from files. One world is open at a time; it saves itself a moment after every change.
 import { useEffect, useRef, useState } from "react";
-import { emptyWorld, readWorld, summarize, type Campaign, type Setting, type TopLevel, type WorldDoc, type WorldSummary } from "../core/index";
+import { emptyWorld, readWorld, rekey, summarize, type Campaign, type Setting, type TopLevel, type WorldDoc, type WorldSummary } from "../core/index";
 
 const LIST = "atlas.worlds";
 const CURRENT = "atlas.world.current";
@@ -25,6 +25,10 @@ const write = (key: string, value: unknown) => {
     return false;
   }
 };
+const readDoc = (id: string): WorldDoc | null => {
+  const doc = read<WorldDoc>(docKey(id));
+  return doc ? rekey(doc) : null;
+};
 const forget = (key: string) => {
   try {
     localStorage.removeItem(key);
@@ -45,7 +49,7 @@ function firstWorld(name: string): WorldDoc {
 function startUp(name: string): { world: WorldDoc; list: WorldSummary[] } {
   let list = read<WorldSummary[]>(LIST) ?? [];
   const current = read<string>(CURRENT);
-  let world = (current && read<WorldDoc>(docKey(current))) || (list[0] && read<WorldDoc>(docKey(list[0].id))) || null;
+  let world = (current && readDoc(current)) || (list[0] && readDoc(list[0].id)) || null;
   if (!world) {
     world = firstWorld(name);
     write(docKey(world.id), world);
@@ -107,7 +111,7 @@ export function useWorlds(defaultName: string) {
     open: (id: string) => {
       if (id === world.id) return;
       write(docKey(world.id), world);
-      const doc = read<WorldDoc>(docKey(id));
+      const doc = readDoc(id);
       if (doc) openDoc(doc);
     },
     create: (input: NewWorld) => {
@@ -117,7 +121,7 @@ export function useWorlds(defaultName: string) {
     rename: (id: string, name: string) => {
       if (id === world.id) setState((current) => ({ ...current, world: { ...current.world, name, updated: Date.now() } }));
       else {
-        const doc = read<WorldDoc>(docKey(id));
+        const doc = readDoc(id);
         if (!doc) return;
         const next = { ...doc, name, updated: Date.now() };
         write(docKey(id), next);
@@ -129,7 +133,7 @@ export function useWorlds(defaultName: string) {
       }
     },
     duplicate: (id: string, suffix: string) => {
-      const doc = id === world.id ? world : read<WorldDoc>(docKey(id));
+      const doc = id === world.id ? world : readDoc(id);
       if (!doc) return;
       const copy: WorldDoc = { ...doc, id: newId(), name: `${doc.name} ${suffix}`, created: Date.now(), updated: Date.now() };
       write(docKey(copy.id), copy);
@@ -146,7 +150,7 @@ export function useWorlds(defaultName: string) {
         write(LIST, lines);
         if (id !== current.world.id) return { ...current, list: lines };
         // The open world was removed: open another, or start afresh.
-        const other = lines[0] ? read<WorldDoc>(docKey(lines[0].id)) : null;
+        const other = lines[0] ? readDoc(lines[0].id) : null;
         const next = other ?? emptyWorld({ id: newId(), name: defaultName, top: "planet" });
         write(docKey(next.id), next);
         write(CURRENT, next.id);
@@ -156,7 +160,7 @@ export function useWorlds(defaultName: string) {
       });
     },
     /** A world as a file, to keep or to give to another game master. */
-    file: (id: string): WorldDoc | null => (id === world.id ? world : read<WorldDoc>(docKey(id))),
+    file: (id: string): WorldDoc | null => (id === world.id ? world : readDoc(id)),
     /** Opens a world from a file; one already here under the same id is kept, the file comes in as a copy. */
     load: (data: unknown) => {
       const doc = readWorld(data);

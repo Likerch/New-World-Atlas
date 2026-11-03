@@ -6,6 +6,8 @@ import { present, type LegendSection } from "./legend";
 
 export const PX = 24;
 
+const esc = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
+
 export type BuildingThemeId = "ink" | "color" | "blueprint";
 export const BUILDING_THEMES: BuildingThemeId[] = ["ink", "color", "blueprint"];
 
@@ -57,7 +59,8 @@ export interface BuildingRenderOptions {
   floor?: number;
   grid?: boolean;
   /** Room names in the reader's language. */
-  label?: (kind: RoomKind) => string;
+  /** A room's label: by its kind, or the GM's own name for that room. */
+  label?: (kind: RoomKind, room: { id: number }) => string;
   highlight?: number | null;
 }
 
@@ -220,7 +223,7 @@ export function renderBuilding(plan: BuildingPlan, options: BuildingRenderOption
   for (const room of floor.rooms) {
     if (room.w < 1.6 || room.h < 1.2) continue;
     const size = Math.max(9, Math.min(14, Math.min(room.w, room.h) * 3));
-    out.push(`<text x="${n(room.x + room.w / 2)}" y="${n(room.y + room.h / 2) + size / 3}" text-anchor="middle" font-size="${size}" fill="${th.label}" stroke="${floorFill}" stroke-width="3" paint-order="stroke" opacity="0.9">${label(room.kind)}</text>`);
+    out.push(`<text x="${n(room.x + room.w / 2)}" y="${n(room.y + room.h / 2) + size / 3}" text-anchor="middle" font-size="${size}" fill="${th.label}" stroke="${floorFill}" stroke-width="3" paint-order="stroke" opacity="0.9">${esc(label(room.kind, room))}</text>`);
   }
 
   if (options.grid) {
@@ -285,7 +288,7 @@ export function renderRoom(room: RoomMap, options: { theme?: BuildingThemeId; gr
     } else out.push(exit.horizontal ? `<rect x="${cx - half}" y="${cy - wall / 3}" width="${half * 2}" height="${(wall * 2) / 3}" fill="${th.window}"/>` : `<rect x="${cx - wall / 3}" y="${cy - half}" width="${(wall * 2) / 3}" height="${half * 2}" fill="${th.window}"/>`);
   }
   out.push(`</g>`);
-  if (options.label) out.push(`<text x="${o}" y="${o * 0.62}" font-size="18" font-weight="600" fill="${th.label}">${options.label}</text>`);
+  if (options.label) out.push(`<text x="${o}" y="${o * 0.62}" font-size="18" font-weight="600" fill="${th.label}">${esc(options.label)}</text>`);
   out.push(`<g fill="${th.label}" font-size="12"><rect x="${W - o - 1.5 * P}" y="${H - o * 0.55}" width="${1.5 * P}" height="5" fill="${th.wall}"/><text x="${W - o - 1.5 * P - 6}" y="${H - o * 0.55 + 6}" text-anchor="end">1.5 m</text></g>`);
   out.push(`</svg>`);
   return out.join("");

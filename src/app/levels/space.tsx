@@ -3,7 +3,7 @@
 // own kinds of thing can be added to the galaxy and the universe.
 import { useMemo, useRef, useState } from "react";
 import { CustomKinds, loadKinds, saveKinds } from "../CustomKinds";
-import { FEATURE_GLYPH, galaxyLegend, systemLegend, universeLegend, GALAXY_PLACEMENTS, UNIVERSE_PLACEMENTS, type CustomKind, type Zone, generateUniverse, renderUniverse, shapeOf, universeParams, type Universe, type UniverseParams, GALAXY_SHAPES, localFromStar, galaxyParams, generateGalaxy, generateLoneSystem, generateSystem, planetFromBody, randomSeed, type SpectralClass, type SystemParams, renameGalaxy, renameSystem, renderGalaxy, renderSystem, SPECTRA, type Galaxy, type GalaxyParams, type PlanetParams, type StarSystem } from "../../core/index";
+import { FEATURE_GLYPH, mapKeyOf, renameUniverse, galaxyLegend, systemLegend, universeLegend, GALAXY_PLACEMENTS, UNIVERSE_PLACEMENTS, type CustomKind, type Zone, generateUniverse, renderUniverse, shapeOf, universeParams, type Universe, type UniverseParams, GALAXY_SHAPES, localFromStar, galaxyParams, generateGalaxy, generateLoneSystem, generateSystem, planetFromBody, randomSeed, type SpectralClass, type SystemParams, renameGalaxy, renameSystem, renderGalaxy, renderSystem, SPECTRA, type Galaxy, type GalaxyParams, type PlanetParams, type StarSystem } from "../../core/index";
 import type { Level, LevelContext } from "./types";
 
 const STRANGENESS = [0, 0.5, 1, 2, 3];
@@ -46,7 +46,7 @@ export function useGalaxyLevel(ctx: LevelContext, openSystem: (galaxy: Galaxy, s
   const { t, nm } = ctx;
   const [input, setInput] = useState<GalaxyParams>(() => galaxyParams({ custom: loadKinds("atlas.kinds.galaxy") }));
   const [raw, setGalaxy] = useState<Galaxy | null>(null);
-  const mapKey = raw ? `galaxy:${raw.params.seed}` : null;
+  const mapKey = raw ? mapKeyOf("galaxy", raw.params as unknown as Record<string, unknown>) : null;
   const names = ctx.names(mapKey);
   const galaxy = useMemo(() => (raw ? renameGalaxy(raw, names) : null), [raw, names]);
   const [star, setStar] = useState<number | null>(null);
@@ -409,7 +409,10 @@ export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<P
 export function useUniverseLevel(ctx: LevelContext, openGalaxy: (params: Partial<GalaxyParams>, id: number) => void): Level {
   const { t, nm } = ctx;
   const [input, setInput] = useState<UniverseParams>(() => universeParams({ custom: loadKinds("atlas.kinds.universe") }));
-  const [universe, setUniverse] = useState<Universe | null>(null);
+  const [raw, setUniverse] = useState<Universe | null>(null);
+  const universeKey = raw ? mapKeyOf("universe", raw.params as unknown as Record<string, unknown>) : null;
+  const names = ctx.names(universeKey);
+  const universe = useMemo(() => (raw ? renameUniverse(raw, names) : null), [raw, names]);
   const [picked, setPicked] = useState<number | null>(null);
   const [anomaly, setAnomaly] = useState<number | null>(null);
   const [version, setVersion] = useState(0);
@@ -440,7 +443,7 @@ export function useUniverseLevel(ctx: LevelContext, openGalaxy: (params: Partial
     ensure: () => {
       if (!universe) build(input);
     },
-    mapKey: universe ? `universe:${universe.params.seed}` : null,
+    mapKey: universeKey,
     params: universe ? (universe.params as unknown as Record<string, unknown>) : null,
     restore: (saved) => build(universeParams(saved as Partial<UniverseParams>)),
     selected: !universe ? null : selected ? { key: `galaxy:${selected.id}`, label: selected.name } : { key: "world", label: universe.name },

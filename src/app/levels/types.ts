@@ -53,6 +53,9 @@ export interface Level {
   ensure: () => void;
   /** Identity of the map shown, for the GM's patch. */
   mapKey: string | null;
+  /** Where pins and fog go when the map shows several sheets (a building's floors, a room up close); null when they
+   * cannot be laid on this view (a globe). Unset: the map's own patch. */
+  sheetKey?: string | null;
   /** The thing selected on it, for renaming and notes; "world" for the map itself. */
   selected: { key: string; label: string } | null;
 }

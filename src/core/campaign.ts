@@ -5,8 +5,10 @@ import type { City } from "./city/model";
 import type { LocalMap } from "./local/local";
 import type { PlanetEdits } from "./planet/edit";
 import type { Planet } from "./planet/model";
+import type { Underworld } from "./planet/underworld";
 import type { Galaxy } from "./space/galaxy";
 import type { StarSystem } from "./space/system";
+import type { Universe } from "./space/universe";
 
 export interface Pin {
   id: string;
@@ -100,4 +102,14 @@ export function renameSystem(system: StarSystem, names: Record<string, string>):
 export function renameLocal(map: LocalMap, names: Record<string, string>): LocalMap {
   if (!Object.keys(names).length) return map;
   return { ...map, name: names.world ?? map.name, keyed: rename(map.keyed, "keyed", names) };
+}
+
+export function renameUniverse(universe: Universe, names: Record<string, string>): Universe {
+  if (!Object.keys(names).length) return universe;
+  return { ...universe, name: names.world ?? universe.name, galaxies: rename(universe.galaxies, "galaxy", names) };
+}
+
+export function renameUnderworld(world: Underworld, names: Record<string, string>): Underworld {
+  if (!Object.keys(names).length) return world;
+  return { ...world, name: names.world ?? world.name, caverns: rename(world.caverns, "cavern", names) };
 }

@@ -38,11 +38,11 @@ export function generateDistrict(city: City, wardId: number): City {
     wards.push({ ...ward, polygon: shape, center: T(ward.center), urban: false });
   }
   const context = new Set(wards.map((ward) => ward.id));
-  for (const building of city.buildings) {
-    if (!context.has(building.ward)) continue;
+  city.buildings.forEach((building, origin) => {
+    if (!context.has(building.ward)) return;
     const shape = building.polygon.map(T);
-    if (shape.every(([x, y]) => x >= 0 && y >= 0 && x <= FRAME_W && y <= FRAME_H)) buildings.push({ ...building, polygon: shape });
-  }
+    if (shape.every(([x, y]) => x >= 0 && y >= 0 && x <= FRAME_W && y <= FRAME_H)) buildings.push({ ...building, polygon: shape, origin });
+  });
 
   // The quarter itself, back from the streets round it, cut into blocks by alleys.
   const outline = ccw(focus.polygon.map(T));
@@ -78,7 +78,9 @@ export function generateDistrict(city: City, wardId: number): City {
   if (keep) {
     pieces.length = 0;
     blockWards.push({ ...focus, polygon: outline, center: T(focus.center), urban: true });
-    for (const building of city.buildings) if (building.ward === focus.id) buildings.push({ ...building, polygon: building.polygon.map(T) });
+    city.buildings.forEach((building, origin) => {
+      if (building.ward === focus.id) buildings.push({ ...building, polygon: building.polygon.map(T), origin });
+    });
   }
   const tall = focus.kind === "megablock" || focus.kind === "downtown" || focus.kind === "commercial" || focus.kind === "arcology";
   const floors = (): number => (tall ? rng.int(12, 60) : organic ? rng.int(1, 3) + Math.round(focus.wealth) : rng.int(3, 8));
