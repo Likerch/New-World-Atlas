@@ -17,6 +17,8 @@ import {
   generateCity,
   generateDistrict,
   influenceTints,
+  mapKeyOf,
+  nextPlaceId,
   localFromHall,
   localOutskirts,
   pointInPolygon,
@@ -58,7 +60,14 @@ export function useCityLevel(
   const [input, setInput] = useState<CityParams>(() => cityParams({ seed: initialSeed, era: "medieval", ...(placeKinds.length ? { custom: { wards: wardKinds, places: placeKinds } } : {}) }));
   const [language, setLanguage] = useState<Language | null>(null);
   const [raw, setCity] = useState<City | null>(null);
-  const mapKey = raw ? `city:${raw.params.seed}` : null;
+  const [parents, setParents] = useState<City[]>([]);
+  // A town's key: its seed and a print of what it grew from (another age, size or coast is another map); a quarter up
+  // close is keyed under its whole city's.
+  const keyOf = (made: City): string => {
+    const whole = parents[0];
+    return whole && made !== whole && made.params.seed.startsWith(`${whole.params.seed}/`) ? `${keyOf(whole)}${made.params.seed.slice(whole.params.seed.length)}` : mapKeyOf("city", made.params as unknown as Record<string, unknown>);
+  };
+  const mapKey = raw ? keyOf(raw) : null;
   const names = ctx.names(mapKey);
   // The GM's edits of this map (the whole city or a quarter up close), laid over what was generated.
   const editsOf = (key: string) => (ctx.patch(key).changes?.city ?? null) as CityEdits | null;
@@ -66,11 +75,10 @@ export function useCityLevel(
   const setEdits = (change: (edits: CityEdits) => CityEdits) => ctx.update(mapKey, (p) => ({ ...p, changes: { ...p.changes, city: change((p.changes?.city ?? {}) as CityEdits) } }));
   const edited = useMemo(() => (raw ? editCity(raw, edits) : null), [raw, edits]);
   const city = useMemo(() => (edited ? renameCity(edited, names) : null), [edited, names]);
-  const [parents, setParents] = useState<City[]>([]);
   // A quarter up close belongs to its whole city: the city's factions, council and the owners of its places; only the
   // close-up's own blocks get profiles of their own.
   const whole = parents.length ? parents[0] : null;
-  const wholeKey = whole ? `city:${whole.params.seed}` : null;
+  const wholeKey = whole ? keyOf(whole) : null;
   const wholeEdits = wholeKey ? editsOf(wholeKey) : null;
   const wholeNames = ctx.names(wholeKey);
   const top = useMemo(() => (whole ? renameCity(editCity(whole, wholeEdits), wholeNames) : null), [whole, wholeEdits, wholeNames]);
@@ -143,14 +151,20 @@ export function useCityLevel(
     title: city?.name ?? null,
     seed: input.seed,
     setSeed: (seed) => set("seed", seed),
-    generate: (seed) => build(seed ? { ...input, seed } : input, language),
+    generate: (seed) => {
+      const next = seed ? { ...input, seed } : input;
+      // The same town grown another way is another map: the maps opened from it go, so the GM is asked first (a new
+      // seed is asked about by the app).
+      const top = parents[0] ?? raw;
+      if (!top || next.seed !== top.params.seed || ctx.regrow(keyOf(top), mapKeyOf("city", cityParams(next) as unknown as Record<string, unknown>))) build(next, language);
+    },
     ensure: () => {
       // Only when nothing is on its way: an opened building or city must not be replaced by a fresh one.
       if (!city && !pending.current) build(input, language);
     },
     city,
     mapKey,
-    worldKey: parents.length ? `city:${parents[0].params.seed}` : mapKey,
+    worldKey: parents.length ? keyOf(parents[0]) : mapKey,
     params: (parents[0] ?? raw)?.params ? ((parents[0] ?? raw)!.params as unknown as Record<string, unknown>) : null,
     language,
     restore: (saved, tongue) => {
@@ -192,7 +206,7 @@ export function useCityLevel(
             if (waiting?.action === "add") {
               const own = waiting.kind.startsWith("custom:") ? placeKinds.find((kind) => kind.id === waiting.kind.slice(7)) : undefined;
               setEdits((e) => {
-                const id = Math.max(city.landmarks.reduce((most, l) => Math.max(most, l.id), 0), ...(e.places?.added ?? []).map((a) => a.id)) + 1;
+                const id = nextPlaceId(city, e);
                 return { ...e, places: { ...e.places, added: [...(e.places?.added ?? []), { id, kind: own ? "custom" : (waiting.kind as LandmarkKind), ...(own ? { custom: own.id, own } : {}), x, y }] } };
               });
               setWaiting(null);
@@ -328,12 +342,12 @@ export function useCityLevel(
               const origin = at.buildings[id]?.origin ?? (place && k === parents.length - 1 ? place.origin : undefined);
               if (origin === undefined) break;
               id = origin;
-              at = editCity(parents[k], editsOf(`city:${parents[k].params.seed}`));
+              at = editCity(parents[k], editsOf(keyOf(parents[k])));
             }
             const top = parents[0] ?? raw!;
             const own = at.buildings[id]?.key ?? String(id);
             const entity = at.params.seed === top.params.seed ? `building:${own}` : `building:${at.params.seed.slice(top.params.seed.length + 1)}/${own}`;
-            openBuilding(at, id, entity, ctx.names(`city:${top.params.seed}`)[entity] || names[`building:${city.buildings[index]?.key ?? index}`] || "");
+            openBuilding(at, id, entity, ctx.names(keyOf(top))[entity] || names[`building:${city.buildings[index]?.key ?? index}`] || "");
           }}
           onOpenLocal={openLocal}
           onOpenDistrict={

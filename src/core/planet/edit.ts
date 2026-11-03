@@ -147,6 +147,8 @@ export function editPlanet(planet: Planet, edits: PlanetEdits | null | undefined
     // A town moved to the shore becomes a port; one moved inland is not one any more.
     const port = planet.coast[cell] === 1 && mesh.neighbors[cell].some((next) => water[next] && (planet.features[planet.feature[next]].kind === "ocean" || planet.features[planet.feature[next]].cells > 25));
     Object.assign(town, { x, y, cell, port });
+    // A town moved stands somewhere else: its city is read from where it stands now.
+    delete town.site;
     burg[cell] = town.id;
     return true;
   };

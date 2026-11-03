@@ -4,13 +4,14 @@
 import { createLanguage, name, type Language } from "../language";
 import { armsOf } from "../planet/arms";
 import { BIOMES } from "../planet/biomes";
+import { hexColor } from "../color";
 import { createRng, randomSeed } from "../random";
 import { ageOf, isClassic, peopleOf, settingOf, SETTINGS } from "../setting";
-import type { Planet } from "../planet/model";
+import type { Planet, TownSite } from "../planet/model";
 import { buildBuildings } from "./buildings";
 import { placeLandmarks } from "./landmarks";
 import { layoutCity, type Layout } from "./layout";
-import { ERAS, type City, type CityParams, type CityRoad, type Era, type Street } from "./model";
+import { ERAS, type City, type CityCustom, type CityParams, type CityRoad, type Era, type Street } from "./model";
 import { morePlaces } from "./places";
 import { buildStreets, edgeKey, type StreetNet } from "./streets";
 import { generateVillage } from "./village";
@@ -21,7 +22,7 @@ export function cityParams(input: Partial<CityParams> = {}): CityParams {
   const era: Era = input.era ?? rng.pick(ERAS);
   const big = era === "modern" || era === "cyberpunk" || era === "far-future";
   const population = big ? Math.round(rng.float(200, 2500)) : Math.round(rng.float(3, 60) * 10) / 10;
-  return {
+  const params: CityParams = {
     seed,
     name: "",
     width: 1200,
@@ -37,6 +38,17 @@ export function cityParams(input: Partial<CityParams> = {}): CityParams {
     market: true,
     shanty: rng.chance(0.4),
     ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)),
+  };
+  if (params.custom) params.custom = cleanCustom(params.custom);
+  return params;
+}
+
+/** The GM's own kinds of quarter and place as this browser, a pack or a world file gives them: lists, and colours that
+ * are colours, so nothing they say can run as markup in the map. */
+export function cleanCustom(custom: Partial<CityCustom>): CityCustom {
+  return {
+    wards: (Array.isArray(custom.wards) ? custom.wards : []).map((kind) => ({ ...kind, color: hexColor(kind.color, "#8a4fc9") })),
+    places: (Array.isArray(custom.places) ? custom.places : []).map((kind) => ({ ...kind, color: hexColor(kind.color, "#8a4fc9") })),
   };
 }
 
@@ -140,8 +152,9 @@ export function cityEraOf(planet: Planet): Era {
   return ageOf(settingOf(planet.params.setting));
 }
 
-/** City parameters for a town of a generated planet: its size, river, coast, defences and people; by default in the world's own age. */
-export function cityFromBurg(planet: Planet, burgId: number, era: Era = cityEraOf(planet)): { params: CityParams; language: City["language"] } {
+/** What a town's city takes from the map round it: its coast, its river, the roads of the world leaving it, the faith of
+ * its land and its biome. */
+export function townSite(planet: Planet, burgId: number): TownSite {
   const burg = planet.burgs[burgId];
   const { mesh } = planet;
   const cell = burg.cell;
@@ -161,12 +174,7 @@ export function cityFromBurg(planet: Planet, burgId: number, era: Era = cityEraO
     const to = at + 1 < path.length ? path[at + 1] : null;
     river = to === null ? Math.atan2(planet.rivers[riverId].mouth[1] - mesh.y[from], planet.rivers[riverId].mouth[0] - mesh.x[from]) : Math.atan2(mesh.y[to] - mesh.y[from], mesh.x[to] - mesh.x[from]);
   }
-  // A town already sized by its world's age keeps its people; one seen in another age grows or shrinks to it. The classic
-  // world keeps its old rule, so its towns open as they always did.
-  const world = settingOf(planet.params.setting);
-  const modern = era === "modern" || era === "cyberpunk";
-  const population = isClassic(world) ? (modern ? burg.population * 25 : burg.population) : (burg.population * peopleOf(SETTINGS[era]).urban) / peopleOf(world).urban;
-  // What the world gives the town: its roads out, its faith and god, its arms, its land, whether it rules and who camps by it.
+  // The roads of the world leaving town.
   const roads: CityRoad[] = [];
   for (const route of planet.routes ?? []) {
     // Sea lanes leave from the docks and air routes from the field, not through a gate.
@@ -190,14 +198,30 @@ export function cityFromBurg(planet: Planet, burgId: number, era: Era = cityEraO
   }
   const religion = planet.religions?.[planet.religion?.[cell] ?? 0];
   const faith = religion && religion.id ? { name: religion.name, deity: religion.deity, holy: religion.center === (burg.origin ?? burgId) } : undefined;
+  const biome = BIOMES[planet.biome[cell]]?.key;
+  return { coast, river, roads, ...(faith ? { faith } : {}), ...(biome ? { biome } : {}) };
+}
+
+/** City parameters for a town of a generated planet: its size, river, coast, defences and people; by default in the world's own age. */
+export function cityFromBurg(planet: Planet, burgId: number, era: Era = cityEraOf(planet)): { params: CityParams; language: City["language"] } {
+  const burg = planet.burgs[burgId];
+  // A planet's town in a close-up keeps the site it has on the planet (the close-up's finer coast, rivers and roads lie
+  // a little otherwise), so it opens as the same city from either map.
+  const { coast, river, roads, faith, biome } = burg.site ?? townSite(planet, burgId);
+  // A town already sized by its world's age keeps its people; one seen in another age grows or shrinks to it. The classic
+  // world keeps its old rule, so its towns open as they always did.
+  const world = settingOf(planet.params.setting);
+  const modern = era === "modern" || era === "cyberpunk";
+  const population = isClassic(world) ? (modern ? burg.population * 25 : burg.population) : (burg.population * peopleOf(SETTINGS[era]).urban) / peopleOf(world).urban;
+  // What the world gives the town besides: its arms, whether it rules and who camps by it.
   const state = planet.states[burg.state];
   const nomads = planet.cultures[burg.culture]?.kind === "nomadic" || state?.form === "horde";
   const arms = armsOf(planet, "burg", burgId);
-  const biome = BIOMES[planet.biome[cell]]?.key;
   return {
     params: cityParams({
-      // A town of a close-up is its planet's town: the same city, whichever map it is opened from.
-      seed: `${planet.params.world ?? planet.params.seed}/burg-${burg.origin ?? burgId}`,
+      // A town of a close-up is its planet's town: the same city, whichever map it is opened from. A close-up's own
+      // village is keyed under the close-up, so it never shares a key with the planet's town of the same number.
+      seed: burg.origin !== undefined ? `${planet.params.world ?? planet.params.seed}/burg-${burg.origin}` : `${planet.params.seed}/burg-${burgId}`,
       name: burg.name,
       // A hamlet stays a hamlet: a few dozen people, not a town of five hundred.
       population: Math.max(era === "stone" ? 0.03 : burg.population < 0.5 ? 0.05 : 0.5, isClassic(world) ? population : Math.round(population * 100) / 100),

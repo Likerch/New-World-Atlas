@@ -171,14 +171,32 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
   const round = (at: Point, r: number, corners = 8): Point[] => Array.from({ length: corners }, (_, j) => [at[0] + Math.cos((j * Math.PI * 2) / corners) * r, at[1] + Math.sin((j * Math.PI * 2) / corners) * r]);
   /** A stone-age camp: families' huts (or longhouses in a bigger village) in clusters round their yards; the fire and
    * its racks in the middle; a ring of standing stones and the barrows of the dead at the sacred place. */
-  const placed: [Point, number][] = [];
-  const free = (at: Point, r: number) => !placed.some(([p, q]) => Math.hypot(p[0] - at[0], p[1] - at[1]) < r + q) && !paths.some((path) => distanceToPolyline(at, path.points) < r + path.width);
+  // What already stands in the camp, filed by squares of the map, so a new hut asks only its neighbours whether there is
+  // room (a big camp has tens of thousands of huts).
+  const square = Math.max(m(12), 4);
+  const placed = new Map<string, [Point, number][]>();
+  let widest = 0;
+  const settle = (at: Point, r: number) => {
+    const key = `${Math.floor(at[0] / square)}:${Math.floor(at[1] / square)}`;
+    const here = placed.get(key);
+    if (here) here.push([at, r]);
+    else placed.set(key, [[at, r]]);
+    widest = Math.max(widest, r);
+  };
+  const crowded = (at: Point, r: number) => {
+    const reach = Math.ceil((r + widest) / square);
+    const i0 = Math.floor(at[0] / square),
+      j0 = Math.floor(at[1] / square);
+    for (let i = i0 - reach; i <= i0 + reach; i++) for (let j = j0 - reach; j <= j0 + reach; j++) if (placed.get(`${i}:${j}`)?.some(([p, q]) => Math.hypot(p[0] - at[0], p[1] - at[1]) < r + q)) return true;
+    return false;
+  };
+  const free = (at: Point, r: number) => !crowded(at, r) && !paths.some((path) => distanceToPolyline(at, path.points) < r + path.width);
   const stoneWard = (kind: WardKind, ward: number, inner: Point[], own: Rng) => {
     const site = diagram.sites[ward];
     const take = (polygon: Point[], buildingKind: BuildingKind, at: Point, r: number) => {
       if (wet(polygon)) return false;
       out.push({ polygon, ward, kind: buildingKind, floors: buildingKind === "hut" || buildingKind === "longhouse" ? 1 : 0 });
-      placed.push([at, r]);
+      settle(at, r);
       return true;
     };
     const xs = inner.map((p) => p[0]),
@@ -212,7 +230,7 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
         const at: Point = [heart[0] + Math.cos(angle) * ring, heart[1] + Math.sin(angle) * ring];
         take(round(at, m(own.float(0.7, 1.1)), 4), "stone", at, m(1));
       }
-      placed.push([heart, ring + m(3)]);
+      settle(heart, ring + m(3));
       for (let k = own.int(2, 5), tries = 0; k > 0 && tries < 60; tries++) {
         const at = somewhere();
         const r = m(own.float(4, 8));
@@ -221,8 +239,11 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
       }
       return;
     }
-    // Huts: family clusters round a yard; a bigger village builds longhouses.
-    const clusters = Math.max(1, Math.round(area(inner) / (m(26) * m(26))));
+    // Huts: family clusters round a yard; a bigger village builds longhouses. On the map of a great camp one cluster,
+    // drawn larger, stands for several, so the map stays drawable.
+    const lod = Math.max(1, 6 / m(26));
+    const g = (metres: number) => m(metres) * lod;
+    const clusters = Math.max(1, Math.round(area(inner) / (g(26) * g(26))));
     const longhouses = params.population > 0.25 ? 0.35 : 0.08;
     for (let c = 0, tries = 0; c < clusters && tries < clusters * 8; tries++) {
       const yard = somewhere();
@@ -230,8 +251,8 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
       c++;
       if (own.chance(longhouses)) {
         // A longhouse: a long hall with flat sides and round ends; points 0 and 6 are the ends of its ridge.
-        const length = m(own.float(10, 22)),
-          width = m(own.float(5, 7));
+        const length = g(own.float(10, 22)),
+          width = g(own.float(5, 7));
         const angle = own.float(0, Math.PI);
         if (!free(yard, length / 2)) continue;
         const ux = Math.cos(angle),
@@ -248,12 +269,12 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
       }
       for (let k = own.int(2, 6); k > 0; k--) {
         const angle = own.float(0, Math.PI * 2);
-        const r = m(own.float(2.2, 3.8));
-        const reach = m(own.float(5, 9));
+        const r = g(own.float(2.2, 3.8));
+        const reach = g(own.float(5, 9));
         const at: Point = [yard[0] + Math.cos(angle) * reach, yard[1] + Math.sin(angle) * reach];
-        if (pointInPolygon(at, inner) && free(at, r + m(0.8))) take(round(at, r, 10), "hut", at, r + m(0.8));
+        if (pointInPolygon(at, inner) && free(at, r + g(0.8))) take(round(at, r, 10), "hut", at, r + g(0.8));
       }
-      if (own.chance(0.35) && free(yard, m(2))) take([[yard[0] - m(2), yard[1]], [yard[0] + m(2), yard[1]], [yard[0] + m(2), yard[1] + m(0.1)]], "rack", yard, m(2));
+      if (own.chance(0.35) && free(yard, g(2))) take([[yard[0] - g(2), yard[1]], [yard[0] + g(2), yard[1]], [yard[0] + g(2), yard[1] + g(0.1)]], "rack", yard, g(2));
     }
     if (own.chance(0.3)) {
       const at = centroid(inner);
@@ -419,6 +440,9 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
     const own = rng.fork("boats");
     const nearest = shore.reduce((best, p, k) => (Math.hypot(p[0] - center[0], p[1] - center[1]) < Math.hypot(shore[best][0] - center[0], shore[best][1] - center[1]) ? k : best), 1);
     const bank = river ? river.width / 2 + m(2.2) : -m(2.5);
+    // A boat belongs to the dry quarter it lies in, or the nearest one: the water is no quarter of the town.
+    const dry = diagram.sites.map((_, ward) => ward).filter((ward) => !layout.water[ward] && diagram.cells[ward].length >= 3);
+    const wardOf = (p: Point) => dry.find((ward) => pointInPolygon(p, diagram.cells[ward])) ?? dry.reduce((best, ward) => (Math.hypot(diagram.sites[ward][0] - p[0], diagram.sites[ward][1] - p[1]) < Math.hypot(diagram.sites[best][0] - p[0], diagram.sites[best][1] - p[1]) ? ward : best), dry[0] ?? 0);
     for (let k = own.int(2, 5); k > 0; k--) {
       const at = Math.max(1, Math.min(shore.length - 2, nearest + own.int(-3, 3)));
       const p = shore[at];
@@ -433,7 +457,7 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
         beam = m(0.5);
       const ux = tx / tl,
         uy = ty / tl;
-      out.push({ polygon: [[c[0] - ux * half, c[1] - uy * half], [c[0] - nx * beam, c[1] - ny * beam], [c[0] + ux * half, c[1] + uy * half], [c[0] + nx * beam, c[1] + ny * beam]], ward: 0, kind: "boat", floors: 0 });
+      out.push({ polygon: [[c[0] - ux * half, c[1] - uy * half], [c[0] - nx * beam, c[1] - ny * beam], [c[0] + ux * half, c[1] + uy * half], [c[0] + nx * beam, c[1] + ny * beam]], ward: wardOf(c), kind: "boat", floors: 0 });
     }
   }
   // Piers: wooden or stone jetties from the harbour shore out into the sea.

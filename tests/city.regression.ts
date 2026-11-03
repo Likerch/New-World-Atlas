@@ -1,6 +1,6 @@
 // City-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { area, buildingFromCity, generateBuilding, SETTINGS, CITY_THEMES, cityTiers, renderTier, generateDistrict, cityFromBurg, distanceToPolyline, ERAS, generateCity, generatePlanet, pointInPolygon, renderCity, hashString, citySociety, cityShops, craftsOf, influenceTints, cityLegend, localFromPlace, editCity, PROPS, GROWTH_AGES, heightField, tierLegend, localFromHall, localOutskirts } from "../src/core/index";
+import { area, buildingFromCity, generateBuilding, SETTINGS, CITY_THEMES, cityTiers, renderTier, generateDistrict, cityFromBurg, distanceToPolyline, ERAS, generateCity, generatePlanet, pointInPolygon, renderCity, hashString, citySociety, cityShops, craftsOf, influenceTints, cityLegend, localFromPlace, editCity, PROPS, GROWTH_AGES, heightField, tierLegend, localFromHall, localOutskirts, nextPlaceId, centroid, type City } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -293,6 +293,97 @@ test("tiers by age, and the ways down: rooftops over an old town, vaults after t
   const place = close.landmarks.find((l) => l.kind === "tavern")!;
   const index = port.buildings.findIndex((b) => !PROPS.includes(b.kind) && pointInPolygon([port.landmarks.find((l) => l.id === place.id)!.x, port.landmarks.find((l) => l.id === place.id)!.y], b.polygon));
   assert.equal(place.origin, index, "the close-up's place knows its house");
+});
+
+test("review fixes: a torn-down house picked, a great camp, boats ashore, places on houses of their own", () => {
+  const city = generateCity({ seed: "edit", era: "medieval", population: 20, walls: true, coast: null, river: null });
+  const ward = city.wards.find((w) => w.urban && w.kind === "craftsmen" && w.buildings > 20)!;
+  const rebuilt = editCity(city, { wards: { [ward.id]: { salt: 1 } } });
+  assert.doesNotMatch(renderCity(rebuilt, { mark: { landmark: null, building: rebuilt.buildings.findIndex((b) => b.kind === "gone") } }), /NaN|undefined/u, "a torn-down house picked");
+  // A camp of a million keeps to what a map can draw, and quickly.
+  const started = performance.now();
+  const great = generateCity({ seed: "camp", era: "stone", population: 1000, river: 0.4, coast: null });
+  assert.ok(great.buildings.length < 40_000 && performance.now() - started < 30_000, `${great.buildings.length} buildings in ${Math.round(performance.now() - started)} ms`);
+  for (let k = 0; k < 6; k++) {
+    const camp = generateCity({ seed: `camp-${k}`, era: "stone", population: 0.3, river: 0.4, coast: 1 });
+    for (const boat of camp.buildings.filter((b) => b.kind === "boat")) assert.ok(camp.wards.some((w) => w.id === boat.ward), `camp-${k}: a boat in no quarter`);
+  }
+  // Docks and scrapyards stand in a warehouse, not on a pier.
+  for (let k = 0; k < 6; k++)
+    for (const era of ["medieval", "post-apocalypse"] as const) {
+      const port = generateCity({ seed: `dock-${k}`, era, population: 20, coast: 1, port: true });
+      for (const place of port.landmarks.filter((l) => l.kind === "docks" || l.kind === "scrapyard")) assert.ok(port.buildings.some((b) => b.ward === place.ward && !PROPS.includes(b.kind) && pointInPolygon([place.x, place.y], b.polygon)), `dock-${k}/${era}: ${place.kind} on no building`);
+    }
+  // A quarter rebuilt gives each of its places a house of its own; one rebuilt as a park sends them to a house nearby.
+  const busy = generateCity({ seed: "snap-3", era: "medieval", population: 40, walls: true });
+  const counts = new Map<number, number>();
+  for (const l of busy.landmarks) counts.set(l.ward, (counts.get(l.ward) ?? 0) + 1);
+  for (const [id] of [...counts].filter(([, n]) => n >= 2).slice(0, 3))
+    for (const kind of ["patriciate", "military", "park"] as const) {
+      const edited = editCity(busy, { wards: { [id]: { kind } } });
+      const moved = edited.landmarks.filter((l) => busy.landmarks.find((b) => b.id === l.id)!.ward === id);
+      const spots = moved.map((l) => edited.buildings.findIndex((b) => b.polygon.length > 2 && !PROPS.includes(b.kind) && pointInPolygon([l.x, l.y], b.polygon)));
+      assert.equal(new Set(spots).size, spots.length, `${kind}: two places on one house`);
+      for (const [k, l] of moved.entries()) assert.ok(spots[k] >= 0 || !busy.buildings.some((b) => b.ward === id && !PROPS.includes(b.kind) && pointInPolygon([busy.landmarks.find((x) => x.id === l.id)!.x, busy.landmarks.find((x) => x.id === l.id)!.y], b.polygon)), `${kind}: ${l.kind} on an empty lot`);
+    }
+});
+
+test("review fixes: a new place never takes a removed one's id, a place turned into the GM's kind keeps it, colours stay colours", () => {
+  const city = generateCity({ seed: "ids", era: "medieval", population: 20 });
+  const top = city.landmarks.reduce((most, l) => Math.max(most, l.id), 0);
+  const edits = { places: { removed: [top] } };
+  const id = nextPlaceId(editCity(city, edits), edits);
+  assert.ok(id > top, "a new place took the removed place's id");
+  assert.ok(editCity(city, { places: { removed: [top], added: [{ id, kind: "bank" as const, x: 10, y: 10 }] } }).landmarks.some((l) => l.id === id), "the new place was taken away with the old");
+  assert.ok(nextPlaceId(city, { places: { added: [{ id: id + 5, kind: "bank", x: 1, y: 1 }], removed: [id + 9] } }) === id + 10);
+  // The GM's own kind given to a place goes along with the edit.
+  const own = { id: "shrine", name: "Old Shrine", glyph: "☥", color: "#227744", description: "Moss.", secret: "A door below.", opens: "none" as const, target: "", count: 0, where: [] };
+  const turned = editCity(city, { places: { kinds: { [String(city.landmarks[1].id)]: "custom:shrine" }, own: { [String(city.landmarks[1].id)]: own } } });
+  assert.equal(turned.params.custom?.places.find((kind) => kind.id === "shrine")?.secret, "A door below.");
+  assert.match(renderCity(turned), /☥/u);
+  // A colour that is not a colour cannot carry markup into the map.
+  const hostile = '#fff" onload="alert(1)';
+  const marked = generateCity({ seed: "ids", era: "medieval", population: 20, custom: { wards: [{ id: "w", name: "W", color: hostile, base: "slum", wealth: 0.2 }], places: [{ ...own, color: hostile, count: 2 }] } });
+  const ward = marked.wards.find((w) => w.urban && w.kind !== "plaza")!;
+  for (const svg of [renderCity(marked), renderCity(editCity(marked, { wards: { [ward.id]: { custom: "w", own: { id: "w", name: "W", color: hostile, base: "slum", wealth: 0.2 } } } }))]) assert.doesNotMatch(svg, /onload/u);
+});
+
+test("review fixes: a village's church stands, a hamlet by a river has its farmstead, the mill has a house of its own", () => {
+  for (let k = 0; k < 40; k++) {
+    const village = generateCity({ seed: `v-${k}`, era: "medieval", population: 0.4, settlement: "village", river: k % 2 ? 0.5 : null, coast: null });
+    for (const place of village.landmarks.filter((l) => l.kind === "temple")) assert.ok(village.buildings.some((b) => b.kind === "landmark" && pointInPolygon([place.x, place.y], b.polygon)), `v-${k}: a temple with no church`);
+    const spots = village.landmarks.filter((l) => l.kind !== "market-well").map((l) => `${l.x},${l.y}`);
+    assert.equal(new Set(spots).size, spots.length, `v-${k}: two places on one house`);
+    const hamlet = generateCity({ seed: `h-${k}`, era: "medieval", population: 0.03, settlement: "hamlet", river: 0.5 + k * 0.01, coast: null });
+    assert.ok(hamlet.wards.some((w) => w.kind === "farmstead"), `h-${k}: a hamlet with no farmstead`);
+  }
+});
+
+test("review fixes: a close-up's own houses keep their names when a neighbour is rebuilt, and its ground is the city's", () => {
+  const city = generateCity({ seed: "close", era: "medieval", population: 30, walls: true, relief: 0.8, river: null, coast: null });
+  const focus = city.wards.find((w) => w.urban && ["craftsmen", "merchants"].includes(w.kind))!;
+  const close = generateDistrict(city, focus.id);
+  const neighbour = city.wards.find((w) => w.urban && w.id !== focus.id && w.kind === "craftsmen" && close.buildings.some((b) => b.ward === w.id))!;
+  const after = generateDistrict(editCity(city, { wards: { [neighbour.id]: { salt: 1 } } }), focus.id);
+  const own = (made: City) => made.buildings.filter((b) => b.origin === undefined && !PROPS.includes(b.kind)).map((b) => [b.key, b.polygon] as const);
+  assert.ok(own(close).length > 5 && own(close).every(([key]) => key));
+  assert.deepEqual(own(after), own(close), "the close-up's own houses are known by their block, not their place in the list");
+  // The close-up's contours are the city's, enlarged.
+  const ground = heightField(city.params)!;
+  const zoom = close.zoom!;
+  assert.equal(heightField(zoom.ground)!([zoom.x, zoom.y]), ground([zoom.x, zoom.y]), "the close-up grows its ground from the city's seed");
+  const mapped = close.buildings.find((b) => b.origin !== undefined)!;
+  const at = centroid(mapped.polygon);
+  assert.ok(Math.hypot(zoom.x + at[0] * zoom.k - centroid(city.buildings[mapped.origin!].polygon)[0], zoom.y + at[1] * zoom.k - centroid(city.buildings[mapped.origin!].polygon)[1]) < 0.01, "the close-up's frame maps back onto the city");
+  assert.doesNotMatch(renderCity(close), /NaN|undefined|Infinity/u);
+  // Places of one quarter up close stand on houses of their own while there are houses enough.
+  const busy = generateCity({ seed: "snap-17", era: "medieval", population: 40, walls: true });
+  for (const ward of busy.wards.filter((w) => w.urban && busy.landmarks.filter((l) => l.ward === w.id).length >= 2)) {
+    const up = generateDistrict(busy, ward.id);
+    const spots = up.landmarks.map((l) => `${l.x},${l.y}`);
+    const homes = up.buildings.filter((b) => b.origin === undefined && !PROPS.includes(b.kind) && b.kind !== "shed").length;
+    if (homes >= spots.length) assert.equal(new Set(spots).size, spots.length, `${ward.kind} ${ward.id}: two places on one house up close`);
+  }
 });
 
 console.log(`city: ${passed} regressions passed`);

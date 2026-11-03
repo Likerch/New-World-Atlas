@@ -88,6 +88,10 @@ export function roleFits(role: Role, age: EraId): boolean {
   return !ages || ages.includes(age);
 }
 
+/** How likely the owner of a place, a shop or a house keeps a secret: one chance, so the same owner is the same person
+ * in the city's directory and in the plan of the house. */
+export const OWNER_SECRET = 0.55;
+
 /** A person: `key` names the place and the post (the same key gives the same person), `language` their names. */
 export function makeNpc(key: string, language: Language, role: Role, options: { secretChance?: number; faction?: string; ageRange?: [number, number] } = {}): Npc {
   const rng = createRng(`${key}/npc`);

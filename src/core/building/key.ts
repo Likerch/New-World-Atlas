@@ -5,7 +5,7 @@
 // building always keeps the same people and the same secrets.
 import type { Era } from "../city/model";
 import { createLanguage, type Language } from "../language";
-import { makeNpc, roleFits, rumoursOf, WANTS, type Hearsay, type Npc, type Role, type Rumour } from "../people";
+import { makeNpc, OWNER_SECRET, roleFits, rumoursOf, WANTS, type Hearsay, type Npc, type Role, type Rumour } from "../people";
 import { createRng, type Rng } from "../random";
 import { shopInventory, type ShopItem } from "./crafts";
 import type { BuildingPlan, BuildingType, Floor, Room, RoomKind } from "./plan";
@@ -158,7 +158,7 @@ export function buildingKey(plan: BuildingPlan, language?: Language | null, salt
   // The owner: the city's person for this house when it says, else one of its own — a plain house's head by its purse.
   const role = (params.owner?.role as Role | undefined) || OWNER[params.type] || householder(wealth, era);
   const ownerRole = roleFits(role, era) ? role : householder(wealth, era);
-  const owner = makeNpc(params.owner?.key ?? `${params.seed}/owner`, tongue, ownerRole, { secretChance: 0.6, ...(params.owner?.faction ? { faction: params.owner.faction.id } : {}) });
+  const owner = makeNpc(params.owner?.key ?? `${params.seed}/owner`, tongue, ownerRole, { secretChance: OWNER_SECRET, ...(params.owner?.faction ? { faction: params.owner.faction.id } : {}) });
 
   // Rooms in key order: the ground floor up, the cellar last.
   const order = [...plan.floors].sort((a, b) => (a.level < 0 ? 1000 : a.level) - (b.level < 0 ? 1000 : b.level));
@@ -253,12 +253,18 @@ export function buildingKey(plan: BuildingPlan, language?: Language | null, salt
   lies.push({ key: "rumour.want", vars: { name: owner.name, want: `@want.${fib.pick(WANTS.filter((want) => want !== owner.want))}` } });
   const wrong = fib.pick(["debt", "affair", "crime", "cult", "spy", "smuggling", "murder", "curse"].filter((s) => s !== owner.secret));
   lies.push({ key: "rumour.person", vars: { name: owner.name, secret: `@secret.${wrong}` } });
-  if (entries.length) lies.push({ key: "rumour.room-treasure", vars: { what: `@valuable.${fib.pick(loot)[0]}`, where: roomName(fib.pick(entries).level, fib.pick(entries).room) } });
+  if (entries.length) {
+    // One room, picked once: its floor and its number together.
+    const what = fib.pick(loot)[0];
+    const where = fib.pick(entries);
+    lies.push({ key: "rumour.room-treasure", vars: { what: `@valuable.${what}`, where: roomName(where.level, where.room) } });
+  }
   if (!params.hatch) lies.push({ key: "rumour.hatch", vars: {} });
   const rumours = rumoursOf(base, truths, lies);
 
   const hooks = createRng(`${base}/hook`);
-  const somewhere = entries.length ? roomName(hooks.pick(entries).level, hooks.pick(entries).room) : "@room.hall";
+  const spot = entries.length ? hooks.pick(entries) : null;
+  const somewhere = spot ? roomName(spot.level, spot.room) : "@room.hall";
   const guest = entries.find((entry) => kindOf(entry.level, entry.room) === "guest-room" && entry.occupants.length);
   const hookKind = hooks.pick(HOOKS.filter((kind) => kind !== "guest" || guest));
   const hook: Hearsay = { key: `hook.${hookKind}`, vars: { name: owner.name, where: hookKind === "guest" && guest ? roomName(guest.level, guest.room) : somewhere, faction: params.owner?.faction?.name ?? "" } };

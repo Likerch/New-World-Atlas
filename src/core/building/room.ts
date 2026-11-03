@@ -65,9 +65,11 @@ const FULL = new Set<FurnitureKind>(["shelf", "rack", "wardrobe", "counter", "bo
 const HALF = new Set<FurnitureKind>(["table", "round-table", "desk", "bench", "pew", "chest", "barrel", "crate", "altar", "sofa", "bed", "bunk", "tub", "anvil", "operating-table", "throne", "vat"]);
 const LIGHT = new Set<FurnitureKind>(["hearth", "forge", "stove"]);
 
-export function generateRoom(plan: BuildingPlan, floorIndex: number, roomId: number): RoomMap {
+/** A room of a floor up close; null when the floor has no such room. */
+export function generateRoom(plan: BuildingPlan, floorIndex: number, roomId: number): RoomMap | null {
   const floor = plan.floors[floorIndex];
-  const room = floor.rooms.find((r) => r.id === roomId)!;
+  const room = floor?.rooms.find((r) => r.id === roomId);
+  if (!room) return null;
   const seed = `${plan.params.seed}/floor-${floor.level}/room-${roomId}`;
   const rng = createRng(seed);
   const era = plan.params.era;
@@ -114,10 +116,18 @@ export function generateRoom(plan: BuildingPlan, floorIndex: number, roomId: num
 
   const onEdge = (p: Point) => Math.abs(p[0] - room.x) < 0.01 || Math.abs(p[0] - room.x - room.w) < 0.01 || Math.abs(p[1] - room.y) < 0.01 || Math.abs(p[1] - room.y - room.h) < 0.01;
   const within = (p: Point) => p[0] >= room.x - 0.01 && p[0] <= room.x + room.w + 0.01 && p[1] >= room.y - 0.01 && p[1] <= room.y + room.h + 0.01;
+  // A round tower's windows are short chords of its circle: a room has those whose middle, a step inside, lies in it.
+  const R = plan.params.shape === "round" ? plan.params.width / 2 : 0;
+  const pierces = (win: { a: Point; b: Point }) => {
+    const mx = (win.a[0] + win.b[0]) / 2 - R,
+      my = (win.a[1] + win.b[1]) / 2 - R;
+    const d = Math.hypot(mx, my) || 1;
+    return within([R + (mx / d) * (R - 0.4), R + (my / d) * (R - 0.4)]);
+  };
   const exits: Exit[] = [
     ...floor.doors.filter((door) => door.rooms.includes(room.id) && !door.walled).map((door): Exit => ({ at: local(door.at[0], door.at[1]), kind: "door", horizontal: door.horizontal, width: door.width, ...(door.kind ? { door: door.kind } : {}), ...(door.lock && door.lock !== "none" ? { lock: door.lock } : {}), ...(door.secret ? { secret: true } : {}) })),
-    ...floor.windows.filter((win) => within(win.a) && within(win.b) && onEdge(win.a) && onEdge(win.b)).map((win): Exit => {
-      const horizontal = Math.abs(win.a[1] - win.b[1]) < 0.01;
+    ...floor.windows.filter((win) => (R ? pierces(win) : within(win.a) && within(win.b) && onEdge(win.a) && onEdge(win.b))).map((win): Exit => {
+      const horizontal = R ? Math.abs(win.b[0] - win.a[0]) >= Math.abs(win.b[1] - win.a[1]) : Math.abs(win.a[1] - win.b[1]) < 0.01;
       return { at: local((win.a[0] + win.b[0]) / 2, (win.a[1] + win.b[1]) / 2), kind: "window", horizontal, width: Math.hypot(win.b[0] - win.a[0], win.b[1] - win.a[1]) };
     }),
   ];

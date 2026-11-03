@@ -277,10 +277,11 @@ export function roundFloors(params: BuildingParams, R: number, levels: number[],
     const plan = params.attic && level > top ? ATTIC : program(params.type, level, top, own, modern, params.customType);
     const kinds = plan.rooms.map(([kind]) => kind);
     const rects: { rect: Rect; kind: RoomKind }[] = [];
-    // The lamp of a lighthouse (a mage's circle) stands in the middle of the top floor, a walk round it.
+    // The lamp of a lighthouse (a mage's circle) stands in the middle of the top floor, a walk round it; the stair comes
+    // up at the back of the walk (and goes on to a loft above).
     if (kinds.length === 1 && (kinds[0] === "lantern" || kinds[0] === "ritual-room")) {
       rects.push({ rect: centre, kind: kinds[0] });
-      for (const cell of cells) rects.push({ rect: cell, kind: "gallery" });
+      cells.forEach((cell, k) => rects.push({ rect: cell, kind: multi && k === 2 ? "stairs" : "gallery" }));
     } else {
       let ring = kinds;
       if (multi) rects.push({ rect: centre, kind: "stairs" });

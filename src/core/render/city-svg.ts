@@ -229,8 +229,10 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
     }
   }
   if (city.lake) out.push(`<path d="${pathData(smooth([...city.lake, city.lake[0]], true, 2), true)}" fill="${th.water}" stroke="${th.shore}" stroke-width="1.2"/>`);
-  // Contours of a hilly town, every tenth of its height.
-  const height = layers.fields ? heightField(city.params) : null;
+  // Contours of a hilly town, every tenth of its height; a quarter up close keeps the whole city's, enlarged.
+  const zoom = city.zoom;
+  const ground = layers.fields ? heightField(zoom?.ground ?? city.params) : null;
+  const height = ground && zoom ? (p: Point) => ground([zoom.x + p[0] * zoom.k, zoom.y + p[1] * zoom.k]) : ground;
   if (height) out.push(`<path d="${contours(height, W, H).map((line) => `M${line.map(([x, y]) => `${r1(x)},${r1(y)}`).join("L")}`).join("")}" fill="none" stroke="${th.fieldLine}" stroke-width="0.7" opacity="0.55"/>`);
   const byKind = (kind: string) => city.buildings.filter((b) => b.kind === kind);
   if (layers.fields) {
@@ -465,8 +467,9 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
     const ward = city.wards.find((w) => w.id === options.highlight);
     if (ward) out.push(`<path d="${poly(ward.polygon)}" fill="#ffd34d" fill-opacity="0.15" stroke="#ffb300" stroke-width="2.5"/>`);
   }
+  // A house the GM's edit tore down is an empty slot with no outline (undo and redo may leave one picked).
   const marked = options.mark?.building;
-  if (marked !== null && marked !== undefined && city.buildings[marked]) out.push(`<path d="${poly(city.buildings[marked].polygon)}" fill="#ffd34d" fill-opacity="0.55" stroke="#e08a00" stroke-width="2"/>`);
+  if (marked !== null && marked !== undefined && (city.buildings[marked]?.polygon.length ?? 0) > 2) out.push(`<path d="${poly(city.buildings[marked].polygon)}" fill="#ffd34d" fill-opacity="0.55" stroke="#e08a00" stroke-width="2"/>`);
 
   if (layers.landmarks) {
     const r = 6.5;

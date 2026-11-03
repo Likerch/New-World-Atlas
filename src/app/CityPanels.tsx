@@ -12,6 +12,7 @@ import {
   ERAS,
   localFromLandmark,
   localFromPlace,
+  nextPlaceId,
   pointInPolygon,
   PROPS,
   type City,
@@ -457,7 +458,7 @@ export function CityInspector({ city, society, shops, t, nm, players, selection,
                   const y = building.polygon.reduce((sum, p) => sum + p[1], 0) / building.polygon.length;
                   const own = value.startsWith("custom:") ? placeKinds.find((kind) => kind.id === value.slice(7)) : undefined;
                   setEdits((e) => {
-                    const id = Math.max(city.landmarks.reduce((top, l) => Math.max(top, l.id), 0), ...(e.places?.added ?? []).map((a) => a.id)) + 1;
+                    const id = nextPlaceId(city, e);
                     return { ...e, places: { ...e.places, added: [...(e.places?.added ?? []), { id, kind: own ? "custom" : (value as LandmarkKind), ...(own ? { custom: own.id, own } : {}), x, y }] } };
                   });
                 }}
@@ -549,7 +550,12 @@ export function CityInspector({ city, society, shops, t, nm, players, selection,
                     const mine = value.startsWith("custom:") ? placeKinds.find((k) => k.id === value.slice(7)) : undefined;
                     setEdits((e) => {
                       if (added) return { ...e, places: { ...e.places, added: (e.places?.added ?? []).map((a) => (a.id === landmark.id ? { ...a, kind: mine ? "custom" : (value as LandmarkKind), custom: mine?.id, own: mine } : a)) } };
-                      return { ...e, places: { ...e.places, kinds: { ...e.places?.kinds, [String(landmark.id)]: value } } };
+                      // The GM's own kind goes along with the edit, so the place keeps its mark, name and secret wherever
+                      // the city is opened.
+                      const own = { ...e.places?.own };
+                      if (mine) own[String(landmark.id)] = mine;
+                      else delete own[String(landmark.id)];
+                      return { ...e, places: { ...e.places, kinds: { ...e.places?.kinds, [String(landmark.id)]: value }, own } };
                     });
                   }}
                 >
@@ -574,7 +580,8 @@ export function CityInspector({ city, society, shops, t, nm, players, selection,
                 <button
                   type="button"
                   onClick={() => {
-                    setEdits((e) => (added ? { ...e, places: { ...e.places, added: (e.places?.added ?? []).filter((a) => a.id !== landmark.id) } } : { ...e, places: { ...e.places, removed: [...new Set([...(e.places?.removed ?? []), landmark.id])] } }));
+                    // A place the GM added leaves its id among the removed too, so no later place is given it (or its notes).
+                    setEdits((e) => ({ ...e, places: { ...e.places, ...(added ? { added: (e.places?.added ?? []).filter((a) => a.id !== landmark.id) } : {}), removed: [...new Set([...(e.places?.removed ?? []), landmark.id])] } }));
                     onSelect(null);
                   }}
                 >

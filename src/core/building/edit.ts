@@ -41,7 +41,10 @@ export function editBuilding(plan: BuildingPlan, edits: BuildingEdits | null | u
       if (change.kind) room.kind = change.kind;
       const rng = createRng(`${plan.params.seed}/edit/room-${floor.level}-${room.id}/${change.salt ?? 0}`);
       room.collapsed = false;
-      room.furniture = forAge(furnish(room, floor.doors.filter((door) => door.rooms.includes(room.id)), plan.params.type, modern, rng), plan.params.era);
+      // What is of the house (the hatch down, a craft's tools, a chalked circle) stays; the new furniture keeps clear of it.
+      const fixed = room.furniture.filter((f) => f.fixed);
+      const fresh = forAge(furnish(room, floor.doors.filter((door) => door.rooms.includes(room.id)), plan.params.type, modern, rng), plan.params.era);
+      room.furniture = [...fresh.filter((f) => f.kind === "carpet" || fixed.every((k) => f.x >= k.x + k.w || k.x >= f.x + f.w || f.y >= k.y + k.h || k.y >= f.y + f.h)), ...fixed];
     }
     floor.doors.forEach((door, index) => {
       const change = edits.doors?.[`${floor.level}:${index}`];

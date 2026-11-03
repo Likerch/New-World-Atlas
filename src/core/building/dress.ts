@@ -6,7 +6,7 @@ import type { Era } from "../city/model";
 import type { Point } from "../geometry";
 import { createRng, type Rng } from "../random";
 import { CRAFTS, type Craft } from "./crafts";
-import type { BuildingPlan, Door, DoorKind, Floor, FurnitureKind, LockKind, Room, RoomKind } from "./plan";
+import { sharedWall, type BuildingPlan, type Door, type DoorKind, type Floor, type FurnitureKind, type LockKind, type Room, type RoomKind } from "./plan";
 
 /** Rooms a hidden door is worth having in: someone keeps something there. */
 const PRIVATE = new Set<RoomKind>(["study", "bedroom", "vault", "cellar", "office", "sacristy", "storage", "throne-room", "ritual-room", "vip", "server-room"]);
@@ -37,10 +37,10 @@ export function freeSpot(plan: BuildingPlan, floor: Floor, room: Room, w: number
   return null;
 }
 
-function put(plan: BuildingPlan, floor: Floor, room: Room, kind: FurnitureKind, w: number, h: number, rng: Rng, round = false): boolean {
+function put(plan: BuildingPlan, floor: Floor, room: Room, kind: FurnitureKind, w: number, h: number, rng: Rng, round = false, fixed = false): boolean {
   const at = freeSpot(plan, floor, room, w, h, rng);
   if (!at) return false;
-  room.furniture.push({ kind, x: at[0], y: at[1], w, h, round });
+  room.furniture.push({ kind, x: at[0], y: at[1], w, h, round, ...(fixed ? { fixed } : {}) });
   return true;
 }
 
@@ -95,21 +95,12 @@ function lockKind(plan: BuildingPlan, a: Room | undefined, b: Room | undefined, 
   return "none";
 }
 
+/** The shortest wall a door is broken through between two rooms. */
+export const DOOR_WALL = 1.6;
+
 /** A door between two rooms that touch but have none: on their shared wall, clear of furniture on both sides. */
 export function newDoor(floor: Floor, a: Room, b: Room, rng: Rng, force = false): Door | null {
-  const eps = 0.01;
-  let wall: { from: Point; to: Point; horizontal: boolean } | null = null;
-  if (Math.abs(a.x + a.w - b.x) < eps || Math.abs(b.x + b.w - a.x) < eps) {
-    const x = Math.abs(a.x + a.w - b.x) < eps ? b.x : a.x;
-    const y0 = Math.max(a.y, b.y),
-      y1 = Math.min(a.y + a.h, b.y + b.h);
-    if (y1 - y0 >= 1.6) wall = { from: [x, y0], to: [x, y1], horizontal: false };
-  } else if (Math.abs(a.y + a.h - b.y) < eps || Math.abs(b.y + b.h - a.y) < eps) {
-    const y = Math.abs(a.y + a.h - b.y) < eps ? b.y : a.y;
-    const x0 = Math.max(a.x, b.x),
-      x1 = Math.min(a.x + a.w, b.x + b.w);
-    if (x1 - x0 >= 1.6) wall = { from: [x0, y], to: [x1, y], horizontal: true };
-  }
+  const wall = sharedWall(a, b, DOOR_WALL);
   if (!wall) return null;
   const len = wall.horizontal ? wall.to[0] - wall.from[0] : wall.to[1] - wall.from[1];
   for (let attempt = 0; attempt < 8; attempt++) {
@@ -130,6 +121,45 @@ function strangers(floor: Floor): [Room, Room][] {
   for (const a of floor.rooms)
     for (const b of floor.rooms) if (a.id < b.id && !joined.has(`${a.id}:${b.id}`) && a.kind !== "stairs" && b.kind !== "stairs") out.push([a, b]);
   return out;
+}
+
+/** Rooms no door reaches from where the floor is entered (cut narrower than a door's width, or reached only past such
+ * a room): each is joined to a reached room it touches by as wide a door as the wall takes, until every room that
+ * touches another is in. The doors go last, so every other door keeps its number. */
+function joinStrays(floor: Floor): void {
+  const entry = floor.rooms.find((room) => room.kind === "stairs") ?? floor.rooms.find((room) => floor.doors.some((door) => door.rooms[0] === room.id && door.rooms[1] === -1)) ?? floor.rooms[0];
+  if (!entry) return;
+  const reached = new Set<number>();
+  const walk = (from: number) => {
+    const queue = [from];
+    reached.add(from);
+    while (queue.length) {
+      const at = queue.shift()!;
+      for (const door of floor.doors) {
+        if (door.secret || door.walled) continue;
+        const other = door.rooms[0] === at ? door.rooms[1] : door.rooms[1] === at ? door.rooms[0] : -1;
+        if (other >= 0 && !reached.has(other)) (reached.add(other), queue.push(other));
+      }
+    }
+  };
+  walk(entry.id);
+  const length = (wall: { from: Point; to: Point }) => Math.hypot(wall.to[0] - wall.from[0], wall.to[1] - wall.from[1]);
+  for (let joined = true; joined && reached.size < floor.rooms.length; ) {
+    joined = false;
+    for (const room of floor.rooms) {
+      if (reached.has(room.id)) continue;
+      let best: { other: Room; wall: { from: Point; to: Point; horizontal: boolean } } | null = null;
+      for (const other of floor.rooms) {
+        const wall = reached.has(other.id) ? sharedWall(room, other, 0.6) : null;
+        if (wall && (!best || length(wall) > length(best.wall))) best = { other, wall };
+      }
+      if (!best) continue;
+      const { wall } = best;
+      floor.doors.push({ at: [(wall.from[0] + wall.to[0]) / 2, (wall.from[1] + wall.to[1]) / 2], horizontal: wall.horizontal, width: Math.min(0.9, length(wall) - 0.2), rooms: [best.other.id, room.id] });
+      walk(room.id);
+      joined = true;
+    }
+  }
 }
 
 /** The finishing pass over a fresh plan. */
@@ -163,9 +193,12 @@ export function dress(plan: BuildingPlan): BuildingPlan {
         // Out through the cellar wall, to a tunnel under the street or the yard.
         const room = cellar.rooms.find((r) => r.kind !== "stairs" && r.kind !== "corridor" && (r.y < 0.01 || r.x < 0.01));
         if (room) {
-          const at: Point = room.y < 0.01 ? [room.x + room.w / 2, 0] : [0, room.y + room.h / 2];
+          // A round tower's outer wall is its circle: the way out goes through it, out from the middle past the room.
+          const R = params.shape === "round" ? params.width / 2 : 0;
+          const away = Math.atan2(room.y + room.h / 2 - R, room.x + room.w / 2 - R);
+          const at: Point = R ? [R + Math.cos(away) * R, R + Math.sin(away) * R] : room.y < 0.01 ? [room.x + room.w / 2, 0] : [0, room.y + room.h / 2];
           if (!blocked(room, at, 0.6)) {
-            cellar.doors.push({ at, horizontal: room.y < 0.01, width: 0.9, rooms: [room.id, -1], secret: true, kind: "plain", lock: "none" });
+            cellar.doors.push({ at, horizontal: R ? Math.abs(Math.sin(away)) > Math.abs(Math.cos(away)) : room.y < 0.01, width: 0.9, rooms: [room.id, -1], secret: true, kind: "plain", lock: "none" });
             return true;
           }
         }
@@ -182,6 +215,8 @@ export function dress(plan: BuildingPlan): BuildingPlan {
       return false;
     })();
   }
+
+  for (const floor of plan.floors) joinStrays(floor);
 
   // What every door is and how it shuts (the hidden ones are already plain and open to whoever finds them).
   for (const floor of plan.floors) {
@@ -205,7 +240,7 @@ export function dress(plan: BuildingPlan): BuildingPlan {
     const rooms = (ground?.rooms.filter((room) => order.includes(room.kind)) ?? []).sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind) || b.w * b.h - a.w * a.h);
     for (const kind of craft.furniture) {
       const size: [number, number] = kind === "oven" || kind === "kiln" || kind === "press" ? [1.4, 1] : kind === "hooks" || kind === "bolts" || kind === "display" ? [1.2, 0.5] : [1, 0.9];
-      for (const room of rooms) if (ground && (put(plan, ground, room, kind, size[0], size[1], rng, kind === "kiln" || kind === "barrel" || kind === "vat") || put(plan, ground, room, kind, size[1], size[0], rng, kind === "kiln" || kind === "barrel" || kind === "vat"))) break;
+      for (const room of rooms) if (ground && (put(plan, ground, room, kind, size[0], size[1], rng, kind === "kiln" || kind === "barrel" || kind === "vat", true) || put(plan, ground, room, kind, size[1], size[0], rng, kind === "kiln" || kind === "barrel" || kind === "vat", true))) break;
     }
   }
 
@@ -214,7 +249,7 @@ export function dress(plan: BuildingPlan): BuildingPlan {
     const rng = base.fork("hatch");
     const floor = plan.floors.find((f) => f.level < 0) ?? plan.floors.find((f) => f.level === 0)!;
     const room = floor.rooms.find((r) => r.kind === "cellar" || r.kind === "storage") ?? floor.rooms.find((r) => r.kind !== "stairs") ?? floor.rooms[0];
-    if (!put(plan, floor, room, "hatch", 1, 1, rng)) room.furniture.push({ kind: "hatch", x: room.x + 0.4, y: room.y + 0.4, w: 1, h: 1, round: false });
+    if (!put(plan, floor, room, "hatch", 1, 1, rng, false, true)) room.furniture.push({ kind: "hatch", x: room.x + 0.4, y: room.y + 0.4, w: 1, h: 1, round: false, fixed: true });
   }
 
   // Decay: rubble on the floors, boarded windows, doors off their hinges, a room or two fallen in.
@@ -231,8 +266,9 @@ export function dress(plan: BuildingPlan): BuildingPlan {
       if (decay > 0.7) {
         const fallen = rng.shuffle(floor.rooms.filter((room) => room.kind !== "stairs" && room.kind !== "corridor")).slice(0, decay > 0.9 ? 2 : 1);
         for (const room of fallen) {
+          // The hatch, a craft's tools and a circle are of the house: the rubble falls round them.
           room.collapsed = true;
-          room.furniture = [];
+          room.furniture = room.furniture.filter((f) => f.fixed);
           for (let k = 0; k < Math.max(2, Math.round((room.w * room.h) / 6)); k++) put(plan, floor, room, "rubble", rng.float(0.8, 1.8), rng.float(0.8, 1.6), rng, true);
         }
       }
@@ -246,7 +282,7 @@ export function dress(plan: BuildingPlan): BuildingPlan {
     for (const floor of plan.floors)
       for (const room of floor.rooms) {
         if (!["study", "lab", "cellar", "sacristy", "vault", "chapel"].includes(room.kind) || room.furniture.some((f) => f.kind === "circle")) continue;
-        if (rng.chance(params.type === "mage-tower" ? 0.8 : magic >= 2 ? magic * 0.12 : 0.04)) put(plan, floor, room, "circle", 1.6, 1.6, rng, true) || put(plan, floor, room, "circle", 1.1, 1.1, rng, true);
+        if (rng.chance(params.type === "mage-tower" ? 0.8 : magic >= 2 ? magic * 0.12 : 0.04)) put(plan, floor, room, "circle", 1.6, 1.6, rng, true, true) || put(plan, floor, room, "circle", 1.1, 1.1, rng, true, true);
       }
   }
   return plan;

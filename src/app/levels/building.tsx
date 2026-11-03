@@ -15,12 +15,14 @@ import {
   buildingLegend,
   buildingParams,
   buildingView,
+  DOOR_WALL,
   editBuilding,
   ERAS,
   generateBuilding,
   generateRoom,
   localFromHatch,
   localFromCellar,
+  mapKeyOf,
   materialOf,
   neighbours,
   PX,
@@ -28,6 +30,7 @@ import {
   renderRoom,
   roomSalts,
   ROOM_PX,
+  sharedWall,
   TYPE_SHAPE,
   type BuildingEdits,
   type BuildingParams,
@@ -76,7 +79,8 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null, o
     });
   };
   const set = <K extends keyof BuildingParams>(key: K, value: BuildingParams[K]) => setInput((current) => ({ ...current, [key]: value }));
-  const mapKey = raw ? `building:${raw.params.seed}` : null;
+  // A house's key: its seed and a print of what it was built as (another type, size or floors is another plan).
+  const mapKey = raw ? mapKeyOf("building", raw.params as unknown as Record<string, unknown>) : null;
   const patch = ctx.patch(mapKey);
   const edits = (patch.changes?.building ?? null) as BuildingEdits | null;
   const setEdits = (change: (edits: BuildingEdits) => BuildingEdits) => ctx.update(mapKey, (p) => ({ ...p, changes: { ...p.changes, building: change((p.changes?.building ?? {}) as BuildingEdits) } }));
@@ -160,7 +164,11 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null, o
     selected: !plan || !current ? null : room !== null ? { key: `room:${current.level}:${room}`, label: roomLabel(room, current.rooms.find((r) => r.id === room)?.kind) } : { key: "world", label: plan.params.name || typeName(plan.params.type, plan.params) },
     seed: input.seed,
     setSeed: (seed) => set("seed", seed),
-    generate: (seed) => build(seed ? { ...input, seed } : input),
+    generate: (seed) => {
+      const next = seed ? { ...input, seed } : input;
+      // The same house built another way is another map: the maps opened from it go, so the GM is asked first.
+      if (!raw || next.seed !== raw.params.seed || ctx.regrow(mapKey, mapKeyOf("building", generateBuilding(next).params as unknown as Record<string, unknown>))) build(next);
+    },
     ensure: () => {
       // Only when nothing is on its way: an opened building or city must not be replaced by a fresh one.
       if (!plan && !pending.current) build(input);
@@ -208,8 +216,11 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null, o
               type="button"
               aria-pressed={index === floor && !roof}
               onClick={() => {
+                // Another floor has other rooms: the room picked and the room up close stay behind.
                 setFloor(index);
                 setRoof(false);
+                setRoom(null);
+                setClose(null);
               }}
             >
               {floorName(f.level)}
@@ -422,7 +433,8 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null, o
               for (const f of selectedRoom.furniture) if (!(ctx.players && f.kind === "hatch")) counts.set(f.kind, (counts.get(f.kind) ?? 0) + 1);
               const ways = neighbours(current, selectedRoom.id).filter((way) => !way.door.walled && (!way.door.secret || !ctx.players));
               const doorKey = (index: number) => `${current.level}:${index}`;
-              const touching = current.rooms.filter((other) => other.id !== selectedRoom.id && other.kind !== "stairs" && !neighbours(current, selectedRoom.id).some((way) => way.room === other.id) && (Math.abs(other.x + other.w - selectedRoom.x) < 0.01 || Math.abs(selectedRoom.x + selectedRoom.w - other.x) < 0.01 || Math.abs(other.y + other.h - selectedRoom.y) < 0.01 || Math.abs(selectedRoom.y + selectedRoom.h - other.y) < 0.01));
+              // Rooms a door can be broken through to: by the very test the new door is made by.
+              const touching = current.rooms.filter((other) => other.id !== selectedRoom.id && other.kind !== "stairs" && !neighbours(current, selectedRoom.id).some((way) => way.room === other.id) && sharedWall(selectedRoom, other, DOOR_WALL));
               const hatch = selectedRoom.furniture.some((f) => f.kind === "hatch");
               const setDoor = (index: number, change: NonNullable<BuildingEdits["doors"]>[string]) => setEdits((e) => ({ ...e, doors: { ...e.doors, [doorKey(index)]: { ...e.doors?.[doorKey(index)], ...change } } }));
               const roomKey = `${current.level}:${selectedRoom.id}`;

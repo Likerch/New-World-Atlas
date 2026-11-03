@@ -172,7 +172,8 @@ export interface Building {
   floors: number;
   /** In a close-up: the building of the enlarged map that this one is (absent for lots drawn only up close). */
   origin?: number;
-  /** A building the game master's edits raised: its own name for seeds and notes, in place of its index. */
+  /** A building the game master's edits raised, or a lot drawn only up close: its own name for seeds and notes, in place
+   * of its index. */
   key?: string;
 }
 
@@ -297,4 +298,7 @@ export interface City {
   growth?: { rings: Record<number, number>; ages: EraId[] };
   /** The gates of the town wall, each with the road of the world it opens on (index into params.roads), if any. */
   gateRoads?: (number | null)[];
+  /** A quarter up close: where its frame lies on the whole city's map (the corner, and the city's units to one of its
+   * own) and what the city's ground grew from, so its contours are the city's. */
+  zoom?: { x: number; y: number; k: number; ground: Pick<CityParams, "seed" | "width" | "height" | "relief"> };
 }

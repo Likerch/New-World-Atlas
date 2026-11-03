@@ -9,6 +9,9 @@ import {
   buildingFromCity,
   buildingParams,
   cityParams,
+  generateBuilding,
+  type BuildingParams,
+  type CityParams,
   localFromCavern,
   cityFromBurg,
   editPlanet,
@@ -283,7 +286,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
       }, 30);
     },
     regrow: (from, to) => {
-      if (!from || from === to || world.top !== "planet" || rootOf(world)?.[0] !== from) return true;
+      if (!from || from === to || rootOf(world)?.[0] !== from) return true;
       if (!Object.values(world.maps).some((map) => map.parent === from)) return true;
       return confirm(t("worlds.confirmRegrow"));
     },
@@ -667,8 +670,12 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     level.generate(seed);
   };
   const setWorldSetting = (setting: Setting) => {
-    worlds.update((current) => ({ ...current, setting, updated: Date.now() }));
     const root = rootOf(world);
+    // A town or a house at the top is grown anew in the new age: another map, so the maps opened from it go.
+    const grown = root?.[1].params;
+    const next = grown && world.top === "city" ? mapKeyOf("city", cityParams({ ...grown, era: ageOf(setting) } as Partial<CityParams>) as unknown as Record<string, unknown>) : grown && world.top === "building" ? mapKeyOf("building", generateBuilding({ ...grown, era: ageOf(setting) } as Partial<BuildingParams>).params as unknown as Record<string, unknown>) : null;
+    if (root && next && !ctx.regrow(root[0], next)) return;
+    worlds.update((current) => ({ ...current, setting, updated: Date.now() }));
     if (!root) return;
     const params = root[1].params;
     if (world.top === "planet") planet.restore!({ ...params, setting });

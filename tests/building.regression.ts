@@ -1,6 +1,7 @@
 // Building-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { PROPS, tierLegend, cityTiers, generateDistrict, BUILDING_THEMES, BUILDING_TYPES, buildingAt, buildingFromCity, centroid, ERA_BUILDINGS, generateBuilding, generateCity, generateRoom, pointInPolygon, renderBuilding, renderRoom, hashString, BUILDING_SHAPES, buildingKey, CRAFT_IDS, CRAFTS, shopInventory, craftFor, craftsOf, editBuilding, localFromHatch, placeOwnerKey, citySociety, cityShops, ROLES } from "../src/core/index";
+import { PROPS, tierLegend, cityTiers, generateDistrict, BUILDING_THEMES, BUILDING_TYPES, buildingAt, buildingFromCity, centroid, ERA_BUILDINGS, generateBuilding, generateCity, generateRoom, pointInPolygon, renderBuilding, renderRoom, hashString, BUILDING_SHAPES, buildingKey, CRAFT_IDS, CRAFTS, shopInventory, craftFor, craftsOf, editBuilding, localFromHatch, placeOwnerKey, citySociety, cityShops, ROLES, DOOR_WALL, neighbours, sharedWall, type CustomBuildingType, type RoomKind } from "../src/core/index";
+import { translator } from "../src/app/i18n";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -74,7 +75,7 @@ test("a room opens as a scene: things inside it, doors on its walls, cover from 
   const plan = generateBuilding({ seed: "scene", type: "tavern", floors: 2 });
   const floor = plan.floors.findIndex((f) => f.level === 0);
   const hall = plan.floors[floor].rooms.find((r) => r.kind === "common-room")!;
-  const room = generateRoom(plan, floor, hall.id);
+  const room = generateRoom(plan, floor, hall.id)!;
   for (const item of room.items) assert.ok(item.x >= 0 && item.y >= 0 && item.x <= room.w && item.y <= room.h, `${item.kind} lies outside the room`);
   assert.ok(room.exits.some((exit) => exit.kind === "door"), "a way in");
   for (const exit of room.exits) assert.ok([0, room.w].some((v) => Math.abs(exit.at[0] - v) < 0.01) || [0, room.h].some((v) => Math.abs(exit.at[1] - v) < 0.01), "exits sit on the walls");
@@ -124,13 +125,13 @@ test("what lies about follows the age, and stairs show where they lead", () => {
   for (let k = 0; k < 30; k++) {
     const hut = generateBuilding({ seed: `hut-${k}`, type: "hut", era: "stone" });
     for (const room of hut.floors[0].rooms) {
-      const items = generateRoom(hut, 0, room.id).items.map((item) => item.kind);
+      const items = generateRoom(hut, 0, room.id)!.items.map((item) => item.kind);
       for (const kind of ["letter", "key", "coins", "papers", "book", "datapad", "credstick"]) assert.ok(!items.includes(kind as never), `a ${kind} in a stone-age hut`);
     }
   }
   const tavern = generateBuilding({ seed: "flights", type: "tavern", floors: 2, cellar: false });
   const stairs = tavern.floors[0].rooms.find((r) => r.kind === "stairs")!;
-  const close = generateRoom(tavern, 0, stairs.id);
+  const close = generateRoom(tavern, 0, stairs.id)!;
   assert.deepEqual(close.flights, { up: true, down: false });
   assert.match(renderRoom(close), /▲/u);
 });
@@ -330,6 +331,105 @@ test("a house opened from the city knows its street, its quarter's wealth, its c
       const role = buildingKey(generateBuilding(buildingFromCity(town, index)), town.language).owner.role;
       assert.ok(ROLES.includes(role), `${era}: an owner with no role (${role})`);
     });
+  }
+});
+
+test("review fixes: a room up close of another floor, the hatch and a craft's tools kept, one room to a rumour, doors offered that open", () => {
+  const plan = generateBuilding({ seed: "tools", type: "shop", era: "medieval", floors: 2, cellar: true, hatch: true, craft: "baker" });
+  const ground = plan.floors.findIndex((f) => f.level === 0);
+  assert.equal(generateRoom(plan, ground, 999), null, "a room the floor has not is no room up close");
+  // Decay that brings a room down leaves the hatch under the rubble; a room furnished anew keeps it and the craft's tools.
+  for (let k = 0; k < 20; k++) {
+    const ruin = generateBuilding({ seed: `ruin-${k}`, type: "house", hatch: true, cellar: true, decay: 0.95 });
+    assert.ok(ruin.floors.some((f) => f.rooms.some((r) => r.furniture.some((x) => x.kind === "hatch"))), `ruin-${k} lost its hatch`);
+  }
+  const at = plan.floors.flatMap((f) => f.rooms.filter((r) => r.furniture.some((x) => x.kind === "hatch")).map((r) => [f.level, r.id] as const))[0];
+  const tools = plan.floors.flatMap((f) => f.rooms.filter((r) => r.furniture.some((x) => x.fixed && x.kind !== "hatch")).map((r) => [f.level, r.id] as const))[0];
+  assert.ok(at && tools, "a hatch and a baker's oven");
+  const again = editBuilding(plan, { rooms: { [`${at[0]}:${at[1]}`]: { salt: 1 }, [`${tools[0]}:${tools[1]}`]: { kind: "storage" } } });
+  const room = (level: number, id: number) => again.floors.find((f) => f.level === level)!.rooms.find((r) => r.id === id)!;
+  assert.ok(room(at[0], at[1]).furniture.some((x) => x.kind === "hatch"), "a room thrown again lost its hatch");
+  assert.ok(room(tools[0], tools[1]).furniture.some((x) => x.fixed && x.kind !== "hatch"), "a room given a new purpose lost the craft's tools");
+  // A rumour or a hook names one room, never a room of nowhere.
+  for (let k = 0; k < 60; k++) {
+    for (const type of ["tavern", "manor", "house"] as const) {
+      const key = buildingKey(generateBuilding({ seed: `r${k}`, type }));
+      assert.doesNotMatch(JSON.stringify([key.rumours, key.hook]), /@room\.undefined/u, `r${k}/${type}`);
+    }
+  }
+  // Every room the editor offers a door to gets one.
+  for (let k = 0; k < 10; k++) {
+    const manor = generateBuilding({ seed: `door-${k}`, type: "manor", floors: 2 });
+    for (const floor of manor.floors)
+      for (const one of floor.rooms)
+        for (const other of floor.rooms.filter((o) => o.id !== one.id && o.kind !== "stairs" && !neighbours(floor, one.id).some((way) => way.room === o.id) && sharedWall(one, o, DOOR_WALL))) {
+          const doors = editBuilding(manor, { added: [{ level: floor.level, a: one.id, b: other.id }] }).floors.find((f) => f.level === floor.level)!.doors.length;
+          assert.equal(doors, floor.doors.length + 1, `door-${k}: no door from ${one.kind} to ${other.kind}`);
+        }
+  }
+});
+
+test("review fixes: narrow rooms are reached, a round tower's top has its stair and its secret way out stays in its wall", () => {
+  const twelve: RoomKind[] = ["hall", "kitchen", "bedroom", "bedroom", "storage", "study", "office", "bath", "pantry", "bedroom", "storage", "chapel"];
+  const own: CustomBuildingType = { id: "dozen", name: "Dozen", description: "", ground: twelve, upper: twelve, cellar: [], width: 12, depth: 9, floors: 2 };
+  const plans = [
+    ...(["tenement", "prison", "barracks", "apartment"] as const).map((type) => generateBuilding({ seed: "narrow", type, width: 5, depth: 4, floors: 3 })),
+    generateBuilding({ seed: "arcology", type: "office", era: "cyberpunk", width: 6, depth: 4, floors: 12 }),
+    ...(["L", "T"] as const).map((shape) => generateBuilding({ seed: "dozen", type: "custom", customType: own, shape, width: 12, depth: 9, floors: 2 })),
+  ];
+  for (const plan of plans) for (const floor of plan.floors) assert.equal(reachable(floor), floor.rooms.length, `${plan.params.type}/${plan.params.shape ?? "rect"} floor ${floor.level}: a room cannot be reached`);
+  for (const type of ["lighthouse", "mage-tower"] as const) {
+    for (const attic of [false, true]) {
+      const tower = generateBuilding({ seed: "tower", type, floors: 4, attic });
+      for (const floor of tower.floors) {
+        assert.ok(floor.rooms.some((r) => r.kind === "stairs"), `${type}${attic ? " with a loft" : ""}: floor ${floor.level} has no stair`);
+        assert.equal(reachable(floor), floor.rooms.length);
+      }
+    }
+  }
+  let secrets = 0;
+  for (let k = 0; k < 40; k++) {
+    const tower = generateBuilding({ seed: `mage-${k}`, type: "mage-tower", cellar: true });
+    const R = tower.params.width / 2;
+    for (const floor of tower.floors)
+      for (const door of floor.doors.filter((d) => d.secret && d.rooms[1] === -1)) {
+        secrets++;
+        assert.ok(Math.abs(Math.hypot(door.at[0] - R, door.at[1] - R) - R) < 0.05, `mage-${k}: the secret way out is not in the round wall`);
+      }
+  }
+  assert.ok(secrets > 3, "secret ways out of a tower's cellar");
+  // A round room up close has the windows of its stretch of wall.
+  const light = generateBuilding({ seed: "light", type: "lighthouse", floors: 3 });
+  const ground = light.floors.findIndex((f) => f.level === 0);
+  assert.ok(light.floors[ground].rooms.reduce((sum, r) => sum + generateRoom(light, ground, r.id)!.exits.filter((e) => e.kind === "window").length, 0) >= light.floors[ground].windows.length);
+});
+
+test("review fixes: every piece of furniture has a name in both tongues", () => {
+  const kinds = new Set<string>();
+  for (const [era, types] of Object.entries(ERA_BUILDINGS))
+    for (const type of types) for (const floor of generateBuilding({ seed: `names-${type}`, type, era: era as never, decay: 0.9, magic: 3, hatch: true, cellar: true }).floors) for (const room of floor.rooms) for (const f of room.furniture) kinds.add(f.kind);
+  for (const craft of CRAFT_IDS) for (const kind of CRAFTS[craft].furniture) kinds.add(kind);
+  for (const locale of ["en", "ru"] as const) {
+    const t = translator(locale);
+    for (const kind of kinds) assert.notEqual(t(`furniture.${kind}`), `furniture.${kind}`, `${locale}: furniture.${kind}`);
+    assert.notEqual(t("bkind.gone"), "bkind.gone");
+  }
+});
+
+test("review fixes: the owner of a place or a shop is the same person in the city and in the house", () => {
+  for (const era of ["medieval", "industrial"] as const) {
+    const city = generateCity({ seed: `secrets-${era}`, era, population: 25 });
+    const society = citySociety(city);
+    for (const place of society.places.slice(0, 12)) {
+      const index = city.buildings.findIndex((b) => b.ward === city.landmarks.find((l) => l.id === place.landmark)!.ward && !PROPS.includes(b.kind) && pointInPolygon([city.landmarks.find((l) => l.id === place.landmark)!.x, city.landmarks.find((l) => l.id === place.landmark)!.y], b.polygon));
+      if (index < 0) continue;
+      const owner = buildingKey(generateBuilding(buildingFromCity(city, index)), city.language).owner;
+      if (owner.id === place.owner.id) assert.equal(owner.secret, place.owner.secret, `${era}: the owner of place ${place.landmark} keeps another secret in the house`);
+    }
+    for (const shop of cityShops(city).slice(0, 12)) {
+      const owner = buildingKey(generateBuilding(buildingFromCity(city, shop.building)), city.language).owner;
+      if (owner.id === shop.owner.id) assert.equal(owner.secret, shop.owner.secret, `${era}: a shopkeeper keeps another secret in the shop`);
+    }
   }
 });
 

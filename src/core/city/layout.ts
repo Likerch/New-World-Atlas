@@ -60,7 +60,7 @@ const isSeaAt = (sea: Point[] | null, p: Point) => !!sea && pointInPolygon(p, se
 
 /** How high the ground of a hilly town stands at a point, 0–1; null for a flat town. The renderer draws its contours
  * from the same field. */
-export function heightField(params: CityParams): ((at: Point) => number) | null {
+export function heightField(params: Pick<CityParams, "seed" | "width" | "height" | "relief">): ((at: Point) => number) | null {
   const relief = params.relief ?? 0;
   if (relief <= 0) return null;
   const hills = noise2(createRng(`${params.seed}/layout`).fork("relief"));

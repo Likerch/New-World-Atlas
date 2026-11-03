@@ -19,6 +19,7 @@ import { hydrology } from "./rivers";
 import { buildRoutes } from "./routes";
 import { NATURAL_KINDS } from "./nature";
 import { carveRivers, fiefsOf, landformsOf, landUseOf, planetRoads, rankVillages } from "./countryside";
+import { townSite } from "../city/generate";
 import { cellKm2 } from "./geo";
 
 export function generateRegion(planet: Planet, provinceId: number, cells?: number): Planet {
@@ -194,7 +195,8 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
     if (water[cell] || burg[cell]) continue;
     const id = burgs.length;
     const dry = !water[mesh.find(x, y)] && mesh.find(x, y) === cell;
-    burgs.push({ ...town, id, cell, x: dry ? x : mesh.x[cell], y: dry ? y : mesh.y[cell], origin: town.origin ?? town.id });
+    // The town keeps the coast, river, roads, faith and land it has on the planet: its city is the planet's city.
+    burgs.push({ ...town, id, cell, x: dry ? x : mesh.x[cell], y: dry ? y : mesh.y[cell], origin: town.origin ?? town.id, site: town.site ?? townSite(planet, town.id) });
     burg[cell] = id;
   }
   const scores = new Float32Array(n);
