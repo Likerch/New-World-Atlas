@@ -46,7 +46,7 @@ export function localStory(map: LocalMap): LocalStory {
   else if (prisoner) hook = { key: "hook.prisoner", vars: { name: prisoner.name, place } };
   else if (lord) hook = { key: "hook.lord", vars: { who: lord.name ?? whoKey(lord.who), place } };
   else if (best) hook = { key: "hook.treasure", vars: { what: lootKey(best.what), place } };
-  else hook = { key: "hook.explore", vars: { place } };
+  else hook = { key: "hook.lost", vars: { place } };
 
   // Rumours: what is so, and lies of the same kind with a wrong detail.
   const tables = tablesFor(map.params);

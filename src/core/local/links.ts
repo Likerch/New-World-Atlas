@@ -10,6 +10,7 @@ import type { Underworld } from "../planet/underworld";
 import { hashString } from "../random";
 import { ageOf, SETTINGS, settingOf, type Setting } from "../setting";
 import type { Galaxy } from "../space/galaxy";
+import { siteOfStar } from "../space/links";
 import type { LocalExit, LocalParams, LocalTheme } from "./model";
 
 export interface LocalLink {
@@ -128,30 +129,10 @@ export function localFromLandmark(city: City, landmarkId: number): LocalLink | n
   return { params: { seed: `${city.params.seed}/landmark-${landmarkId}`, kind: "dungeon", theme, danger, age: era, origin: { kind: `landmark:${landmark.kind}`, facts: {} }, ...(landmark.name ? { name: landmark.name } : {}) }, language: city.language };
 }
 
+/** A star's point of interest as a local map: the galaxy's own map of it (see siteOfStar), with where it came from. */
 export function localFromStar(galaxy: Galaxy, starId: number): LocalLink | null {
-  const star = galaxy.stars[starId];
-  const by: Partial<Record<string, Partial<LocalParams>>> = {
-    derelict: { kind: "dungeon", theme: "derelict" },
-    graveyard: { kind: "dungeon", theme: "derelict" },
-    ruins: { kind: "dungeon", theme: "temple" },
-    vault: { kind: "dungeon", theme: "temple" },
-    "time-rift": { kind: "dungeon", theme: "temple" },
-    station: { kind: "dungeon", theme: "bunker" },
-    "pirate-base": { kind: "dungeon", theme: "bunker" },
-    research: { kind: "dungeon", theme: "lab" },
-    quarantine: { kind: "dungeon", theme: "lab" },
-    prison: { kind: "dungeon", theme: "bunker" },
-    shipyard: { kind: "dungeon", theme: "factory" },
-    "trade-hub": { kind: "dungeon", theme: "mall" },
-    mining: { kind: "cave", theme: "mine" },
-    // Inside the leviathan, as one walks a cave; out on a rogue planet's frozen face.
-    leviathan: { kind: "cave", theme: "lair" },
-    "rogue-planet": { kind: "wilderness", theme: "tundra" },
-  };
-  const params = star.feature ? by[star.feature] : undefined;
-  if (!params) return null;
-  // Out among the stars even a ruin is haunted by machines and strange life, not goblins.
-  return { params: { seed: `${galaxy.params.seed}/star-${starId}/site`, ...params, danger: star.feature === "quarantine" || star.feature === "leviathan" ? 3 : 2, age: "far-future", name: star.name, origin: { kind: `star:${star.feature}`, facts: {} } }, language: star.empire ? galaxy.empires[star.empire].language : null };
+  const link = siteOfStar(galaxy, starId);
+  return link && { ...link, params: { ...link.params, origin: { kind: `star:${galaxy.stars[starId].feature}`, facts: {} } } };
 }
 
 /** A cavern's way off the map toward a neighbour, by the compass. */
