@@ -1,6 +1,6 @@
 // Region regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { SETTINGS, armsOf, cityFromBurg, generateArea, generateCity, generateCountry, generatePlanet, generateRegion, generateUnderworld, renderPlanet, renderUnderworld, sheetBox } from "../src/core/index";
+import { SETTINGS, armsOf, cityFromBurg, editPlanet, emptyEdits, generateArea, generateCity, generateCountry, generatePlanet, generateRegion, generateUnderworld, renderPlanet, renderUnderworld, sheetBox } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -158,6 +158,17 @@ test("a 200 km sheet is a close-up of that size", () => {
   const sheet = generateArea(planet, box, "Sheet", 3000);
   assert.ok(Math.abs(sheet.params.width * sheet.scale - 200) < 1, `the sheet is ${sheet.params.width * sheet.scale} km wide`);
   assert.ok(sheet.burgs.some((burg) => burg.origin === town.id), "the town stands on its sheet");
+});
+
+test("a region's edits keep the planet's roads; words alone move no road", () => {
+  const given = region.routes.filter((route) => route.given).length;
+  assert.ok(given > 0, "the planet's roads are marked");
+  const worded = editPlanet(region, { ...emptyEdits(), labels: [[100, 100, "Here be dragons", 14]] });
+  assert.equal(worded.routes, region.routes);
+  const hamlet = region.burgs.find((burg) => burg.tier === "hamlet")!;
+  const razed = editPlanet(region, { ...emptyEdits(), removed: [hamlet.id] });
+  assert.ok(razed.burgs[hamlet.id].removed);
+  assert.equal(razed.routes.filter((route) => route.given).length, given, "the planet's roads were lost");
 });
 
 console.log(`region: ${passed} regressions passed`);

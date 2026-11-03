@@ -1,10 +1,15 @@
 // The region level: one province of the planet up close, with its villages, roads and local places.
 import { useMemo, useState } from "react";
-import { generateUnderworld, underworldGhostSvg, defaultLayers, eraTheme, generateArea, generateCountry, generateRegion, settingOf, LAYERS, planetToJson, renamePlanet, renderPlanet, THEMES, type LayerId, type Planet, type ThemeId, planetLegend } from "../../core/index";
+import { editPlanet, emptyEdits, type PlanetEdits, generateUnderworld, underworldGhostSvg, defaultLayers, eraTheme, generateArea, generateCountry, generateRegion, settingOf, LAYERS, planetToJson, renamePlanet, renderPlanet, THEMES, type LayerId, type Planet, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { selectedOf } from "./planet";
 import { describePlanet, searchPlanet } from "../planetText";
 import { useLayers } from "./layers";
+import { editAt, WorldEditor, type EditTool, type Paint } from "../WorldEditor";
+
+/** A close-up's own edits: its land's peoples and faiths, its villages, words and zones. Its relief and realms are the
+ * planet's, edited there. */
+const REGION_TOOLS: EditTool[] = ["people", "faith", "move", "add", "remove", "label", "zone"];
 import type { Level, LevelContext } from "./types";
 
 /** Where a close-up lies on its planet: the planet's land in small squares and the close-up's frame over it. */
@@ -48,7 +53,17 @@ export function useRegionLevel(
   const [of, setOf] = useState<{ of: "province" | "state" | "area"; id: number; box?: [number, number, number, number]; title?: string } | null>(null);
   const mapKey = raw ? `region:${raw.params.seed}` : null;
   const names = ctx.names(mapKey);
-  const region = useMemo(() => (raw ? renamePlanet(raw, names) : null), [raw, names]);
+  const edits = ctx.patch(mapKey).edits ?? null;
+  const region = useMemo(() => (raw ? renamePlanet(editPlanet(raw, edits), names) : null), [raw, edits, names]);
+  const [tool, setTool] = useState<EditTool | null>(null);
+  const [radius, setRadius] = useState(40);
+  const [paint, setPaint] = useState<Paint>({ realm: 1, people: 1, faith: 1, province: 1, zone: "custom" });
+  const [moving, setMoving] = useState<number | null>(null);
+  const [history, setHistory] = useState<PlanetEdits[]>([]);
+  const change = (next: (current: PlanetEdits) => PlanetEdits) => {
+    setHistory((past) => [...past.slice(-40), edits ?? emptyEdits()]);
+    ctx.update(mapKey, (patch) => ({ ...patch, edits: next(patch.edits ?? emptyEdits()) }));
+  };
   const [theme, setTheme] = useState<ThemeId>("atlas");
   const { layers, restyle, toggle, setAll } = useLayers("atlas", { provinces: true });
   // A close-up is drawn in its planet's style and layers: the ones the GM has on the planet, else the ones its age
@@ -129,6 +144,7 @@ export function useRegionLevel(
           height: region.params.height,
           key: `region-${region.params.seed}-${time}`,
           onPick: (x, y) => {
+            if (tool) return editAt(region, edits, tool, x, y, { radius, paint, moving, setMoving, change, t });
             const cell = region.mesh.find(x, y);
             const marker = region.markers.slice(1).find((item) => Math.hypot(item.x - x, item.y - y) < region.mesh.spacing * 0.5);
             const burg = region.burg[cell];
@@ -162,6 +178,36 @@ export function useRegionLevel(
               ))}
             </div>
           </>
+        ) : null}
+        {region ? (
+          <WorldEditor
+            t={t}
+            nm={ctx.nm}
+            planet={region}
+            edits={edits}
+            tool={tool}
+            setTool={(next) => {
+              setTool(next);
+              setMoving(null);
+            }}
+            brush={{ radius, strength: 0 }}
+            setBrush={(next) => setRadius(next.radius)}
+            paint={paint}
+            setPaint={setPaint}
+            moving={moving}
+            started={false}
+            selection={selection}
+            change={change}
+            onImage={() => undefined}
+            canUndo={history.length > 0}
+            onUndo={() => {
+              const last = history[history.length - 1];
+              setHistory((past) => past.slice(0, -1));
+              ctx.update(mapKey, (patch) => ({ ...patch, edits: last }));
+            }}
+            onReset={() => change(() => emptyEdits())}
+            tools={REGION_TOOLS}
+          />
         ) : null}
         {region ? (
           <button type="button" className="wide" onClick={() => links.openUnderworld(region)}>

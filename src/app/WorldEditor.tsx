@@ -2,7 +2,7 @@
 // picture, land given to a realm, a people, a faith or a province, towns moved, founded and razed, words and zones on
 // the map, a close-up of a marked-out stretch), and for a realm or a town picked in the inspector its own edits: form
 // of rule, colour, seat, merging, standing with neighbours; size, walls, harbour, a realm raised round it.
-import type { Planet, PlanetEdits, Relation } from "../core/index";
+import { createRng, foundedSize, name, type Planet, type PlanetEdits, type Relation } from "../core/index";
 import type { T } from "./i18n";
 import type { Selection } from "./Inspector";
 import { NumberInput } from "./NumberInput";
@@ -49,11 +49,59 @@ interface Props {
   canUndo: boolean;
   onUndo: () => void;
   onReset: () => void;
+  /** The tools this map offers (a close-up has no relief brushes and no realm of its own to recast); all by default. */
+  tools?: EditTool[];
 }
 
-export function WorldEditor({ t, nm, planet, edits, tool, setTool, brush, setBrush, paint, setPaint, moving, started, selection, change, onImage, canUndo, onUndo, onReset }: Props) {
+/**
+ * What a click with a tool in hand does to a map's edits: land handed to a realm, a people, a faith or a province;
+ * words and zones laid down; towns moved, founded and razed. Relief strokes and boxes are the planet level's own.
+ */
+export function editAt(planet: Planet, edits: PlanetEdits | null, tool: EditTool, x: number, y: number, o: { radius: number; paint: Paint; moving: number | null; setMoving: (id: number | null) => void; change: Props["change"]; t: T }): void {
+  const { mesh } = planet;
+  const at: [number, number] = [Math.round(x), Math.round(y)];
+  const town = () => {
+    let best = 0;
+    for (const burg of planet.burgs.slice(1)) if (!burg.removed && Math.hypot(burg.x - x, burg.y - y) < mesh.spacing * 0.8 && (!best || Math.hypot(burg.x - x, burg.y - y) < Math.hypot(planet.burgs[best].x - x, planet.burgs[best].y - y))) best = burg.id;
+    return best;
+  };
+  const handOver = (field: "owners" | "cultures" | "faiths" | "provinces", id: number) => {
+    const given: Record<number, number> = {};
+    for (let cell = 0; cell < mesh.cells; cell++) if (!planet.water[cell] && Math.hypot(mesh.x[cell] - x, mesh.y[cell] - y) < o.radius) given[cell] = id;
+    o.change((current) => ({ ...current, [field]: { ...current[field], ...given } }));
+  };
+  if (tool === "paint") handOver("owners", o.paint.realm);
+  else if (tool === "people") handOver("cultures", o.paint.people);
+  else if (tool === "faith") handOver("faiths", o.paint.faith);
+  else if (tool === "province") handOver("provinces", o.paint.province);
+  else if (tool === "label") {
+    const words = prompt(o.t("editor.labelText"));
+    if (words) o.change((current) => ({ ...current, labels: [...(current.labels ?? []), [...at, words, 14]] }));
+  } else if (tool === "zone") {
+    const label = o.paint.zone === "custom" ? (prompt(o.t("editor.zoneLabel")) ?? "") : "";
+    o.change((current) => ({ ...current, zones: [...(current.zones ?? []), [...at, o.radius, o.paint.zone, label]] }));
+  } else if (tool === "move") {
+    if (o.moving === null) o.setMoving(town() || null);
+    else {
+      const id = o.moving;
+      o.change((current) => ({ ...current, moved: { ...current.moved, [id]: at } }));
+      o.setMoving(null);
+    }
+  } else if (tool === "add") {
+    const cell = mesh.find(x, y);
+    if (planet.water[cell]) return;
+    const people = planet.cultures[planet.culture[cell]] ?? planet.cultures[0];
+    const founded = name({ ...people.language }, createRng(`${planet.params.seed}/founded-${edits?.added.length ?? 0}`), "town");
+    o.change((current) => ({ ...current, added: [...current.added, [...at, founded, foundedSize(planet, cell)]] }));
+  } else if (tool === "remove") {
+    const id = town();
+    if (id && !planet.burgs[id].capital) o.change((current) => ({ ...current, removed: [...current.removed, id] }));
+  }
+}
+
+export function WorldEditor({ t, nm, planet, edits, tool, setTool, brush, setBrush, paint, setPaint, moving, started, selection, change, onImage, canUndo, onUndo, onReset, tools }: Props) {
   const towns = edits ? Object.keys(edits.moved).length + edits.added.length + edits.removed.length + Object.keys(edits.towns ?? {}).length : 0;
-  const realm = selection?.kind === "state" && selection.id ? planet.states[selection.id] : null;
+  const realm = !tools && selection?.kind === "state" && selection.id ? planet.states[selection.id] : null;
   const town = selection?.kind === "burg" ? planet.burgs[selection.id] : null;
   const select = (label: string, value: number, items: { id: number; name: string }[], set: (id: number) => void) => (
     <label>
@@ -73,11 +121,11 @@ export function WorldEditor({ t, nm, planet, edits, tool, setTool, brush, setBru
   return (
     <details className="editor" onToggle={(event) => !(event.currentTarget as HTMLDetailsElement).open && setTool(null)}>
       <summary>✏️ {t("editor.title")}</summary>
-      {GROUPS.map(([group, tools]) => (
+      {GROUPS.map(([group, all]) => [group, all.filter((id) => !tools || tools.includes(id))] as const).filter(([, shown]) => shown.length).map(([group, shown]) => (
         <div key={group}>
           <h4 className="muted">{t(`editor.group.${group}`)}</h4>
           <div className="floor-tabs">
-            {tools.map((id) => (
+            {shown.map((id) => (
               <button key={id} type="button" aria-pressed={tool === id} onClick={() => setTool(tool === id ? null : id)}>
                 {t(`editor.tool.${id}`)}
               </button>
@@ -114,10 +162,12 @@ export function WorldEditor({ t, nm, planet, edits, tool, setTool, brush, setBru
         </label>
       ) : null}
       {tool ? <p className="muted">{moving !== null ? t("editor.hint.moving", { name: nm(planet.burgs[moving].name) }) : started ? t("editor.hint.second") : t(`editor.hint.${tool}`)}</p> : null}
-      <label>
-        🖼 {t("editor.image")}
-        <input type="file" accept="image/*" onChange={(event) => event.target.files?.[0] && onImage(event.target.files[0])} />
-      </label>
+      {!tools || tools.includes("raise") ? (
+        <label>
+          🖼 {t("editor.image")}
+          <input type="file" accept="image/*" onChange={(event) => event.target.files?.[0] && onImage(event.target.files[0])} />
+        </label>
+      ) : null}
       {edits?.image ? (
         <button type="button" onClick={() => change((current) => ({ ...current, image: undefined }))}>
           ✕ {t("editor.noImage")}

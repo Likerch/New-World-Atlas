@@ -253,11 +253,16 @@ export function editPlanet(planet: Planet, edits: PlanetEdits | null | undefined
     states[a].relations[b] = relation as never;
     states[b].relations[a] = (relation === "vassal" ? "suzerain" : relation === "suzerain" ? "vassal" : relation) as never;
   }
-  const routes = buildRoutes(
-    planet,
-    burgs.map((town) => (town.removed ? { ...town, state: -1, port: false } : town)),
-    states,
-  );
+  // Only towns, borders and seats move roads: words, zones, peoples and faiths leave them as they were.
+  const relay = owners.length || moved.length || edits.added.length || edits.removed.length || edits.raised?.length || edits.merged?.length || Object.values(edits.towns ?? {}).some((set) => set.port !== undefined) || Object.values(edits.realms ?? {}).some((set) => set.capital !== undefined);
+  const routes = relay
+    ? buildRoutes(
+        planet,
+        burgs.map((town) => (town.removed ? { ...town, state: -1, port: false } : town)),
+        states,
+        planet.routes.filter((route) => route.given).map((route) => [route.kind, route.cells]),
+      )
+    : planet.routes;
   return { ...planet, state, province, provinces, culture, religion, burg, burgs, states, routes, ...(edits.labels?.length ? { gmLabels: edits.labels } : {}), ...(edits.zones?.length ? { gmZones: edits.zones } : {}) };
 }
 

@@ -94,18 +94,18 @@ function network(points: number[][], extraRatio: number): [number, number][] {
 export function buildRoutes(g: Ground, burgs: Burg[], states: State[], given: [RouteKind, number[]][] = []): Route[] {
   const routes: Route[] = [{ id: 0, kind: "road", cells: [], length: 0 }];
   const roads = new Uint8Array(g.mesh.cells);
-  const add = (kind: RouteKind, cells: number[] | null) => {
+  const add = (kind: RouteKind, cells: number[] | null, from = false) => {
     if (!cells || cells.length < 2) return;
     let length = 0;
     for (let k = 1; k < cells.length; k++) length += Math.hypot(g.mesh.x[cells[k]] - g.mesh.x[cells[k - 1]], g.mesh.y[cells[k]] - g.mesh.y[cells[k - 1]]);
-    routes.push({ id: routes.length, kind, cells, length: length * g.scale });
+    routes.push({ id: routes.length, kind, cells, length: length * g.scale, ...(from ? { given: true } : {}) });
     if (kind !== "sea" && kind !== "air") for (const cell of cells) roads[cell] = 1;
   };
   const setting = settingOf(g.params.setting);
   // Before the wheel every way is a footpath, and before boats there are no sea lanes.
   const walking = setting.transport < 1;
 
-  for (const [kind, cells] of given) add(kind, cells);
+  for (const [kind, cells] of given) add(kind, cells, true);
   // Highways between the capitals of neighbouring states on the same landmass (a close-up has its planet's).
   const capitals = states.slice(1).filter((state) => state.capital);
   for (const state of given.length ? [] : capitals) {

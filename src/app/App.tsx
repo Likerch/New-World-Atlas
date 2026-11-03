@@ -439,7 +439,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
       madeOf(map.parent, (planet) => {
         const of = map.params as { of?: string; id?: number; box?: [number, number, number, number]; title?: string };
         const cut = of.of === "state" ? generateCountry(planet, of.id ?? 0) : of.of === "area" && of.box ? generateArea(planet, of.box, of.title ?? t("region.area")) : generateRegion(planet, of.id ?? 0);
-        done(renamePlanet(cut, patch?.names ?? {}));
+        done(renamePlanet(editPlanet(cut, patch?.edits ?? null), patch?.names ?? {}));
       });
     }
   }

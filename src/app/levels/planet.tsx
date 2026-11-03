@@ -1,10 +1,10 @@
 // The planet level: world settings, the world map and its inspector.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { generateUnderworld, underworldGhostSvg, sheetBox, createRng, editPlanet, mapKeyOf, pastPlanet, planetGeoJSON, eraTheme, emptyEdits, foundedSize, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
+import { generateUnderworld, underworldGhostSvg, sheetBox, editPlanet, mapKeyOf, pastPlanet, planetGeoJSON, eraTheme, emptyEdits, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { SettingPanel } from "../SettingPanel";
 import { WorldForm, type ZoomRange } from "../WorldForm";
-import { WorldEditor, type EditTool, type Paint } from "../WorldEditor";
+import { editAt, WorldEditor, type EditTool, type Paint } from "../WorldEditor";
 import type { T } from "../i18n";
 import { describePlanet, searchPlanet } from "../planetText";
 import { growPlanet } from "../work";
@@ -217,21 +217,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   const sculpt = (x: number, y: number) => {
     if (!planet || !tool) return;
     const { mesh } = planet;
-    const town = () => {
-      let best = 0;
-      for (const burg of planet.burgs.slice(1)) if (!burg.removed && Math.hypot(burg.x - x, burg.y - y) < mesh.spacing * 0.8 && (!best || Math.hypot(burg.x - x, burg.y - y) < Math.hypot(planet.burgs[best].x - x, planet.burgs[best].y - y))) best = burg.id;
-      return best;
-    };
     const at: [number, number] = [Math.round(x), Math.round(y)];
-    const under = () => {
-      const cells: number[] = [];
-      for (let cell = 0; cell < mesh.cells; cell++) if (!planet.water[cell] && Math.hypot(mesh.x[cell] - x, mesh.y[cell] - y) < brush.radius) cells.push(cell);
-      return cells;
-    };
-    const handOver = (field: "owners" | "cultures" | "faiths" | "provinces", id: number) => {
-      const given = Object.fromEntries(under().map((cell) => [cell, id]));
-      change((current) => ({ ...current, [field]: { ...current[field], ...given } }));
-    };
     if (tool === "raise" || tool === "lower") change((current) => ({ ...current, terrain: [...current.terrain, [...at, brush.radius, tool === "raise" ? brush.strength : -brush.strength]] }));
     else if (tool === "smooth") change((current) => ({ ...current, terrain: [...current.terrain, [...at, brush.radius, 0, 1]] }));
     else if (tool === "flatten") change((current) => ({ ...current, terrain: [...current.terrain, [...at, brush.radius, Math.round(planet.height[mesh.find(x, y)]), 2]] }));
@@ -242,33 +228,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
       setStart(null);
       if (tool === "area") return openArea?.(planet, [x0, y0, ...at]);
       change((current) => ({ ...current, terrain: [...current.terrain, [x0, y0, brush.radius, tool === "ridge" ? brush.strength : -brush.strength, 3, ...at]] }));
-    } else if (tool === "paint") handOver("owners", paint.realm);
-    else if (tool === "people") handOver("cultures", paint.people);
-    else if (tool === "faith") handOver("faiths", paint.faith);
-    else if (tool === "province") handOver("provinces", paint.province);
-    else if (tool === "label") {
-      const words = prompt(t("editor.labelText"));
-      if (words) change((current) => ({ ...current, labels: [...(current.labels ?? []), [...at, words, 14]] }));
-    } else if (tool === "zone") {
-      const label = paint.zone === "custom" ? prompt(t("editor.zoneLabel")) ?? "" : "";
-      change((current) => ({ ...current, zones: [...(current.zones ?? []), [...at, brush.radius, paint.zone, label]] }));
-    } else if (tool === "move") {
-      if (moving === null) setMoving(town() || null);
-      else {
-        const id = moving;
-        change((current) => ({ ...current, moved: { ...current.moved, [id]: at } }));
-        setMoving(null);
-      }
-    } else if (tool === "add") {
-      const cell = mesh.find(x, y);
-      if (planet.water[cell]) return;
-      const people = planet.cultures[planet.culture[cell]] ?? planet.cultures[0];
-      const founded = name({ ...people.language }, createRng(`${planet.params.seed}/founded-${edits?.added.length ?? 0}`), "town");
-      change((current) => ({ ...current, added: [...current.added, [...at, founded, foundedSize(planet, cell)]] }));
-    } else {
-      const id = town();
-      if (id && !planet.burgs[id].capital) change((current) => ({ ...current, removed: [...current.removed, id] }));
-    }
+    } else editAt(planet, edits, tool, x, y, { radius: brush.radius, paint, moving, setMoving, change, t });
   };
 
   return {

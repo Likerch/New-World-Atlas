@@ -208,6 +208,8 @@ export interface Route {
   cells: number[];
   /** Length in km. */
   length: number;
+  /** A close-up's share of its planet's roads: kept when its own are relaid. */
+  given?: boolean;
 }
 
 export type MarkerKind =
