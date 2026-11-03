@@ -1,6 +1,6 @@
 // Worlds: the tree of maps, parameters handed down with the GM's overrides on top, names flowing up. Run with `npm test`.
 import assert from "node:assert/strict";
-import { mapKeyOf, rekey, planetParams, generateUniverse, renameUniverse, generateUnderworld, renameUnderworld, generateDistrict, buildingFromCity, cityFromBurg, emptyPatch, emptyWorld, generateCity, generatePlanet, levelsOf, nameUp, overridesOf, pathTo, readWorld, resolve, rootOf, settingAt, SETTINGS, visit, type WorldDoc } from "../src/core/index";
+import { mergeWorlds, mapKeyOf, rekey, planetParams, generateUniverse, renameUniverse, generateUnderworld, renameUnderworld, generateDistrict, buildingFromCity, cityFromBurg, emptyPatch, emptyWorld, generateCity, generatePlanet, levelsOf, nameUp, overridesOf, pathTo, readWorld, resolve, rootOf, settingAt, SETTINGS, visit, type WorldDoc } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -140,6 +140,17 @@ test("a building a quarter close-up only enlarges opens as the building of the w
   assert.equal(made.buildings[origin].ward, close.buildings[copy].ward);
   assert.equal(buildingFromCity(made, origin).seed, `${made.params.seed}/building-${origin}`);
   assert.ok(close.buildings.some((b) => b.origin === undefined), "the quarter's own lots are new");
+});
+
+test("two copies of one world merge: names and notes of both, pins of both, fog revealed by either", () => {
+  const base = { ...emptyWorld({ id: "m", name: "M", top: "planet", now: 1 }), patches: { "planet:a": { ...emptyPatch(), names: { "burg:1": "Old" }, notes: { "burg:2": "mine" }, pins: [{ id: "p1", x: 1, y: 1, label: "", note: "", color: "#d64545", hidden: false }], fog: { enabled: true, revealed: [[1, 1, 5]] as [number, number, number][] } } } };
+  const incoming = { ...emptyWorld({ id: "m", name: "M", top: "planet", now: 2 }), patches: { "planet:a": { ...emptyPatch(), names: { "burg:1": "New", "burg:3": "Third" }, notes: {}, pins: [{ id: "p2", x: 2, y: 2, label: "", note: "", color: "#d64545", hidden: false }], fog: { enabled: false, revealed: [[9, 9, 5]] as [number, number, number][] } } } };
+  const merged = mergeWorlds(base, incoming).patches["planet:a"];
+  assert.deepEqual(merged.names, { "burg:1": "New", "burg:3": "Third" });
+  assert.equal(merged.notes["burg:2"], "mine");
+  assert.deepEqual(merged.pins.map((pin) => pin.id), ["p1", "p2"]);
+  assert.equal(merged.fog.enabled, true);
+  assert.equal(merged.fog.revealed.length, 2);
 });
 
 console.log(`world: ${passed} regressions passed`);

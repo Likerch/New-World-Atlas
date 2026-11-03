@@ -251,3 +251,24 @@ export function nameUp(world: WorldDoc, key: string, before: MapPatch | undefine
   else delete names[map.step.entity];
   return { ...world, patches: { ...world.patches, [map.parent]: { ...parent, names } } };
 }
+
+/** Two copies of one world brought together (the GM's own and one from a file): maps of both; where both changed a
+ * map's patch, the names and notes of both (the file's word wins a clash), pins of both and fog revealed by either. */
+export function mergeWorlds(base: WorldDoc, incoming: WorldDoc): WorldDoc {
+  const patches = { ...base.patches };
+  for (const [key, patch] of Object.entries(incoming.patches)) {
+    const old = patches[key];
+    patches[key] = !old
+      ? patch
+      : {
+          ...old,
+          ...patch,
+          names: { ...old.names, ...patch.names },
+          notes: { ...old.notes, ...patch.notes },
+          pins: [...old.pins, ...patch.pins.filter((pin) => !old.pins.some((other) => other.id === pin.id))],
+          fog: { enabled: old.fog.enabled || patch.fog.enabled, revealed: [...old.fog.revealed, ...patch.fog.revealed] },
+          ...(old.changes || patch.changes ? { changes: { ...old.changes, ...patch.changes } } : {}),
+        };
+  }
+  return { ...base, maps: { ...base.maps, ...incoming.maps }, patches, updated: Math.max(base.updated, incoming.updated) };
+}

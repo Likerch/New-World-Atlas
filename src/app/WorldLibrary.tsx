@@ -1,10 +1,10 @@
 // The game master's worlds: the one open now (its name, setting and file), all the others, a new world from any top map,
 // and worlds read from files.
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ERA_IDS, randomSeed, settingOf, TOP_LEVELS, type Setting, type TopLevel, type WorldDoc } from "../core/index";
 import type { T } from "./i18n";
 import { SettingPanel } from "./SettingPanel";
-import type { NewWorld, Worlds } from "./worlds";
+import type { NewWorld, Snapshot, Worlds } from "./worlds";
 import { useEscape } from "./keys";
 
 export const LEVEL_ICON: Record<string, string> = { universe: "🌠", galaxy: "🌌", system: "☀️", planet: "🌍", region: "🗺", underworld: "🕳", city: "🏰", building: "🏠", local: "🗺️" };
@@ -26,6 +26,10 @@ export function WorldLibrary({ t, worlds, onClose, onWorldSetting }: { t: T; wor
   const { world } = worlds;
   const [draft, setDraft] = useState<NewWorld>(() => ({ name: "", top: "planet", setting: {}, script: "latin", start: { seed: randomSeed() } }));
   const [error, setError] = useState("");
+  const [shots, setShots] = useState<Snapshot[]>([]);
+  useEffect(() => {
+    worlds.snapshots(world.id).then(setShots);
+  }, [world.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const picker = useRef<HTMLInputElement>(null);
   const when = (time: number) => new Date(time).toLocaleString(t.locale);
   const era = (setting: Partial<Setting>) => t(`era.${settingOf(setting).era}`);
@@ -58,7 +62,55 @@ export function WorldLibrary({ t, worlds, onClose, onWorldSetting }: { t: T; wor
               <button type="button" onClick={() => worlds.duplicate(world.id, t("worlds.copySuffix"))}>
                 ⧉ {t("worlds.duplicate")}
               </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  const label = prompt(t("worlds.snapshotLabel"), new Date().toLocaleString(t.locale));
+                  if (label === null) return;
+                  await worlds.snapshot(label);
+                  setShots(await worlds.snapshots(world.id));
+                }}
+              >
+                📸 {t("worlds.snapshot")}
+              </button>
             </div>
+            <label className="check">
+              <input type="checkbox" checked={!!worlds.list.find((item) => item.id === world.id)?.template} onChange={(event) => worlds.setTemplate(world.id, event.target.checked)} />
+              {t("worlds.isTemplate")}
+            </label>
+            {shots.length ? (
+              <>
+                <h4 className="muted">{t("worlds.snapshots")}</h4>
+                <ul className="list world-list">
+                  {shots.map((shot) => (
+                    <li key={shot.at}>
+                      <span className="grow">
+                        {shot.label}
+                        <small className="line">
+                          {when(shot.at)} · {t("worlds.maps", { n: Object.keys(shot.world.maps).length })}
+                        </small>
+                      </span>
+                      <button
+                        type="button"
+                        className="ghost"
+                        title={t("worlds.goBack")}
+                        onClick={() => {
+                          if (confirm(t("worlds.confirmGoBack", { label: shot.label }))) {
+                            worlds.goBack(shot);
+                            onClose();
+                          }
+                        }}
+                      >
+                        ↺
+                      </button>
+                      <button type="button" className="ghost" title={t("worlds.branch")} onClick={() => worlds.branch(shot, `${world.name} — ${shot.label}`).then(onClose)}>
+                        ⑂
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            ) : null}
           </section>
           <section>
             <h3>{t("worlds.all")}</h3>
@@ -73,7 +125,12 @@ export function WorldLibrary({ t, worlds, onClose, onWorldSetting }: { t: T; wor
                       {t(`top.${item.top}`)} · {ERA_IDS.includes(item.era as never) ? t(`era.${item.era}`) : item.era} · {t("worlds.maps", { n: item.maps })} · {when(item.updated)}
                     </small>
                   </span>
-                  <button type="button" className="ghost" title={t("worlds.save")} onClick={() => download(`${item.name || "world"}.atlas.json`, worlds.file(item.id))}>
+                  {item.template ? (
+                    <button type="button" className="ghost" title={t("worlds.fromTemplate")} onClick={() => worlds.fromTemplate(item.id, t("worlds.fromTemplateName", { name: item.name || t("worlds.unnamed") })).then(onClose)}>
+                      ＋
+                    </button>
+                  ) : null}
+                  <button type="button" className="ghost" title={t("worlds.save")} onClick={async () => download(`${item.name || "world"}.atlas.json`, await worlds.file(item.id))}>
                     💾
                   </button>
                   <button
@@ -81,7 +138,7 @@ export function WorldLibrary({ t, worlds, onClose, onWorldSetting }: { t: T; wor
                     className="ghost"
                     title={t("worlds.delete")}
                     onClick={() => {
-                      if (confirm(t("worlds.confirmDelete", { name: item.name || t("worlds.unnamed") }))) worlds.remove(item.id);
+                      worlds.remove(item.id);
                     }}
                   >
                     🗑
@@ -102,7 +159,9 @@ export function WorldLibrary({ t, worlds, onClose, onWorldSetting }: { t: T; wor
                 event.target.value = "";
                 if (!file) return;
                 try {
-                  worlds.load(JSON.parse(await file.text()));
+                  const data = JSON.parse(await file.text());
+                  // The same world from another table: merge its notes into this one, or keep it as a copy.
+                  await worlds.load(data, worlds.has(data) && confirm(t("worlds.mergeAsk")));
                   setError("");
                   onClose();
                 } catch (problem) {
@@ -111,6 +170,43 @@ export function WorldLibrary({ t, worlds, onClose, onWorldSetting }: { t: T; wor
               }}
             />
             {error ? <p className="error">{error}</p> : null}
+            {worlds.trash.length ? (
+              <>
+                <h3>{t("worlds.trash")}</h3>
+                <ul className="list world-list">
+                  {worlds.trash.map((item) => (
+                    <li key={item.line.id}>
+                      <span className="grow">
+                        {LEVEL_ICON[item.line.top]} {item.line.name || t("worlds.unnamed")}
+                        <small className="line">{when(item.at)}</small>
+                      </span>
+                      <button type="button" className="ghost" title={t("worlds.restore")} onClick={() => worlds.restore(item.line.id)}>
+                        ↺
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost"
+                        title={t("worlds.purge")}
+                        onClick={() => {
+                          if (confirm(t("worlds.confirmPurge", { name: item.line.name || t("worlds.unnamed") }))) worlds.purge([item.line.id]);
+                        }}
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <button
+                  type="button"
+                  className="wide"
+                  onClick={() => {
+                    if (confirm(t("worlds.confirmEmpty", { count: worlds.trash.length }))) worlds.purge(worlds.trash.map((item) => item.line.id));
+                  }}
+                >
+                  🗑 {t("worlds.emptyTrash")}
+                </button>
+              </>
+            ) : null}
           </section>
           <section>
             <h3>{t("worlds.new")}</h3>

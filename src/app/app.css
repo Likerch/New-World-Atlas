@@ -246,6 +246,15 @@ input {
 .busy {
   top: 12px;
 }
+.loading {
+  display: grid;
+  place-items: center;
+  height: 100vh;
+  color: var(--muted);
+}
+.save-state {
+  font-size: 12px;
+}
 /* A long task: its stage, a bar and a way to stop it. */
 .busy.task {
   display: flex;

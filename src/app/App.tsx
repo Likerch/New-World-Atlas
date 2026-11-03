@@ -133,6 +133,7 @@ export function App() {
   useListKeys();
   const t = useMemo(() => translator(locale), [locale]);
   const worlds = useWorlds(t("worlds.firstName"));
+  if (!worlds.ready) return <div className="loading">{t("worlds.loading")}</div>;
   // A world opened anew starts with fresh levels.
   return <WorldView key={worlds.world.id} t={t} locale={locale} setLocale={setLocale} worlds={worlds} />;
 }
@@ -394,7 +395,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
         }
         if (top && (item.id === "city" || item.id === "building") && ageOf(settingOf(current.setting)) !== params.era) next = { ...next, setting: SETTINGS[params.era as EraId] };
         return next;
-      });
+      }, true);
     }
   }, [signature]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -421,8 +422,22 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   useEffect(() => {
     history.replaceState(null, "", `?view=${view}`);
     const key = levelKey(view);
-    if (key && world.maps[key] && world.last.key !== key) worlds.update((current) => ({ ...current, last: { ...current.last, key } }));
+    if (key && world.maps[key] && world.last.key !== key) worlds.update((current) => ({ ...current, last: { ...current.last, key } }), true);
   }, [view]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const typing = (event.target as Element | null)?.closest?.("input, textarea, select, [contenteditable]");
+      if (typing || !(event.ctrlKey || event.metaKey)) return;
+      const key = event.key.toLowerCase();
+      if (key === "z" && !event.shiftKey) worlds.undo();
+      else if (key === "y" || (key === "z" && event.shiftKey)) worlds.redo();
+      else return;
+      event.preventDefault();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  });
 
   const showLevel = (id: LevelId) => {
     // A tab of a level below the top shows the last map of that level opened in this world.
@@ -529,7 +544,19 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
           </button>
         )}
         <span className="grow" />
-        {worlds.saveFailed ? <span className="warning" title={t("worlds.saveFailedHint")}>⚠ {t("worlds.saveFailed")}</span> : null}
+        <button type="button" className="ghost" onClick={worlds.undo} disabled={!worlds.canUndo} title={t("action.undo")} aria-label={t("action.undo")}>
+          ↶
+        </button>
+        <button type="button" className="ghost" onClick={worlds.redo} disabled={!worlds.canRedo} title={t("action.redo")} aria-label={t("action.redo")}>
+          ↷
+        </button>
+        {worlds.saving === "failed" ? (
+          <span className="warning" title={t("worlds.saveFailedHint")}>
+            ⚠ {t("worlds.saveFailed")}
+          </span>
+        ) : (
+          <span className="muted save-state">{t(worlds.saving === "saving" ? "worlds.saving" : "worlds.saved")}</span>
+        )}
         <select value={script} aria-label={t("field.script")} onChange={(event) => worlds.update((current) => ({ ...current, script: event.target.value as "latin" | "cyrillic", updated: Date.now() }))}>
           <option value="latin">{t("script.latin")}</option>
           <option value="cyrillic">{t("script.cyrillic")}</option>
