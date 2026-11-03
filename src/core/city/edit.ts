@@ -55,7 +55,8 @@ export function editCity(city: City, edits: CityEdits | null | undefined): City 
   let walls = city.walls;
 
   // Quarters rebuilt: the town's first stages again, the edited quarters' kinds and wealth changed, their houses built anew.
-  if (wardEdits.length && params.settlement !== "village" && params.settlement !== "hamlet") {
+  // A village, and a quarter up close (its blocks are numbered from 10 000), are not grown that way: they keep theirs.
+  if (wardEdits.length && params.settlement !== "village" && params.settlement !== "hamlet" && !city.wards.some((ward) => ward.id >= 10_000)) {
     const { layout, net } = cityStages(params, { ...city.language });
     if (layout.boulevards?.length) for (const line of layout.oldLines ?? []) for (let k = 1; k < line.length; k++) net.major.add(edgeKey(line[k - 1], line[k]));
     const kinds = [...layout.kinds];

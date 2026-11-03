@@ -211,9 +211,11 @@ interface InspectorProps {
   setPending: (pending: CityPending) => void;
   wardKinds: CustomWard[];
   placeKinds: CustomPlace[];
+  /** A quarter up close: its blocks are not the city's quarters to rebuild, nor its wall to cut gates in. */
+  closeUp?: boolean;
 }
 
-export function CityInspector({ city, society, shops, t, nm, players, selection, onSelect, onOpenBuilding, onOpenLocal, onOpenDistrict, edits, setEdits, pending, setPending, wardKinds, placeKinds }: InspectorProps) {
+export function CityInspector({ city, society, shops, t, nm, players, selection, onSelect, onOpenBuilding, onOpenLocal, onOpenDistrict, edits, setEdits, pending, setPending, wardKinds, placeKinds, closeUp }: InspectorProps) {
   const [tab, setTab] = useState<"wards" | "landmarks" | "streets" | "factions" | "directory">("wards");
   const [query, setQuery] = useState("");
   const [copied, setCopied] = useState(false);
@@ -352,7 +354,7 @@ export function CityInspector({ city, society, shops, t, nm, players, selection,
               ))}
             </ul>
           ) : null}
-          {!players ? (
+          {!players && !closeUp ? (
             <details className="editor">
               <summary>✎ {t("edit.ward")}</summary>
               <label>
@@ -737,7 +739,7 @@ export function CityInspector({ city, society, shops, t, nm, players, selection,
           📋 {copied ? t("action.copied") : t("action.copyGuide")}
         </button>
       ) : null}
-      {!players && wall && city.params.settlement !== "village" && city.params.settlement !== "hamlet" ? (
+      {!players && !closeUp && wall && city.params.settlement !== "village" && city.params.settlement !== "hamlet" ? (
         <details className="editor">
           <summary>
             {t("panel.gates")} ({wall.gates.length})

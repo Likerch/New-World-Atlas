@@ -65,7 +65,21 @@ export function useCityLevel(
   const setEdits = (change: (edits: CityEdits) => CityEdits) => ctx.update(mapKey, (p) => ({ ...p, changes: { ...p.changes, city: change((p.changes?.city ?? {}) as CityEdits) } }));
   const edited = useMemo(() => (raw ? editCity(raw, edits) : null), [raw, edits]);
   const city = useMemo(() => (edited ? renameCity(edited, names) : null), [edited, names]);
-  const society = useMemo(() => (city ? citySociety(city) : null), [city]);
+  const [parents, setParents] = useState<City[]>([]);
+  // A quarter up close belongs to its whole city: the city's factions, council and the owners of its places; only the
+  // close-up's own blocks get profiles of their own.
+  const whole = parents.length ? parents[0] : null;
+  const wholeKey = whole ? `city:${whole.params.seed}` : null;
+  const wholeEdits = wholeKey ? editsOf(wholeKey) : null;
+  const wholeNames = ctx.names(wholeKey);
+  const top = useMemo(() => (whole ? renameCity(editCity(whole, wholeEdits), wholeNames) : null), [whole, wholeEdits, wholeNames]);
+  const society = useMemo(() => {
+    if (!city) return null;
+    const own = citySociety(city);
+    if (!top) return own;
+    const of = citySociety(top);
+    return { ...of, wards: [...of.wards, ...own.wards.filter((ward) => !of.wards.some((other) => other.ward === ward.ward))] };
+  }, [city, top]);
   const shops = useCallback(() => (city ? cityShops(city) : []), [city]);
   const [theme, setTheme] = useState<CityThemeId>("ink");
   const [layers, setLayers] = useState<Record<CityLayerId, boolean>>(allOn(CITY_LAYERS));
@@ -73,7 +87,6 @@ export function useCityLevel(
   const [selection, setSelection] = useState<CitySelection>(null);
   const [waiting, setWaiting] = useState<CityPending>(null);
   const [time, setTime] = useState(0);
-  const [parents, setParents] = useState<City[]>([]);
   const [tier, setTier] = useState<Tier>("street");
 
   const build = (next: CityParams, tongue: Language | null) => {
@@ -96,7 +109,15 @@ export function useCityLevel(
   const set = <K extends keyof CityParams>(key: K, value: CityParams[K]) => setInput((current) => ({ ...current, [key]: value }));
   const tiers = useMemo(() => (city && tier !== "street" ? cityTiers(city) : null), [city, tier]);
   const legend = useMemo(() => (city ? (tiers && tier !== "street" ? tierLegend(tiers, tier) : cityLegend(city, { theme, layers })) : undefined), [city, tiers, tier, theme, layers]);
-  const tints = useMemo(() => (city && influence ? influenceTints(city) : undefined), [city, influence]);
+  // Influence up close: the whole city's colours, the close-up's blocks in their quarter's.
+  const tints = useMemo(() => {
+    if (!city || !influence) return undefined;
+    if (!top) return influenceTints(city);
+    const outer = influenceTints(top);
+    const focus = Number(city.params.seed.slice(city.params.seed.lastIndexOf("/ward-") + 6));
+    const mine = outer.find((tint) => tint.ward === focus);
+    return [...outer, ...(mine ? city.wards.filter((ward) => !top.wards.some((other) => other.id === ward.id)).map((ward) => ({ ...mine, ward: ward.id })) : [])];
+  }, [city, influence, top]);
   const mark = { landmark: selection?.kind === "landmark" ? (selection.id as number) : null, building: selection?.kind === "building" ? (selection.id as number) : null };
   const svg = useMemo(
     () => (city ? (tiers ? renderTier(city, tiers, tier, { theme, layers, script: ctx.script }) : renderCity(city, { theme, layers, script: ctx.script, highlight: selection?.kind === "ward" ? (selection.id as number) : null, mark, tints, players: ctx.players })) : ""),
@@ -282,6 +303,7 @@ export function useCityLevel(
           selection={selection}
           edits={edits ?? {}}
           setEdits={setEdits}
+          closeUp={parents.length > 0}
           pending={waiting}
           setPending={setWaiting}
           wardKinds={wardKinds}
