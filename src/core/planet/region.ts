@@ -118,12 +118,15 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
   }
   const ground: Ground = { params, mesh, height, water, feature, features, coast, temperature, precipitation: rain, flux: hydro.flux, river: hydro.river, rivers: hydro.rivers, biome, scale };
 
+  // Each people's tongue is copied for this close-up: names come out the same however often or after whatever else the
+  // region is opened, and a village never repeats another's name.
+  const cultures = planet.cultures.map((item) => ({ ...item, language: { ...item.language } }));
   // Rivers keep the planet's names where they run in the same bed.
   const names = rng.fork("names");
   for (const river of hydro.rivers.slice(1)) {
     const last = river.cells[river.cells.length - 1];
     const parentRiver = planet.river[nearest[last]] || planet.river[nearest[river.cells[Math.floor(river.cells.length / 2)]]];
-    river.name = parentRiver ? planet.rivers[parentRiver].name : name(planet.cultures[culture[last]]?.language ?? planet.cultures[0].language, names, "river");
+    river.name = parentRiver ? planet.rivers[parentRiver].name : name(cultures[culture[last]]?.language ?? cultures[0].language, names, "river");
   }
   for (const item of features.slice(1)) {
     const any = Array.from({ length: n }, (_, cell) => cell).find((cell) => feature[cell] === item.id);
@@ -164,12 +167,12 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
   for (const cell of candidates) {
     if (burgs.length > villages + 20) break;
     if (burgs.some((b) => b.cell >= 0 && Math.hypot(b.x - mesh.x[cell], b.y - mesh.y[cell]) < spacing)) continue;
-    const people = planet.cultures[culture[cell]] ?? planet.cultures[0];
+    const people = cultures[culture[cell]] ?? cultures[0];
     const id = burgs.length;
     const port = coast[cell] === 1 && villagers.chance(0.4);
     burgs.push({
       id,
-      name: name({ ...people.language }, villagers, villagers.chance(0.15) ? "fort" : "town"),
+      name: name(people.language, villagers, villagers.chance(0.15) ? "fort" : "town"),
       cell,
       x: mesh.x[cell],
       y: mesh.y[cell],
@@ -195,13 +198,16 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
   const rural = isClassic(setting) ? 1 : peopleOf(setting).rural;
 
   // Roads: planet's road builder over a copy of the states whose "capital" is their biggest town here.
-  const states = planet.states.map((s) => ({ ...s, pole: toRegion(s.pole[0], s.pole[1]) as [number, number], capital: burgs.find((b) => b.capital && b.state === s.id)?.id ?? 0 }));
+  // The realms as they stand in this frame: how much of each is here decides how many airports and air routes it gets.
+  const here = new Map<number, number>();
+  for (let cell = 0; cell < n; cell++) if (!water[cell] && inside(nearest[cell])) here.set(state[cell], (here.get(state[cell]) ?? 0) + 1);
+  const states = planet.states.map((s) => ({ ...s, cells: s.id ? here.get(s.id) ?? 0 : s.cells, pole: toRegion(s.pole[0], s.pole[1]) as [number, number], capital: burgs.find((b) => b.capital && b.state === s.id)?.id ?? 0 }));
   const roadStates = states.map((s) => ({ ...s, capital: s.capital || (burgs.filter((b) => b.state === s.id && b.id).sort((a, b) => b.population - a.population)[0]?.id ?? 0) }));
   const routes = buildRoutes(ground, burgs, roadStates);
-  const markers = placeMarkers(ground, culture, planet.cultures, state, states, burgs, burg, routes, rng.fork("markers"));
+  const markers = placeMarkers(ground, culture, cultures, state, states, burgs, burg, routes, rng.fork("markers"));
   const population = new Float32Array(n);
   // Country folk per cell, scaled to the cell's real size.
   for (let cell = 0; cell < n; cell++) if (!water[cell]) population[cell] = (suitability(ground, cell) * 0.3 * mesh.area[cell] * k * k * rural) / (parent.spacing * parent.spacing);
-  const provinces = planet.provinces.map((p) => ({ ...p, pole: toRegion(p.pole[0], p.pole[1]) as [number, number], burg: burgs.find((b) => b.capital === false && b.name === planet.burgs[p.burg]?.name)?.id ?? 0 }));
+  const provinces = planet.provinces.map((p) => ({ ...p, pole: toRegion(p.pole[0], p.pole[1]) as [number, number], burg: burgs.find((b) => b.origin === p.burg)?.id ?? 0 }));
   return { ...ground, name: title, population, culture, cultures: planet.cultures, religion, religions: planet.religions, burg, burgs, state, states, province: provinceOf, provinces, routes, markers };
 }

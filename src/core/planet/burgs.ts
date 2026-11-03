@@ -2,10 +2,10 @@
 // land's wealth, ports on sheltered coasts, walls, citadels, temples and markets by size and rank.
 import { name } from "../language";
 import type { Rng } from "../random";
-import { spacedPicks, suitability } from "./cultures";
+import { nearestLand, spacedPicks, suitability } from "./cultures";
 import type { Burg, Culture, Ground } from "./model";
 
-export function placeBurgs(g: Ground, culture: Uint16Array, cultures: Culture[], capitalCount: number, townCount: number, rng: Rng): { burg: Int32Array; burgs: Burg[] } {
+export function placeBurgs(g: Ground, culture: Uint16Array, cultures: Culture[], capitalCount: number, townCount: number, rng: Rng, anchors?: [number, number, boolean][]): { burg: Int32Array; burgs: Burg[] } {
   const n = g.mesh.cells;
   const scores = new Float32Array(n);
   let landCells = 0;
@@ -19,9 +19,23 @@ export function placeBurgs(g: Ground, culture: Uint16Array, cultures: Culture[],
     scores[cell] = score;
   }
   const cellArea = g.mesh.spacing * g.mesh.spacing;
-  const capitals = spacedPicks(g, scores, capitalCount, Math.sqrt((landCells * cellArea) / Math.max(1, capitalCount)) * 0.75, rng.fork("capitals"));
-  const towns = townCount > 0 ? townCount : Math.round(landCells / 18);
-  const others = spacedPicks(g, scores, towns, Math.sqrt((landCells * cellArea) / Math.max(1, towns)) * 0.55, rng.fork("towns"), capitals);
+  let capitals: number[];
+  let others: number[];
+  if (anchors) {
+    // A reshaped world keeps every town, in order, on the dry land nearest where it stood.
+    const taken = new Set<number>();
+    const at = anchors.map(([x, y, capital]) => {
+      const cell = nearestLand(g, x, y, taken);
+      taken.add(cell);
+      return [cell, capital] as const;
+    });
+    capitals = at.filter(([, capital]) => capital).map(([cell]) => cell);
+    others = at.filter(([, capital]) => !capital).map(([cell]) => cell);
+  } else {
+    capitals = spacedPicks(g, scores, capitalCount, Math.sqrt((landCells * cellArea) / Math.max(1, capitalCount)) * 0.75, rng.fork("capitals"));
+    const towns = townCount > 0 ? townCount : Math.round(landCells / 18);
+    others = spacedPicks(g, scores, towns, Math.sqrt((landCells * cellArea) / Math.max(1, towns)) * 0.55, rng.fork("towns"), capitals);
+  }
 
   const burg = new Int32Array(n);
   const burgs: Burg[] = [

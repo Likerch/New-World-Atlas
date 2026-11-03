@@ -8,6 +8,7 @@ import { PriorityQueue } from "../queue";
 import { ageOf, settingOf } from "../setting";
 import { BIOMES } from "./biomes";
 import type { Burg, Ground, Route, RouteKind, State } from "./model";
+import { realmsHere } from "./markers";
 
 function findPath(g: Ground, from: number, to: number, sea: boolean, roads: Uint8Array): number[] | null {
   const n = g.mesh.cells;
@@ -130,7 +131,8 @@ export function buildRoutes(g: Ground, burgs: Burg[], states: State[]): Route[] 
   const byWater = new Map<number, Burg[]>();
   for (const burg of burgs.slice(1)) {
     if (!burg.port) continue;
-    const water = g.mesh.neighbors[burg.cell].find((next) => g.water[next]);
+    // The port's sea is the largest water beside it, not a pond that happens to come first.
+    const water = g.mesh.neighbors[burg.cell].filter((next) => g.water[next]).sort((a, b) => g.features[g.feature[b]].cells - g.features[g.feature[a]].cells)[0];
     if (water === undefined) continue;
     byWater.set(g.feature[water], [...(byWater.get(g.feature[water]) ?? []), burg]);
   }
@@ -145,7 +147,7 @@ export function buildRoutes(g: Ground, burgs: Burg[], states: State[]): Route[] 
       .slice(1)
       .filter((burg) => !burg.removed)
       .sort((a, b) => Number(b.capital) - Number(a.capital) || b.population - a.population)
-      .slice(0, Math.min(24, states.length + 6));
+      .slice(0, Math.min(24, realmsHere(states) + 6));
     for (const [a, b] of network(hubs.map((hub) => [hub.x, hub.y]), 0.25)) add("air", [hubs[a].cell, hubs[b].cell]);
   }
   return routes;

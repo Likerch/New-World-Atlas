@@ -1,6 +1,6 @@
 // Planet-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { createLanguage, createRng, armsOf, emblemOf, MIXES, SETTINGS, settingFromText, settingToText, coatOfArms, editPlanet, emptyEdits, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
+import { createLanguage, createRng, armsOf, emblemOf, MIXES, SETTINGS, settingFromText, settingToText, coatOfArms, editPlanet, emptyEdits, foundedSize, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -193,6 +193,57 @@ test("the world editor reshapes the ground, repaints realms and moves towns with
   assert.equal(edited.states.slice(1).reduce((sum, item) => sum + item.cells, 0), planet.states.slice(1).reduce((sum, item) => sum + item.cells, 0), "realms recounted");
   assert.ok(!renderPlanet(edited).includes(`>${other.name}<`), "a razed town is not drawn");
   assert.equal(editPlanet(planet, emptyEdits()), planet, "no edits, the same world");
+});
+
+test("a relief stroke keeps every town, people and realm on its number", () => {
+  const sea = Array.from({ length: planet.mesh.cells }, (_, cell) => cell).find((cell) => planet.coast[cell] === -4)!;
+  const raised = generatePlanet(planet.params, [[planet.mesh.x[sea], planet.mesh.y[sea], 90, 40]]);
+  assert.equal(raised.burgs.length, planet.burgs.length, "no town was lost or added");
+  assert.equal(raised.states.length, planet.states.length, "no realm was lost or added");
+  assert.equal(raised.cultures.length, planet.cultures.length);
+  let kept = 0;
+  for (const town of planet.burgs.slice(1)) {
+    const now = raised.burgs[town.id];
+    assert.equal(now.capital, town.capital, `${town.name} is still ${town.capital ? "" : "not "}a capital`);
+    assert.ok(Math.hypot(now.x - town.x, now.y - town.y) < planet.mesh.spacing * 6, `${town.name} stays where it stood`);
+    if (now.name === town.name) kept++;
+  }
+  assert.ok(kept / (planet.burgs.length - 1) > 0.9, `${kept} of ${planet.burgs.length - 1} towns kept their names`);
+});
+
+test("repainted land joins a province of its new realm; capitals stay home; new neighbours meet", () => {
+  const [a, d] = (() => {
+    for (const realm of planet.states.slice(1)) {
+      const stranger = planet.states.slice(1).find((other) => other.id !== realm.id && other.cells > 20 && !realm.neighbors.includes(other.id));
+      if (stranger) return [realm, stranger];
+    }
+    throw new Error("no two realms apart");
+  })();
+  const [abroad, ...theirs] = Array.from({ length: planet.mesh.cells }, (_, cell) => cell).filter((cell) => planet.state[cell] === d.id && !planet.burg[cell]).slice(0, 6);
+  const capital = planet.burgs[a.capital];
+  const edited = editPlanet(planet, { ...emptyEdits(), owners: Object.fromEntries(theirs.map((cell) => [cell, a.id])), moved: { [capital.id]: [planet.mesh.x[abroad], planet.mesh.y[abroad]] } });
+  for (const cell of theirs) {
+    assert.equal(edited.state[cell], a.id);
+    assert.equal(edited.provinces[edited.province[cell]]?.state, a.id, "the land is in one of its new realm's provinces");
+  }
+  assert.equal(edited.burgs[capital.id].cell, capital.cell, "a capital does not move into another realm");
+  assert.ok(edited.states[a.id].neighbors.includes(d.id) && edited.states[d.id].neighbors.includes(a.id), "the realms now meet");
+  assert.ok(edited.states[a.id].relations[d.id] && edited.states[d.id].relations[a.id], "and have a stance on each other");
+  assert.doesNotMatch(renderPlanet(edited, { theme: "political", layers: { provinces: true } }), /NaN|undefined|Infinity/u);
+});
+
+test("a town moved to the sea becomes a port; a founded town is the size of its realm's towns", () => {
+  const town = planet.burgs.find((b) => b.id && !b.capital && !b.port)!;
+  const shore = Array.from({ length: planet.mesh.cells }, (_, cell) => cell).find((cell) => planet.coast[cell] === 1 && !planet.burg[cell] && planet.state[cell] === town.state && planet.mesh.neighbors[cell].some((next) => planet.features[planet.feature[next]]?.kind === "ocean"))!;
+  const moved = editPlanet(planet, { ...emptyEdits(), moved: { [town.id]: [planet.mesh.x[shore], planet.mesh.y[shore]] } });
+  assert.ok(moved.burgs[town.id].port, "it became a port");
+
+  const stone = generatePlanet({ seed: "regression", template: "continents", cells: 3000, setting: SETTINGS.stone });
+  const spot = Array.from({ length: stone.mesh.cells }, (_, cell) => cell).find((cell) => !stone.water[cell] && !stone.burg[cell] && stone.state[cell])!;
+  const size = foundedSize(stone, spot);
+  assert.ok(size < 1, `a stone-age camp is small (${size})`);
+  const camp = editPlanet(stone, { ...emptyEdits(), added: [[stone.mesh.x[spot], stone.mesh.y[spot], "Camp", size]] }).burgs.at(-1)!;
+  assert.ok(!camp.walls && !camp.citadel && !camp.market, "and has no walls, citadel or market");
 });
 
 test("the world's age reshapes towns, realms, roads, places, armies and banners, and the medieval age is the classic world", () => {

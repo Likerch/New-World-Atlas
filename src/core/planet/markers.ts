@@ -140,7 +140,7 @@ export function placeMarkers(g: Ground, culture: Uint16Array, cultures: Culture[
   if (tech >= 0.5 && tech < 3.5) pickFrom(land.filter((cell) => [1, 2].includes(g.biome[cell]) || (g.height[cell] > 28 && g.height[cell] < 50)), quota(0.0015), "tomb", own, (cell) => ({ ruler: person(cell), age: own.int(100, 3000) }));
   if (age === "ancient" || magic >= 2) pickFrom(land.filter((cell) => g.height[cell] > 45), quota(0.0006), "oracle", own, (cell) => ({ god: person(cell) }));
   // The great places by the cities come first, before factories and plants crowd their outskirts.
-  if (transport >= 6.5 && !fallen && towns.length) outskirts("airport", towns.slice(0, Math.min(24, states.length + 4)), (town) => ({ town: town.name }));
+  if (transport >= 6.5 && !fallen && towns.length) outskirts("airport", towns.slice(0, Math.min(24, realmsHere(states) + 4)), (town) => ({ town: town.name }));
   if (tech >= 7.5 && !fallen) {
     outskirts("arcology", towns.slice(0, 5), (town) => ({ people: own.int(50, 900), corp: name(tongue(town.cell), own, "people") }));
     if (tech < 9) pickFrom(land.filter((cell) => g.coast[cell] > 2), quota(0.0005), "data-haven", own, (cell) => ({ owner: person(cell) }));
@@ -188,4 +188,10 @@ export function placeMarkers(g: Ground, culture: Uint16Array, cultures: Culture[
 /** A cell's latitude in degrees. */
 function latitudeOf(g: Ground, cell: number): number {
   return g.params.latitudeNorth - (g.mesh.y[cell] / g.params.height) * (g.params.latitudeNorth - g.params.latitudeSouth);
+}
+
+/** How many realms a map holds: every realm of a planet; in a close-up, only those with land in the frame (and the
+ * count stays what it always was for a whole planet). */
+export function realmsHere(states: { id: number; cells: number }[]): number {
+  return states.length - states.filter((s) => s.id && !s.cells).length;
 }

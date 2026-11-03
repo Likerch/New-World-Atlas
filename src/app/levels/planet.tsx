@@ -1,6 +1,6 @@
 // The planet level: world settings, the world map and its inspector.
 import { useMemo, useRef, useState } from "react";
-import { createRng, defaultLayers, editPlanet, eraTheme, emptyEdits, generatePlanet, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
+import { createRng, defaultLayers, editPlanet, eraTheme, emptyEdits, foundedSize, generatePlanet, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { SettingPanel } from "../SettingPanel";
 import { WorldForm, type ZoomRange } from "../WorldForm";
@@ -156,7 +156,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
       if (planet.water[cell]) return;
       const people = planet.cultures[planet.culture[cell]] ?? planet.cultures[0];
       const founded = name({ ...people.language }, createRng(`${planet.params.seed}/founded-${edits?.added.length ?? 0}`), "town");
-      change((current) => ({ ...current, added: [...current.added, [...at, founded, 2]] }));
+      change((current) => ({ ...current, added: [...current.added, [...at, founded, foundedSize(planet, cell)]] }));
     } else {
       const id = town();
       if (id && !planet.burgs[id].capital) change((current) => ({ ...current, removed: [...current.removed, id] }));

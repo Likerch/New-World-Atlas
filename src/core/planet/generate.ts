@@ -48,6 +48,9 @@ export function planetParams(input: Partial<PlanetParams> = {}): PlanetParams {
 /** A world from its settings; `terrain` replays the GM's relief brush before anything grows on it. */
 export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: PlanetEdits["terrain"]): Planet {
   const params = planetParams(input);
+  // Relief strokes regrow the world, but its towns and peoples are anchored where they stood on the untouched world,
+  // so their numbers, names and the GM's notes stay with them.
+  const anchors = terrain?.length ? anchorsOf(params) : undefined;
   const rng = createRng(params.seed);
   const mesh = buildMesh(params.width, params.height, params.cells, rng.fork("mesh"));
   const height = generateHeights(mesh, params.template, rng.fork("relief"));
@@ -76,8 +79,8 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   }
 
   const ground: Ground = { params, mesh, height, water, feature, features, coast, temperature, precipitation: rain, flux: hydro.flux, river: hydro.river, rivers: hydro.rivers, biome, scale };
-  const { culture, cultures } = settleCultures(ground, params.cultures, rng.fork("cultures"));
-  const { burg, burgs } = placeBurgs(ground, culture, cultures, params.states, params.towns, rng.fork("burgs"));
+  const { culture, cultures } = settleCultures(ground, params.cultures, rng.fork("cultures"), anchors?.cultures);
+  const { burg, burgs } = placeBurgs(ground, culture, cultures, params.states, params.towns, rng.fork("burgs"), anchors?.burgs);
   // The age decides how big towns grow and what guards them; the classic world keeps its towns as they were.
   const setting = settingOf(params.setting);
   settleAge(burgs, setting, rng.fork("age"));
@@ -142,4 +145,24 @@ function sewSeam(mesh: Mesh, height: Float32Array, width: number) {
     const w = 1 - t * t * (3 - 2 * t);
     height[cell] = Math.min(height[cell], height[cell] * (1 - w) + (SEA_LEVEL - 6) * w);
   }
+}
+
+/** Where the untouched world's peoples began and its towns stand: the anchors a reshaped world keeps. */
+export interface Anchors {
+  cultures: [number, number][];
+  burgs: [number, number, boolean][];
+}
+const anchorCache = new Map<string, Anchors>();
+function anchorsOf(params: PlanetParams): Anchors {
+  const key = JSON.stringify(params);
+  const hit = anchorCache.get(key);
+  if (hit) return hit;
+  const plain = generatePlanet(params);
+  const made: Anchors = {
+    cultures: plain.cultures.slice(1).map((culture) => [plain.mesh.x[culture.center], plain.mesh.y[culture.center]]),
+    burgs: plain.burgs.slice(1).map((town) => [town.x, town.y, town.capital]),
+  };
+  anchorCache.set(key, made);
+  if (anchorCache.size > 4) anchorCache.delete(anchorCache.keys().next().value!);
+  return made;
 }

@@ -26,6 +26,25 @@ export function suitability(g: Ground, cell: number): number {
   return score;
 }
 
+/** The dry cell nearest a point that is not taken yet; good land first, any land when there is none near. */
+export function nearestLand(g: Ground, x: number, y: number, taken: Set<number>): number {
+  const start = g.mesh.find(x, y);
+  let fallback = -1;
+  const seen = new Set([start]);
+  for (let ring = [start]; ring.length; ) {
+    for (const cell of ring) {
+      if (g.water[cell] || taken.has(cell)) continue;
+      if (suitability(g, cell) > 0) return cell;
+      if (fallback < 0) fallback = cell;
+    }
+    if (fallback >= 0) return fallback;
+    const next: number[] = [];
+    for (const cell of ring) for (const m of g.mesh.neighbors[cell]) if (!seen.has(m)) (seen.add(m), next.push(m));
+    ring = next;
+  }
+  return start;
+}
+
 /** Picks well-spaced cells with the best scores, loosening the spacing until enough are found. */
 export function spacedPicks(g: Ground, scores: Float32Array, count: number, spacing: number, rng: Rng, taken: number[] = []): number[] {
   const candidates = Array.from({ length: g.mesh.cells }, (_, cell) => cell)
@@ -84,7 +103,7 @@ function stepCost(g: Ground, cell: number, kind: CultureKind, homeBiome: number)
   return cost;
 }
 
-export function settleCultures(g: Ground, count: number, rng: Rng): { culture: Uint16Array; cultures: Culture[] } {
+export function settleCultures(g: Ground, count: number, rng: Rng, anchors?: [number, number][]): { culture: Uint16Array; cultures: Culture[] } {
   const n = g.mesh.cells;
   const scores = new Float32Array(n);
   let landCells = 0;
@@ -93,7 +112,12 @@ export function settleCultures(g: Ground, count: number, rng: Rng): { culture: U
     if (!g.water[cell]) landCells++;
   }
   const spacing = Math.sqrt((landCells * g.mesh.spacing * g.mesh.spacing) / Math.max(1, count)) * 0.8;
-  const centers = spacedPicks(g, scores, count, spacing, rng.fork("centers"));
+  const taken = new Set<number>();
+  const centers = anchors ? anchors.map(([x, y]) => {
+    const cell = nearestLand(g, x, y, taken);
+    taken.add(cell);
+    return cell;
+  }) : spacedPicks(g, scores, count, spacing, rng.fork("centers"));
   const hue = rng.next();
   const cultures: Culture[] = [
     { id: 0, name: "", kind: "generic", language: createLanguage(rng.fork("wild")), center: -1, color: "#999999", expansionism: 0, cells: 0, population: 0 },

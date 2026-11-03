@@ -1,6 +1,6 @@
 // The city pipeline: layout → streets → buildings → landmarks; and how a town on the planet becomes a city map that
 // keeps its river, its coast, its walls and its people's language.
-import { createLanguage, name } from "../language";
+import { createLanguage, name, type Language } from "../language";
 import { createRng, randomSeed } from "../random";
 import { ageOf, isClassic, peopleOf, settingOf, SETTINGS } from "../setting";
 import type { Planet } from "../planet/model";
@@ -35,10 +35,11 @@ export function cityParams(input: Partial<CityParams> = {}): CityParams {
   };
 }
 
-export function generateCity(input: Partial<CityParams> = {}, language = createLanguage(createRng(input.seed ?? "city").fork("language"))): City {
+export function generateCity(input: Partial<CityParams> = {}, tongue?: Language): City {
   const params = cityParams(input);
-  // A copy of the people's language: the same town must get the same names however often it is opened.
-  language = { ...language };
+  // A copy of the people's language: the same town must get the same names however often it is opened. A city of its
+  // own speaks a tongue of its own seed.
+  const language = { ...(tongue ?? createLanguage(createRng(params.seed).fork("language"))) };
   const rng = createRng(params.seed);
   const layout = layoutCity(params, rng.fork("layout"));
   const net = buildStreets(params, layout, language, rng.fork("streets"));
@@ -86,7 +87,12 @@ export function cityFromBurg(planet: Planet, burgId: number, era: Era = cityEraO
   const burg = planet.burgs[burgId];
   const { mesh } = planet;
   const cell = burg.cell;
-  const waterAround = mesh.neighbors[cell].filter((next) => planet.water[next]);
+  let waterAround = mesh.neighbors[cell].filter((next) => planet.water[next]);
+  // A port on a fine close-up mesh may sit a few cells from its water: look a little further.
+  for (let ring = mesh.neighbors[cell], step = 0; burg.port && !waterAround.length && step < 3; step++) {
+    ring = [...new Set(ring.flatMap((c) => mesh.neighbors[c]))];
+    waterAround = ring.filter((next) => planet.water[next]);
+  }
   const coast = waterAround.length ? Math.atan2(waterAround.reduce((s, c) => s + mesh.y[c], 0) / waterAround.length - mesh.y[cell], waterAround.reduce((s, c) => s + mesh.x[c], 0) / waterAround.length - mesh.x[cell]) : null;
   let river: number | null = null;
   const riverId = planet.river[cell];
@@ -104,9 +110,11 @@ export function cityFromBurg(planet: Planet, burgId: number, era: Era = cityEraO
   const population = isClassic(world) ? (modern ? burg.population * 25 : burg.population) : (burg.population * peopleOf(SETTINGS[era]).urban) / peopleOf(world).urban;
   return {
     params: cityParams({
-      seed: `${planet.params.seed}/burg-${burgId}`,
+      // A town of a close-up is its planet's town: the same city, whichever map it is opened from.
+      seed: `${planet.params.world ?? planet.params.seed}/burg-${burg.origin ?? burgId}`,
       name: burg.name,
-      population: Math.max(era === "stone" ? 0.03 : 0.5, isClassic(world) ? population : Math.round(population * 100) / 100),
+      // A hamlet stays a hamlet: a few dozen people, not a town of five hundred.
+      population: Math.max(era === "stone" ? 0.03 : burg.population < 0.5 ? 0.05 : 0.5, isClassic(world) ? population : Math.round(population * 100) / 100),
       era,
       coast,
       river,

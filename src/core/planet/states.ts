@@ -20,7 +20,7 @@ function growthCost(g: Ground, cell: number, state: State, culture: Uint16Array,
 }
 
 /** The cell deepest inside a region: where its name sits best. */
-function poleOf(g: Ground, owner: Uint16Array, id: number, cells: number[]): Point {
+export function poleOf(g: Ground, owner: Uint16Array, id: number, cells: number[]): Point {
   const depth = new Int32Array(g.mesh.cells);
   let ring = cells.filter((cell) => g.mesh.neighbors[cell].some((next) => owner[next] !== id) || g.mesh.edge[cell]);
   for (const cell of ring) depth[cell] = 1;
