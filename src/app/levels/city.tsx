@@ -1,6 +1,6 @@
 // The city level: a city of its own or one opened from a planet town.
 import { useMemo, useRef, useState } from "react";
-import { buildingAt, cityTiers, generateDistrict, renderTier, type Tier, cityFromBurg, cityParams, CITY_LAYERS, createLanguage, createRng, defaultCityTheme, generateCity, pointInPolygon, renameCity, renderCity, type City, type CityLayerId, type CityParams, type CityThemeId, type Language, type Planet } from "../../core/index";
+import { buildingAt, cityTiers, generateDistrict, renderTier, type Tier, cityFromBurg, PROPS, cityParams, CITY_LAYERS, createLanguage, createRng, defaultCityTheme, generateCity, pointInPolygon, renameCity, renderCity, type City, type CityLayerId, type CityParams, type CityThemeId, type Language, type Planet } from "../../core/index";
 import { CityControls, CityInspector, type CitySelection } from "../CityPanels";
 import type { Level, LevelContext } from "./types";
 
@@ -171,7 +171,7 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
         }}
       />
     ) : null,
-    status: city ? t("city.summary", { wards: city.wards.filter((ward) => ward.urban).length, buildings: city.buildings.filter((b) => !["tree", "field", "grave", "pier"].includes(b.kind)).length, landmarks: city.landmarks.length, time }) : "",
+    status: city ? t("city.summary", { wards: city.wards.filter((ward) => ward.urban).length, buildings: city.buildings.filter((b) => !PROPS.includes(b.kind)).length, landmarks: city.landmarks.length, time }) : "",
     data: () => (city ? { format: "new-world-atlas/city", version: 1, ...city, language: undefined } : null),
   };
 }

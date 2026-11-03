@@ -88,7 +88,45 @@ export function buildStreets(params: CityParams, layout: Layout, language: City[
     return null;
   };
 
-  if (organicEra(params.era)) {
+  if (params.era === "stone") {
+    // A camp has no streets: trodden paths wind from the fire to each group of huts, down to the water and out into
+    // the hunting grounds.
+    const heart = diagram.sites[Math.max(0, layout.kinds.indexOf("plaza"))] ?? center;
+    const wind = (from: Point, to: Point, sway: number) => {
+      const length = Math.hypot(to[0] - from[0], to[1] - from[1]);
+      const steps = Math.max(2, Math.round(length / 14));
+      const nx = -(to[1] - from[1]) / (length || 1),
+        ny = (to[0] - from[0]) / (length || 1);
+      const phase = rng.float(0, Math.PI * 2);
+      const points: Point[] = [];
+      for (let k = 0; k <= steps; k++) {
+        const t = k / steps;
+        const off = Math.sin(t * Math.PI) * Math.sin(phase + t * 5.2) * sway * length;
+        const p: Point = [from[0] + (to[0] - from[0]) * t + nx * off, from[1] + (to[1] - from[1]) * t + ny * off];
+        if (inSea(p)) break;
+        points.push(p);
+        if (outside(p)) break;
+      }
+      return points;
+    };
+    for (let ward = 0; ward < n; ward++) if (urban[ward] && !water[ward] && layout.kinds[ward] !== "plaza") add("path", wind(heart, diagram.sites[ward], 0.12), metres(1.6));
+    // Down to the water.
+    const shore = river?.points ?? sea?.slice(0, -2) ?? null;
+    if (shore?.length) {
+      const near = shore.reduce((best, p) => (Math.hypot(p[0] - heart[0], p[1] - heart[1]) < Math.hypot(best[0] - heart[0], best[1] - heart[1]) ? p : best), shore[0]);
+      const reach = Math.hypot(near[0] - heart[0], near[1] - heart[1]);
+      const stop = Math.max(0, reach - (river ? river.width / 2 + metres(1) : metres(2)));
+      if (reach > 1) add("path", wind(heart, [heart[0] + ((near[0] - heart[0]) * stop) / reach, heart[1] + ((near[1] - heart[1]) * stop) / reach], 0.08), metres(2));
+    }
+    // Out to the hunting grounds, to the edge of the map.
+    const trails = rng.int(2, 4);
+    const offset = rng.float(0, Math.PI * 2);
+    for (let k = 0; k < trails; k++) {
+      const angle = offset + (k * Math.PI * 2) / trails + rng.float(-0.4, 0.4);
+      const far: Point = [heart[0] + Math.cos(angle) * Math.hypot(W, H), heart[1] + Math.sin(angle) * Math.hypot(W, H)];
+      add("path", wind(heart, far, 0.06), metres(1.4));
+    }
+  } else if (organicEra(params.era)) {
     // Main streets: from every gate (or, unwalled, from the town's rim) to the market square.
     const heart = layout.kinds.indexOf("plaza") >= 0 ? layout.kinds.indexOf("plaza") : diagram.sites.map((_, ward) => ward).filter((ward) => urban[ward]).sort((a, b) => Math.hypot(diagram.sites[a][0] - center[0], diagram.sites[a][1] - center[1]) - Math.hypot(diagram.sites[b][0] - center[0], diagram.sites[b][1] - center[1]))[0];
     const heartCorners = new Set(diagram.sides[heart]?.flatMap((side) => [side.a, side.b]) ?? []);
@@ -115,7 +153,7 @@ export function buildStreets(params: CityParams, layout: Layout, language: City[
       });
       if (!route) continue;
       for (let k = 1; k < route.length; k++) major.add(edgeKey(route[k - 1], route[k]));
-      add("main", route.map((corner) => corners[corner]), metres(params.era === "stone" ? 3 : 9), params.era !== "stone");
+      add("main", route.map((corner) => corners[corner]), metres(9), true);
       // Out of the gate, a road to the edge of the map, heading away from the centre.
       const p = corners[gate];
       const away = Math.atan2(p[1] - center[1], p[0] - center[0]);
@@ -127,7 +165,7 @@ export function buildStreets(params: CityParams, layout: Layout, language: City[
         const turn = 1 - Math.cos(heading - away);
         return length * (1 + turn * 1.5) * (crossesRiver(a, b) ? 3 : 1);
       });
-      if (road) add("road", road.map((corner) => corners[corner]), metres(params.era === "stone" ? 2 : 6));
+      if (road) add("road", road.map((corner) => corners[corner]), metres(6));
     }
   } else {
     // Avenues on every border between town districts.
@@ -189,7 +227,8 @@ export function buildStreets(params: CityParams, layout: Layout, language: City[
   const bridges: [Point, Point][] = [];
   if (river) {
     for (const street of streets) {
-      if (street.kind === "skyway") continue;
+      // Skyways pass overhead; a camp's paths ford the river.
+      if (street.kind === "skyway" || street.kind === "path") continue;
       for (let k = 1; k < street.points.length; k++) {
         const a = street.points[k - 1],
           b = street.points[k];

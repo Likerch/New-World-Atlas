@@ -39,12 +39,17 @@ export function placeLandmarks(params: CityParams, layout: Layout, buildings: Bu
   };
   switch (params.era) {
     case "stone": {
-      const plaza = centre(["plaza"]);
-      if (plaza >= 0) add("fire-pit", centroid(layout.diagram.cells[plaza]), plaza);
-      place("chief-hut", ["craftsmen"], true, true);
-      place("sacred-stone", ["temple"], true, true);
-      place("flint-workshop", ["craftsmen"], false);
-      place("animal-pen", ["craftsmen", "farm"], false);
+      const dwelling = (b: Building) => b.kind === "hut" || b.kind === "longhouse";
+      // The fire and the great stone are already on the map; their landmarks mark them.
+      const fire = buildings.find((b) => b.kind === "fire");
+      // Their markers stand just above them, so the hearth and the stone stay in sight.
+      const above = (b: Building): Point => [centroid(b.polygon)[0], centroid(b.polygon)[1] - 11];
+      if (fire) add("fire-pit", above(fire), fire.ward);
+      place("chief-hut", ["craftsmen"], true, true, dwelling);
+      const monolith = buildings.find((b) => b.kind === "stone");
+      if (monolith) add("sacred-stone", above(monolith), monolith.ward, true);
+      place("flint-workshop", ["craftsmen"], false, false, dwelling);
+      place("animal-pen", ["craftsmen", "farm"], false, false, (b) => b.kind === "pen");
       break;
     }
     case "ancient": {

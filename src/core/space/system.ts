@@ -1,10 +1,10 @@
 // Star systems: the star's light sets a habitable zone and a frost line; orbits widen outwards; rocky worlds form
 // inside the frost line (scorched, barren, desert, terran or ocean by warmth and water), giants beyond it. Moons,
 // rings, asteroid belts and stations; settled worlds when a power holds the star. A world can be opened as a planet.
-import { name, type Language } from "../language";
+import { createLanguage, name, type Language } from "../language";
 import type { PlanetParams } from "../planet/model";
-import { createRng } from "../random";
-import { SPECTRA, type Galaxy, type SpectralClass } from "./galaxy";
+import { createRng, randomSeed } from "../random";
+import { SPECTRA, type Galaxy, type SpectralClass, type Star } from "./galaxy";
 
 export type BodyKind = "lava" | "barren" | "desert" | "terran" | "ocean" | "jungle" | "tundra" | "ice" | "gas-giant" | "ice-giant" | "belt";
 export type Atmosphere = "none" | "thin" | "breathable" | "toxic" | "thick";
@@ -59,11 +59,32 @@ const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI"
 
 export function generateSystem(galaxy: Galaxy, starId: number): StarSystem {
   const star = galaxy.stars[starId];
-  const seed = `${galaxy.params.seed}/star-${starId}`;
-  const rng = createRng(seed);
   const empire = galaxy.empires[star.empire];
   // A copy, so names already given elsewhere do not change what this system is called on the next visit.
-  const language = star.empire ? { ...empire.language } : null;
+  return buildSystem(`${galaxy.params.seed}/star-${starId}`, star, empire?.name ?? "", star.empire ? { ...empire.language } : null);
+}
+
+export interface SystemParams {
+  seed: string;
+  /** The star's class; none picks one, mostly sunlike. */
+  spectral?: SpectralClass;
+  /** Whether people live there; none decides by chance. */
+  settled?: boolean;
+}
+
+/** A star system of its own, not cut from a galaxy: for a game that starts at one star. */
+export function generateLoneSystem(input: Partial<SystemParams> = {}): StarSystem {
+  const seed = input.seed || randomSeed();
+  const rng = createRng(seed).fork("lone-star");
+  const language = createLanguage(rng.fork("tongue"));
+  const spectral = input.spectral ?? rng.weighted<SpectralClass>([["G", 5], ["K", 5], ["F", 3], ["M", 4], ["A", 1], ["B", 0.4], ["WD", 0.4], ["NS", 0.2], ["BH", 0.1]]);
+  const settled = input.settled ?? rng.chance(0.6);
+  const star: Star = { id: 0, x: 0, y: 0, name: name(language, rng, "plain"), spectral, empire: 0, capital: settled, settled, feature: null };
+  return buildSystem(seed, star, settled ? name(language, rng, "land") : "", settled ? language : null);
+}
+
+function buildSystem(seed: string, star: Star, empire: string, language: Language | null): StarSystem {
+  const rng = createRng(seed);
   const spectrum = SPECTRA[star.spectral];
   const luminosity = spectrum.luminosity * rng.float(0.7, 1.3);
   const zone: [number, number] = [Math.sqrt(Math.max(luminosity, 1e-4) / 1.1), Math.sqrt(Math.max(luminosity, 1e-4) / 0.53)];
@@ -109,7 +130,7 @@ export function generateSystem(galaxy: Galaxy, starId: number): StarSystem {
     });
     orbit *= rng.float(1.45, 2.1);
   }
-  return { seed, name: star.name, spectral: star.spectral, luminosity, companion, zone, frost, bodies, empire: empire?.name ?? "", settled: star.settled, language };
+  return { seed, name: star.name, spectral: star.spectral, luminosity, companion, zone, frost, bodies, empire, settled: star.settled, language };
 }
 
 /** Planet-generator settings for a world of a system: its climate, its water and its peoples. */

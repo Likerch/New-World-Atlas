@@ -1,6 +1,6 @@
 // Galaxy and star-system regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { generateUniverse, renderUniverse, shapeOf, GALAXY_SHAPES, generateGalaxy, generatePlanet, generateSystem, planetFromBody, renderGalaxy, renderSystem } from "../src/core/index";
+import { generateUniverse, renderUniverse, shapeOf, GALAXY_SHAPES, generateGalaxy, generateLoneSystem, generatePlanet, generateSystem, planetFromBody, renderGalaxy, renderSystem } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -41,6 +41,15 @@ test("systems are reproducible, orbits widen outwards, living worlds sit in the 
     assert.doesNotMatch(renderSystem(system), /NaN|undefined|Infinity/u);
   }
   assert.ok(living > 0, "some worlds are habitable");
+});
+
+test("a star system of its own comes from its seed and keeps the star and people asked for", () => {
+  const made = generateLoneSystem({ seed: "lone", spectral: "K", settled: true });
+  assert.equal(JSON.stringify({ ...generateLoneSystem({ seed: "lone", spectral: "K", settled: true }), language: null }), JSON.stringify({ ...made, language: null }));
+  assert.equal(made.spectral, "K");
+  assert.ok(made.settled && made.empire && made.bodies.length > 0);
+  assert.equal(generateLoneSystem({ seed: "lone", settled: false }).bodies.reduce((sum, b) => sum + b.population, 0), 0, "nobody lives in an unsettled system");
+  assert.doesNotMatch(renderSystem(made), /NaN|undefined|Infinity/u);
 });
 
 test("a world of a system opens as a planet with its name and climate", () => {

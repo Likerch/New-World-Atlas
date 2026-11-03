@@ -81,8 +81,12 @@ export interface Ward {
   buildings: number;
 }
 
-/** A hut is a stone-age dwelling; a ruin is what is left of a building after the fall. */
-export type BuildingKind = "house" | "landmark" | "tower" | "industrial" | "field" | "tree" | "grave" | "stall" | "pier" | "yard" | "shed" | "hut" | "ruin";
+/** A hut or a longhouse is a stone-age dwelling, and a camp has its fire, standing stones, burial mounds, pens, drying
+ * racks and boats; a ruin is what is left of a building after the fall. */
+export type BuildingKind = "house" | "landmark" | "tower" | "industrial" | "field" | "tree" | "grave" | "stall" | "pier" | "yard" | "shed" | "hut" | "ruin" | "longhouse" | "fire" | "stone" | "mound" | "pen" | "rack" | "boat";
+
+/** Things on a city map that are not buildings anyone walks into. */
+export const PROPS: BuildingKind[] = ["tree", "field", "grave", "pier", "stall", "yard", "fire", "stone", "mound", "pen", "rack", "boat"];
 
 export interface Building {
   polygon: Point[];
@@ -91,7 +95,8 @@ export interface Building {
   floors: number;
 }
 
-export type StreetKind = "main" | "street" | "road" | "avenue" | "highway" | "rail" | "skyway";
+/** A path is a stone-age footpath: trodden earth between the huts, down to the water and out to the hunting grounds. */
+export type StreetKind = "main" | "street" | "road" | "avenue" | "highway" | "rail" | "skyway" | "path";
 
 export interface Street {
   id: number;

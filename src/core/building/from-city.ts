@@ -1,6 +1,6 @@
 // A building on a city map, opened as a floor plan: its footprint from the drawn outline (the smallest rectangle
 // around it), its purpose from the quarter it stands in and any landmark there, its height from the map.
-import type { City } from "../city/model";
+import { PROPS, type City } from "../city/model";
 import type { Point } from "../geometry";
 import { pointInPolygon } from "../polygon";
 import { BUILDING_FLOORS, buildingParams, type BuildingParams, type BuildingType } from "./plan";
@@ -66,7 +66,7 @@ const BY_LANDMARK: Record<string, BuildingType> = {
 
 /** The building at a map point, if any (not trees, fields, graves or piers). */
 export function buildingAt(city: City, point: Point): number {
-  return city.buildings.findIndex((b) => !["tree", "field", "grave", "pier", "stall", "yard"].includes(b.kind) && pointInPolygon(point, b.polygon));
+  return city.buildings.findIndex((b) => !PROPS.includes(b.kind) && pointInPolygon(point, b.polygon));
 }
 
 export function buildingFromCity(city: City, index: number): BuildingParams {
@@ -75,7 +75,7 @@ export function buildingFromCity(city: City, index: number): BuildingParams {
   const landmark = city.landmarks.find((l) => l.ward === building.ward && pointInPolygon([l.x, l.y], building.polygon));
   const modern = ["modern", "cyberpunk", "industrial", "far-future", "post-apocalypse"].includes(city.params.era);
   let type: BuildingType = "house";
-  if (building.kind === "hut") type = "hut";
+  if (building.kind === "hut" || building.kind === "longhouse") type = "hut";
   else if (landmark && BY_LANDMARK[landmark.kind]) type = BY_LANDMARK[landmark.kind];
   else if (building.kind === "landmark") type = ward?.kind === "temple" || ward?.kind === "cemetery" ? "temple" : ward?.kind === "castle" ? "keep" : "manor";
   else if (building.kind === "tower") type = ward && ["megablock", "residential", "combat-zone"].includes(ward.kind) ? "apartment" : "office";

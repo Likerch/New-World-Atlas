@@ -95,6 +95,9 @@ test("a camp, a polis, a city of the far future and a dead city each look their 
   const camp = generateCity({ seed: "ages", era: "stone", population: 0.4, walls: true });
   assert.ok(camp.buildings.some((b) => b.kind === "hut") && !camp.buildings.some((b) => b.kind === "house" || b.kind === "tower"), "huts only");
   assert.ok(camp.landmarks.some((l) => l.kind === "fire-pit"));
+  assert.equal(camp.buildings.filter((b) => b.kind === "fire").length, 1, "one fire in the middle");
+  assert.ok(camp.buildings.filter((b) => b.kind === "stone").length >= 8, "a ring of standing stones round a great one");
+  assert.ok(camp.streets.length > 2 && camp.streets.every((street) => street.kind === "path"), "footpaths, no streets");
   const hut = generateBuilding(buildingFromCity(camp, camp.buildings.findIndex((b) => b.kind === "hut")));
   const things = hut.floors.flatMap((floor) => floor.rooms.flatMap((room) => room.furniture.map((item) => item.kind)));
   assert.ok(things.includes("hearth") && !things.includes("table") && !things.includes("bed"), "a hearth, mats and furs, no tables or beds");

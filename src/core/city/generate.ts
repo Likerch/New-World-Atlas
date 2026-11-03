@@ -46,7 +46,7 @@ export function generateCity(input: Partial<CityParams> = {}, language = createL
   const landmarks = placeLandmarks(params, layout, buildings, language, rng.fork("landmarks"));
   const cityName = params.name || name(language, rng.fork("name"), "town");
   const counts = new Map<number, number>();
-  for (const building of buildings) if (building.kind !== "tree" && building.kind !== "field" && building.kind !== "grave") counts.set(building.ward, (counts.get(building.ward) ?? 0) + 1);
+  for (const building of buildings) if (!["tree", "field", "grave", "fire", "stone", "mound", "pen", "rack", "boat"].includes(building.kind)) counts.set(building.ward, (counts.get(building.ward) ?? 0) + 1);
   const names = rng.fork("ward-names");
   const wards = layout.diagram.sites.map((site, id) => ({
     id,

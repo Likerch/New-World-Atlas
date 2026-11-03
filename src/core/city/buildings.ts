@@ -142,6 +142,100 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
   const roads = net.streets.filter((street) => street.kind === "road" || street.kind === "main");
   // Antiquity lays every house block on one grid, whatever the ward's shape.
   const gridAngle = rng.fork("grid").float(0, Math.PI / 2);
+  const paths = net.streets.filter((street) => street.kind === "path");
+  const round = (at: Point, r: number, corners = 8): Point[] => Array.from({ length: corners }, (_, j) => [at[0] + Math.cos((j * Math.PI * 2) / corners) * r, at[1] + Math.sin((j * Math.PI * 2) / corners) * r]);
+  /** A stone-age camp: families' huts (or longhouses in a bigger village) in clusters round their yards; the fire and
+   * its racks in the middle; a ring of standing stones and the barrows of the dead at the sacred place. */
+  const placed: [Point, number][] = [];
+  const free = (at: Point, r: number) => !placed.some(([p, q]) => Math.hypot(p[0] - at[0], p[1] - at[1]) < r + q) && !paths.some((path) => distanceToPolyline(at, path.points) < r + path.width);
+  const stoneWard = (kind: WardKind, ward: number, inner: Point[], own: Rng) => {
+    const site = diagram.sites[ward];
+    const take = (polygon: Point[], buildingKind: BuildingKind, at: Point, r: number) => {
+      if (wet(polygon)) return false;
+      out.push({ polygon, ward, kind: buildingKind, floors: buildingKind === "hut" || buildingKind === "longhouse" ? 1 : 0 });
+      placed.push([at, r]);
+      return true;
+    };
+    const xs = inner.map((p) => p[0]),
+      ys = inner.map((p) => p[1]);
+    const somewhere = (): Point => [own.float(Math.min(...xs), Math.max(...xs)), own.float(Math.min(...ys), Math.max(...ys))];
+    /** The ward's middle, or the nearest dry ground to it when the river runs through. */
+    const middle = (r: number): Point => {
+      const options = [site, centroid(inner), ...Array.from({ length: 30 }, somewhere)];
+      return options.find((p) => pointInPolygon(p, inner) && !wet(round(p, r))) ?? site;
+    };
+    if (kind === "plaza") {
+      const hearth = middle(m(4));
+      take(round(hearth, m(1.8)), "fire", hearth, m(7));
+      for (let k = own.int(2, 4); k > 0; k--) {
+        const angle = own.float(0, Math.PI * 2);
+        const reach = m(own.float(9, 14));
+        const at: Point = [hearth[0] + Math.cos(angle) * reach, hearth[1] + Math.sin(angle) * reach];
+        const along: Point = [-Math.sin(angle) * m(2.2), Math.cos(angle) * m(2.2)];
+        if (free(at, m(2.5))) take([[at[0] - along[0], at[1] - along[1]], [at[0] + along[0], at[1] + along[1]], [at[0] + along[0] * 1.02, at[1] + along[1] * 1.02]], "rack", at, m(2.5));
+      }
+      return;
+    }
+    if (kind === "temple") {
+      // A ring of standing stones round a great one, the barrows beyond.
+      const ring = m(own.float(7, 13));
+      const count = own.int(7, 13);
+      const heart = middle(ring);
+      take(round(heart, m(1.6), 5), "stone", heart, m(2));
+      for (let k = 0; k < count; k++) {
+        const angle = (k * Math.PI * 2) / count + own.float(-0.1, 0.1);
+        const at: Point = [heart[0] + Math.cos(angle) * ring, heart[1] + Math.sin(angle) * ring];
+        take(round(at, m(own.float(0.7, 1.1)), 4), "stone", at, m(1));
+      }
+      placed.push([heart, ring + m(3)]);
+      for (let k = own.int(2, 5), tries = 0; k > 0 && tries < 60; tries++) {
+        const at = somewhere();
+        const r = m(own.float(4, 8));
+        if (!pointInPolygon(at, inner) || !free(at, r)) continue;
+        if (take(round(at, r, 12), "mound", at, r)) k--;
+      }
+      return;
+    }
+    // Huts: family clusters round a yard; a bigger village builds longhouses.
+    const clusters = Math.max(1, Math.round(area(inner) / (m(26) * m(26))));
+    const longhouses = params.population > 0.25 ? 0.35 : 0.08;
+    for (let c = 0, tries = 0; c < clusters && tries < clusters * 8; tries++) {
+      const yard = somewhere();
+      if (!pointInPolygon(yard, inner)) continue;
+      c++;
+      if (own.chance(longhouses)) {
+        // A longhouse: a long hall with flat sides and round ends; points 0 and 6 are the ends of its ridge.
+        const length = m(own.float(10, 22)),
+          width = m(own.float(5, 7));
+        const angle = own.float(0, Math.PI);
+        if (!free(yard, length / 2)) continue;
+        const ux = Math.cos(angle),
+          uy = Math.sin(angle);
+        const hall: Point[] = [];
+        for (let j = 0; j < 12; j++) {
+          const t = (j / 12) * Math.PI * 2;
+          const along = Math.sign(Math.cos(t)) * Math.min(1, Math.abs(Math.cos(t)) * 1.6) * (length / 2);
+          const across = Math.sin(t) * (width / 2);
+          hall.push([yard[0] + ux * along - uy * across, yard[1] + uy * along + ux * across]);
+        }
+        take(hall, "longhouse", yard, length / 2);
+        continue;
+      }
+      for (let k = own.int(2, 6); k > 0; k--) {
+        const angle = own.float(0, Math.PI * 2);
+        const r = m(own.float(2.2, 3.8));
+        const reach = m(own.float(5, 9));
+        const at: Point = [yard[0] + Math.cos(angle) * reach, yard[1] + Math.sin(angle) * reach];
+        if (pointInPolygon(at, inner) && free(at, r + m(0.8))) take(round(at, r, 10), "hut", at, r + m(0.8));
+      }
+      if (own.chance(0.35) && free(yard, m(2))) take([[yard[0] - m(2), yard[1]], [yard[0] + m(2), yard[1]], [yard[0] + m(2), yard[1] + m(0.1)]], "rack", yard, m(2));
+    }
+    if (own.chance(0.3)) {
+      const at = centroid(inner);
+      const r = m(own.float(5, 8));
+      if (free(at, r)) take(round(at, r, 10), "pen", at, r);
+    }
+  };
 
   for (let ward = 0; ward < diagram.sites.length; ward++) {
     const kind = kinds[ward];
@@ -169,6 +263,18 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
       if (!wet(polygon)) out.push({ polygon, ward, kind: buildingKind, floors });
     };
 
+    if (kind === "farm" && params.era === "stone") {
+      // Garden plots hoed out of the forest, and pens for the animals.
+      const plots: Point[][] = [];
+      lots(inner, lotArea(own.float(150, 420)), own, plots);
+      for (const plot of plots) {
+        if (own.chance(0.45)) continue;
+        const garden = insetConvex(plot, m(own.float(2, 5)));
+        if (garden) push(garden, "field", 0);
+      }
+      if (own.chance(0.5)) push(round(centroid(inner), m(own.float(5, 9)), 10), "pen", 0);
+      continue;
+    }
     if (kind === "farm") {
       const toCenter = Math.atan2(diagram.sites[ward][1] - center[1], diagram.sites[ward][0] - center[0]);
       for (const strip of strips(inner, toCenter + own.float(-0.6, 0.6), span(own.float(22, 45), 6))) {
@@ -178,16 +284,13 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
       continue;
     }
     if (kind === "park" || (kind === "wild" && params.era !== "cyberpunk")) {
-      scatter(inner, kind === "park" ? span(11, 6) : span(26, 16), own, [span(2.5, 1.6), span(4.5, 2.6)], "tree", ward, out);
+      // The forest closes in round a camp.
+      scatter(inner, kind === "park" ? span(11, 6) : params.era === "stone" ? span(17, 10) : span(26, 16), own, [span(2.5, 1.6), span(4.5, 2.6)], "tree", ward, out);
       continue;
     }
     if (kind === "wild") continue;
     if (params.era === "stone") {
-      // Huts scattered round the gathering place; the sacred place keeps a single standing stone.
-      if (kind === "temple") {
-        const stone = insetConvex(inner, Math.sqrt(area(inner)) * 0.44);
-        if (stone) push(stone, "landmark", 1);
-      } else if (kind !== "plaza") scatter(inner, span(12, 4.5), own, [span(2.6, 1.4), span(4.2, 2.2)], "hut", ward, out);
+      stoneWard(kind, ward, inner, own);
       continue;
     }
     if (kind === "wasteland") {
@@ -270,6 +373,29 @@ export function buildBuildings(params: CityParams, layout: Layout, net: StreetNe
         const ruined = rule.kind === "ruin" ? insetConvex(shape, m(own.float(0, rule.gap))) : shape;
         if (ruined) push(ruined, rule.kind === "tower" && floors < 8 ? "house" : rule.kind, floors);
       }
+    }
+  }
+  // A camp keeps its dugouts drawn up on the bank nearest the fire.
+  const shore = params.era === "stone" ? (river?.points ?? sea?.slice(0, -2) ?? null) : null;
+  if (shore && shore.length > 2) {
+    const own = rng.fork("boats");
+    const nearest = shore.reduce((best, p, k) => (Math.hypot(p[0] - center[0], p[1] - center[1]) < Math.hypot(shore[best][0] - center[0], shore[best][1] - center[1]) ? k : best), 1);
+    const bank = river ? river.width / 2 + m(2.2) : -m(2.5);
+    for (let k = own.int(2, 5); k > 0; k--) {
+      const at = Math.max(1, Math.min(shore.length - 2, nearest + own.int(-3, 3)));
+      const p = shore[at];
+      const tx = shore[at + 1][0] - shore[at - 1][0],
+        ty = shore[at + 1][1] - shore[at - 1][1];
+      const tl = Math.hypot(tx, ty) || 1;
+      let nx = -ty / tl,
+        ny = tx / tl;
+      if (nx * (center[0] - p[0]) + ny * (center[1] - p[1]) < 0) [nx, ny] = [-nx, -ny];
+      const c: Point = [p[0] + nx * (bank + m(own.float(0, 2))), p[1] + ny * (bank + m(own.float(0, 2)))];
+      const half = m(own.float(2.5, 3.5)),
+        beam = m(0.5);
+      const ux = tx / tl,
+        uy = ty / tl;
+      out.push({ polygon: [[c[0] - ux * half, c[1] - uy * half], [c[0] - nx * beam, c[1] - ny * beam], [c[0] + ux * half, c[1] + uy * half], [c[0] + nx * beam, c[1] + ny * beam]], ward: 0, kind: "boat", floors: 0 });
     }
   }
   // Piers: wooden or stone jetties from the harbour shore out into the sea.

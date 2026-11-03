@@ -1,7 +1,7 @@
 // The galaxy and star-system levels: stars, powers and lanes; then one system's worlds, any of which can be opened as
 // a planet.
 import { useMemo, useRef, useState } from "react";
-import { generateUniverse, renderUniverse, shapeOf, universeParams, type Universe, type UniverseParams, GALAXY_SHAPES, localFromStar, galaxyParams, generateGalaxy, generateSystem, planetFromBody, renameGalaxy, renameSystem, renderGalaxy, renderSystem, SPECTRA, type Galaxy, type GalaxyParams, type PlanetParams, type StarSystem } from "../../core/index";
+import { generateUniverse, renderUniverse, shapeOf, universeParams, type Universe, type UniverseParams, GALAXY_SHAPES, localFromStar, galaxyParams, generateGalaxy, generateLoneSystem, generateSystem, planetFromBody, randomSeed, type SpectralClass, type SystemParams, renameGalaxy, renameSystem, renderGalaxy, renderSystem, SPECTRA, type Galaxy, type GalaxyParams, type PlanetParams, type StarSystem } from "../../core/index";
 import type { Level, LevelContext } from "./types";
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -185,13 +185,24 @@ export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<P
   const mapKey = rawSystem ? `system:${rawSystem.seed}` : null;
   const names = ctx.names(mapKey);
   const system = useMemo(() => (rawSystem ? renameSystem(rawSystem, names) : null), [rawSystem, names]);
+  // A system opened from a galaxy star regenerates from it; otherwise the level makes a lone star of its own seed.
   const [source, setSource] = useState<{ galaxy: Galaxy; star: number } | null>(null);
+  const [input, setInput] = useState<SystemParams>(() => ({ seed: randomSeed() }));
   const [body, setBody] = useState<number | null>(null);
   const svg = useMemo(() => (system ? renderSystem(system, { script: ctx.script, highlight: body }) : ""), [system, ctx.script, body]);
   const open = (galaxy: Galaxy, star: number) =>
     ctx.run(() => {
+      const made = generateSystem(galaxy, star);
       setSource({ galaxy, star });
-      setSystem(generateSystem(galaxy, star));
+      setSystem(made);
+      setInput((current) => ({ ...current, seed: made.seed }));
+      setBody(null);
+    });
+  const lone = (next: SystemParams) =>
+    ctx.run(() => {
+      setSource(null);
+      setSystem(generateLoneSystem(next));
+      setInput(next);
       setBody(null);
     });
   const selected = system && body !== null ? system.bodies[body] : null;
@@ -200,10 +211,15 @@ export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<P
     id: "system",
     icon: "☀️",
     title: system?.name ?? null,
-    seed: system?.seed ?? "",
-    setSeed: () => undefined,
-    generate: () => source && open(source.galaxy, source.star),
-    ensure: () => undefined,
+    seed: input.seed,
+    setSeed: (seed) => setInput((current) => ({ ...current, seed })),
+    generate: (seed) => {
+      if (!seed && source && input.seed === rawSystem?.seed && input.spectral === undefined && input.settled === undefined) open(source.galaxy, source.star);
+      else lone(seed ? { ...input, seed } : input);
+    },
+    ensure: () => {
+      if (!rawSystem) lone(input);
+    },
     open,
     mapKey,
     selected: !system ? null : body !== null ? { key: `body:${body}`, label: system.bodies[body].name } : { key: "world", label: system.name },
@@ -230,6 +246,27 @@ export function useSystemLevel(ctx: LevelContext, openPlanet: (params: Partial<P
             ← {t("action.backToGalaxy")}
           </button>
         ) : null}
+        <h2>{t("view.system")}</h2>
+        {source ? <p className="muted">{t("system.fromGalaxy")}</p> : null}
+        <label>
+          {t("space.class")}
+          <select value={input.spectral ?? ""} onChange={(event) => setInput((current) => ({ ...current, spectral: (event.target.value || undefined) as SpectralClass | undefined }))}>
+            <option value="">{t("system.anyStar")}</option>
+            {(Object.keys(SPECTRA) as SpectralClass[]).map((key) => (
+              <option key={key} value={key}>
+                {t(`spectral.${key}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          {t("space.settled")}
+          <select value={input.settled === undefined ? "" : String(input.settled)} onChange={(event) => setInput((current) => ({ ...current, settled: event.target.value === "" ? undefined : event.target.value === "true" }))}>
+            <option value="">{t("system.byChance")}</option>
+            <option value="true">{t("yes")}</option>
+            <option value="false">{t("no")}</option>
+          </select>
+        </label>
         <p className="muted">{t("system.hint")}</p>
       </>
     ),

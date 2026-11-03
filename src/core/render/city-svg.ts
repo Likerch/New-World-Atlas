@@ -152,10 +152,13 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
   const m = (metres: number) => metres / city.scale;
   const out: string[] = [];
   out.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="${esc(th.font)}">`);
-  out.push(`<defs><clipPath id="city-clip"><rect width="${W}" height="${H}"/></clipPath>${th.glow ? `<filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>` : ""}</defs>`);
+  const stone = city.params.era === "stone";
+  out.push(`<defs><clipPath id="city-clip"><rect width="${W}" height="${H}"/></clipPath>${stone ? `<filter id="clearing" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="${r1(Math.max(3, m(6)))}"/></filter>` : ""}${th.glow ? `<filter id="glow" x="-20%" y="-20%" width="140%" height="140%"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>` : ""}</defs>`);
   out.push(`<g clip-path="url(#city-clip)"><rect width="${W}" height="${H}" fill="${th.paper}"/>`);
 
-  if (layers.wards) {
+  // A camp has no quarters to tint: a clearing of trodden earth opens in the forest round the huts and gardens.
+  if (layers.wards && stone) out.push(`<g fill="${th.plaza}" filter="url(#clearing)">${city.wards.filter((ward) => ward.urban || ward.kind === "farm").map((ward) => `<path d="${poly(ward.polygon)}"/>`).join("")}</g>`);
+  else if (layers.wards) {
     for (const ward of city.wards) {
       const tint = ward.kind === "plaza" ? th.plaza : th.tint[ward.kind];
       if (tint) out.push(`<path d="${poly(ward.polygon)}" fill="${tint}"/>`);
@@ -185,6 +188,7 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
       const d = streetPath(street.points);
       out.push(`<path d="${d}" fill="none" stroke="${th.casing}" stroke-width="${r1(street.width + 1.4)}" stroke-linecap="round" stroke-linejoin="round" opacity="${street.kind === "main" ? 0.35 : 0.8}"/><path d="${d}" fill="none" stroke="${th.street}" stroke-width="${r1(street.width)}" stroke-linecap="round" stroke-linejoin="round"/>`);
     }
+    for (const street of city.streets.filter((s) => s.kind === "path")) out.push(`<path d="${pathData(smooth(street.points, false, 2), false)}" fill="none" stroke="${th.casing}" stroke-width="${r1(Math.max(0.8, street.width))}" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="${r1(Math.max(2, m(3)))} ${r1(Math.max(1, m(1.2)))}" opacity="0.75"/>`);
     for (const [a, b] of city.bridges) out.push(`<path d="M${r1(a[0])},${r1(a[1])}L${r1(b[0])},${r1(b[1])}" stroke="${th.line}" stroke-width="${r1(m(12))}" stroke-linecap="butt"/><path d="M${r1(a[0])},${r1(a[1])}L${r1(b[0])},${r1(b[1])}" stroke="${th.street}" stroke-width="${r1(m(8))}" stroke-linecap="butt"/>`);
   }
 
@@ -216,8 +220,57 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
         return;
       }
       if (building.kind === "hut") {
+        // A round hut: thatch in rings, the smoke hole, the door towards the fire.
         const [cx, cy] = centroid(building.polygon);
-        shapes.push(`<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(Math.hypot(building.polygon[0][0] - cx, building.polygon[0][1] - cy))}" fill="${th.building}" stroke="${th.line}" stroke-width="0.5"/>`);
+        const r = Math.hypot(building.polygon[0][0] - cx, building.polygon[0][1] - cy);
+        const toward = Math.atan2(city.center[1] - cy, city.center[0] - cx);
+        const dx = Math.cos(toward),
+          dy = Math.sin(toward);
+        shapes.push(`<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r)}" fill="${th.building}" stroke="${th.line}" stroke-width="0.5"/><circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r * 0.58)}" fill="none" stroke="${th.line}" stroke-width="0.3" opacity="0.5"/><circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(Math.max(0.4, r * 0.16))}" fill="${th.line}"/><path d="M${r1(cx + dx * r * 0.75)},${r1(cy + dy * r * 0.75)}L${r1(cx + dx * r * 1.25)},${r1(cy + dy * r * 1.25)}" stroke="${th.line}" stroke-width="${r1(Math.max(0.6, r * 0.35))}"/>`);
+        return;
+      }
+      if (building.kind === "longhouse") {
+        const [a, b] = [building.polygon[0], building.polygon[6]];
+        shapes.push(`<path d="${pathData(smooth([...building.polygon, building.polygon[0]], true, 1), true)}" fill="${th.building}" stroke="${th.line}" stroke-width="0.6"/><path d="M${r1(a[0] + (b[0] - a[0]) * 0.08)},${r1(a[1] + (b[1] - a[1]) * 0.08)}L${r1(b[0] + (a[0] - b[0]) * 0.08)},${r1(b[1] + (a[1] - b[1]) * 0.08)}" stroke="${th.line}" stroke-width="0.6" opacity="0.7"/>`);
+        return;
+      }
+      if (building.kind === "fire") {
+        // The hearth: a ring of stones round the embers, logs to sit on round it.
+        const [cx, cy] = centroid(building.polygon);
+        const r = Math.hypot(building.polygon[0][0] - cx, building.polygon[0][1] - cy);
+        const ring = Array.from({ length: 8 }, (_, k) => `<circle cx="${r1(cx + Math.cos((k * Math.PI) / 4) * r)}" cy="${r1(cy + Math.sin((k * Math.PI) / 4) * r)}" r="${r1(Math.max(0.5, r * 0.28))}" fill="${th.tower}" stroke="${th.line}" stroke-width="0.3"/>`).join("");
+        const logs = Array.from({ length: 5 }, (_, k) => {
+          const angle = (k * Math.PI * 2) / 5 + 0.3;
+          const x = cx + Math.cos(angle) * r * 3.2,
+            y = cy + Math.sin(angle) * r * 3.2;
+          return `<path d="M${r1(x - Math.sin(angle) * r)},${r1(y + Math.cos(angle) * r)}L${r1(x + Math.sin(angle) * r)},${r1(y - Math.cos(angle) * r)}" stroke="#7a5634" stroke-width="${r1(Math.max(0.8, r * 0.45))}" stroke-linecap="round"/>`;
+        }).join("");
+        shapes.push(`<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r * 5)}" fill="${th.casing}" opacity="0.18"/>${logs}<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r * 0.8)}" fill="#e0893a"/><circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r * 0.4)}" fill="#ffd36b"/>${ring}`);
+        return;
+      }
+      if (building.kind === "stone") {
+        shapes.push(`<path d="${d}" fill="${th.tower}" stroke="${th.line}" stroke-width="0.6"/>`);
+        return;
+      }
+      if (building.kind === "mound") {
+        const [cx, cy] = centroid(building.polygon);
+        const r = Math.hypot(building.polygon[0][0] - cx, building.polygon[0][1] - cy);
+        shapes.push(`<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r)}" fill="${th.field[1]}" stroke="${th.line}" stroke-width="0.5"/><circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r * 0.62)}" fill="none" stroke="${th.line}" stroke-width="0.35" opacity="0.6"/><circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r * 0.28)}" fill="none" stroke="${th.line}" stroke-width="0.35" opacity="0.6"/>`);
+        return;
+      }
+      if (building.kind === "pen") {
+        const [cx, cy] = centroid(building.polygon);
+        const r = Math.hypot(building.polygon[0][0] - cx, building.polygon[0][1] - cy);
+        shapes.push(`<circle cx="${r1(cx)}" cy="${r1(cy)}" r="${r1(r)}" fill="${th.field[0]}" fill-opacity="0.6" stroke="#7a5634" stroke-width="${r1(Math.max(0.7, m(0.5)))}" stroke-dasharray="${r1(Math.max(1, m(0.8)))} ${r1(Math.max(0.6, m(0.5)))}"/>`);
+        return;
+      }
+      if (building.kind === "rack") {
+        const [a, b] = building.polygon;
+        shapes.push(`<path d="M${r1(a[0])},${r1(a[1])}L${r1(b[0])},${r1(b[1])}" stroke="#7a5634" stroke-width="${r1(Math.max(0.6, m(0.35)))}"/><circle cx="${r1(a[0])}" cy="${r1(a[1])}" r="${r1(Math.max(0.5, m(0.3)))}" fill="#7a5634"/><circle cx="${r1(b[0])}" cy="${r1(b[1])}" r="${r1(Math.max(0.5, m(0.3)))}" fill="#7a5634"/>`);
+        return;
+      }
+      if (building.kind === "boat") {
+        shapes.push(`<path d="${d}" fill="#8a5a33" stroke="${th.line}" stroke-width="0.4"/>`);
         return;
       }
       if (building.kind === "stall") {
@@ -255,7 +308,7 @@ export function renderCity(city: City, options: CityRenderOptions = {}): string 
       // A palisade of stakes round a camp; scrap barricades round a hold after the fall.
       if (era === "stone" || era === "post-apocalypse") {
         const stakes = era === "stone";
-        out.push(`<path d="${pathData(ring, true)}" fill="none" stroke="${stakes ? "#7a5634" : th.wall}" stroke-width="${r1(Math.max(1.4, m(stakes ? 1.5 : 3)))}" stroke-dasharray="${stakes ? "1.2 0.8" : "5 2 2 2"}" stroke-linejoin="round"/>`);
+        out.push(`<path d="${pathData(stakes ? smooth(ring, true, 2) : ring, true)}" fill="none" stroke="${stakes ? "#7a5634" : th.wall}" stroke-width="${r1(Math.max(1.4, m(stakes ? 1.5 : 3)))}" stroke-dasharray="${stakes ? "1.2 0.8" : "5 2 2 2"}" stroke-linejoin="round"/>`);
         for (const p of wall.gates) out.push(`<circle cx="${r1(p[0])}" cy="${r1(p[1])}" r="${r1(Math.max(2, m(4)))}" fill="${th.paper}" stroke="${stakes ? "#7a5634" : th.wall}" stroke-width="1"/>`);
         continue;
       }
