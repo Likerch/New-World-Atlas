@@ -1335,6 +1335,7 @@ const TERMS: Record<string, [string, string]> = {
   "route.highway@cyberpunk": ["megahighway", "мегатрасса"],
   "route.highway@far-future": ["maglev line", "линия маглева"],
   "route.air@far-future": ["shuttle route", "трасса шаттлов"],
+  "route.air@industrial": ["airship line", "линия дирижаблей"],
   "route.highway@post-apocalypse": ["ruined highway", "разбитая трасса"],
   "route.road@post-apocalypse": ["broken road", "разбитая дорога"],
   "btype.hut": ["Hut", "Хижина"],

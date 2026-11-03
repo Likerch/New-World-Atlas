@@ -139,8 +139,8 @@ export function buildRoutes(g: Ground, burgs: Burg[], states: State[]): Route[] 
       for (const [a, b] of network(ports.map((port) => [port.x, port.y]), 0.1)) add("sea", findPath(g, ports[a].cell, ports[b].cell, true, roads));
     }
   }
-  // Air routes: straight between the capitals and the greatest towns, over land and sea alike.
-  if (setting.transport >= 6.5 && ageOf(setting) !== "post-apocalypse") {
+  // Air routes (airship lines in a steam age running ahead): straight between the capitals and the greatest towns.
+  if (setting.transport >= 6 && ageOf(setting) !== "post-apocalypse") {
     const hubs = burgs
       .slice(1)
       .filter((burg) => !burg.removed)

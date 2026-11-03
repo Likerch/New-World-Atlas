@@ -1,7 +1,7 @@
 // New World Atlas: the game master's map table. Every level (planet, city, building, …) supplies its settings, map
 // and inspector; the shell around them holds the tabs, the seed, export, the names' script and the language.
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { localFromLandmark, localFromMarker, localFromStar, overlaySvg, randomSeed, toCyrillic, withOverlay, type LocalLink } from "../core/index";
+import { localFromLandmark, localFromMarker, localFromStar, overlaySvg, randomSeed, toCyrillic, withOverlay, type LocalLink, settingFromText, settingToText } from "../core/index";
 import { useCampaign } from "./campaign";
 import { GmPanel, type GmMode } from "./GmPanel";
 import { translator, type Locale } from "./i18n";
@@ -117,6 +117,7 @@ export function App() {
   const planet = usePlanetLevel(
     ctx,
     query.get("seed") || undefined,
+    settingFromText(query.get("world")),
     {
       openCity: (made, burg) => {
         go("city", "planet");
@@ -164,14 +165,17 @@ export function App() {
   const levels: Level[] = [universe, galaxy, system, planet, region, underworld, city, building, local];
   const level = levels.find((item) => item.id === view) ?? planet;
 
+  const worldText = settingToText(planet.planet?.params.setting);
   useEffect(() => {
     level.ensure();
     const params = new URLSearchParams();
     params.set("view", level.id);
     if (planet.seed) params.set("seed", planet.seed);
+    // The world's age goes into the link with its seed, so the same world opens in the same age.
+    if (worldText) params.set("world", worldText);
     if (view === "city") params.set("city", city.seed);
     history.replaceState(null, "", `?${params}`);
-  }, [view, planet.seed, city.seed]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [view, planet.seed, city.seed, worldText]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fileName = `${(level.title ?? level.id).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-")}-${level.seed.replace(/\W+/gu, "-")}`;
   const map = level.map;

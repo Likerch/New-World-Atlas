@@ -1,6 +1,6 @@
 // The planet level: world settings, the world map and its inspector.
 import { useMemo, useRef, useState } from "react";
-import { createRng, defaultLayers, editPlanet, eraTheme, emptyEdits, generatePlanet, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type ThemeId } from "../../core/index";
+import { createRng, defaultLayers, editPlanet, eraTheme, emptyEdits, generatePlanet, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { SettingPanel } from "../SettingPanel";
 import { WorldEditor, type EditTool } from "../WorldEditor";
@@ -46,9 +46,9 @@ export interface PlanetLinks {
   back: (() => void) | null;
 }
 
-export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, { openCity, openRegion, openLocal, openCountry, openUnderworld, back }: PlanetLinks): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void } {
+export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, initialSetting: Partial<Setting> | undefined, { openCity, openRegion, openLocal, openCountry, openUnderworld, back }: PlanetLinks): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void } {
   const { t } = ctx;
-  const [params, setParams] = useState<PlanetParams>(() => planetParams({ seed: initialSeed }));
+  const [params, setParams] = useState<PlanetParams>(() => planetParams({ seed: initialSeed, setting: initialSetting }));
   const [raw, setPlanet] = useState<Planet | null>(null);
   const mapKey = raw ? `planet:${raw.params.seed}` : null;
   const names = ctx.names(mapKey);
@@ -63,8 +63,8 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   const [moving, setMoving] = useState<number | null>(null);
   const [history, setHistory] = useState<PlanetEdits[]>([]);
   const [time, setTime] = useState(0);
-  const [theme, setTheme] = useState<ThemeId>("atlas");
-  const [layers, setLayers] = useState<Record<LayerId, boolean>>(defaultLayers("atlas"));
+  const [theme, setTheme] = useState<ThemeId>(() => (initialSetting ? eraTheme(settingOf(initialSetting)) : "atlas"));
+  const [layers, setLayers] = useState<Record<LayerId, boolean>>(() => defaultLayers(initialSetting ? eraTheme(settingOf(initialSetting)) : "atlas"));
   const [selection, setSelection] = useState<Selection | null>(null);
   const [tab, setTab] = useState<Tab>("place");
   // The globe view: where it is turned to, or null for the flat map.

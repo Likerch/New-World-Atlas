@@ -1,6 +1,6 @@
 // Planet-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { createLanguage, createRng, armsOf, emblemOf, MIXES, SETTINGS, coatOfArms, editPlanet, emptyEdits, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
+import { createLanguage, createRng, armsOf, emblemOf, MIXES, SETTINGS, settingFromText, settingToText, coatOfArms, editPlanet, emptyEdits, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -194,6 +194,9 @@ test("the world's age reshapes towns, realms, roads, places, armies and banners,
   assert.ok(fallen.states.slice(1).some((state) => state.form === "warlord"), "warlords rule");
   const magic = age(MIXES["high-fantasy"]);
   assert.ok(magic.markers.some((marker) => marker.kind === "wizard-tower"), "wizards' towers where magic is everywhere");
+  for (const setting of [SETTINGS.modern, MIXES.steampunk, { ...SETTINGS.ancient, magic: 2, decline: 0.3, name: "Bronze gods" }]) assert.deepEqual(settingFromText(settingToText(setting)), setting, "a setting survives the link");
+  assert.equal(settingToText(SETTINGS["far-future"]), "far-future");
+  assert.equal(settingFromText("{broken"), undefined);
   const units = (world: typeof planet) => raiseArmies(world).reduce((sum, regiment) => sum + regiment.units.cavalry, 0);
   assert.equal(units(stone), 0, "no riders in the stone age");
 });

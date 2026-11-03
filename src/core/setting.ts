@@ -47,7 +47,7 @@ export const MIXES: Record<string, Setting> = {
   "high-fantasy": preset("medieval", 3, { magic: 3, name: "high-fantasy" }),
   mythic: preset("ancient", 2, { magic: 2, name: "mythic" }),
   "dark-ages": preset("medieval", 3, { decline: 0.5, density: 0.6, rule: "force", name: "dark-ages" }),
-  steampunk: preset("industrial", 5.5, { transport: 6.5, name: "steampunk" }),
+  steampunk: preset("industrial", 5.5, { transport: 6, name: "steampunk" }),
   gaslamp: preset("industrial", 5.5, { magic: 2, name: "gaslamp" }),
   "urban-fantasy": preset("modern", 7, { magic: 2, name: "urban-fantasy" }),
   "science-fantasy": preset("far-future", 9.5, { magic: 2, name: "science-fantasy" }),
@@ -85,4 +85,27 @@ export function peopleOf(setting: Setting): { rural: number; urban: number } {
   const era = techEra(setting.tech);
   const left = 1 - Math.min(0.97, setting.decline);
   return { rural: RURAL[era] * left ** 1.5 * setting.density, urban: URBAN[era] * left ** 2.5 * setting.density };
+}
+
+/** A setting as short text for a link: its era or mix name, or the whole profile when it is custom. */
+export function settingToText(setting: Partial<Setting> | undefined): string {
+  if (!setting) return "";
+  const whole = settingOf(setting);
+  const same = (other: Setting) => JSON.stringify({ ...other, name: undefined }) === JSON.stringify({ ...whole, name: undefined });
+  if (same(SETTINGS[whole.era]) && !whole.name) return whole.era;
+  const mix = Object.entries(MIXES).find(([id, preset]) => same(preset) && (!whole.name || whole.name === id))?.[0];
+  return mix ? `mix:${mix}` : JSON.stringify(whole);
+}
+
+/** The setting a link's text names; nothing for empty or unreadable text. */
+export function settingFromText(text: string | null | undefined): Partial<Setting> | undefined {
+  if (!text) return undefined;
+  if (text.startsWith("mix:")) return MIXES[text.slice(4)];
+  if (text in SETTINGS) return SETTINGS[text as EraId];
+  try {
+    const parsed = JSON.parse(text) as Partial<Setting>;
+    return parsed && typeof parsed === "object" && ERA_IDS.includes(parsed.era as EraId) ? settingOf(parsed) : undefined;
+  } catch {
+    return undefined;
+  }
 }
