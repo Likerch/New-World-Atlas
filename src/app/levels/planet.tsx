@@ -1,6 +1,6 @@
 // The planet level: world settings, the world map and its inspector.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { REROLL_STAGES, parseRecipe, recipeText, generateUnderworld, underworldGhostSvg, sheetBox, editPlanet, mapKeyOf, pastPlanet, planetGeoJSON, eraTheme, emptyEdits, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
+import { fromGeoJSON, REROLL_STAGES, parseRecipe, recipeText, generateUnderworld, underworldGhostSvg, sheetBox, editPlanet, mapKeyOf, pastPlanet, planetGeoJSON, eraTheme, emptyEdits, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { SettingPanel } from "../SettingPanel";
 import { WorldForm, type ZoomRange } from "../WorldForm";
@@ -438,6 +438,17 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
             onImage={async (file) => {
               const image = await heightsOf(file);
               change((current) => ({ ...current, image }));
+            }}
+            onGeo={async (file) => {
+              let read: ReturnType<typeof fromGeoJSON> = null;
+              try {
+                read = fromGeoJSON(JSON.parse(await file.text()), planet.params, edits?.image?.box);
+              } catch {
+                read = null;
+              }
+              if (!read) return alert(t("editor.geoNothing"));
+              const { image, labels } = read;
+              change((current) => ({ ...current, ...(image ? { image } : {}), labels: [...(current.labels ?? []), ...labels] }));
             }}
             canUndo={history.length > 0}
             onUndo={() => {

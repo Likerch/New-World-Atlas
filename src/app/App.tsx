@@ -646,7 +646,9 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
           overlayScale,
         )
       : "";
-  const exported = map ? withOverlay(map.svg, overlaySvg(patch, map.width, map.height, true, overlayScale) + legendBox, map.width, map.height) : "";
+  // An exported map is the players' unless the GM asks for their secrets too: hidden pins, notes, the fogged land.
+  const [secrets, setSecrets] = useState(false);
+  const exported = map ? withOverlay(map.svg, overlaySvg(patch, map.width, map.height, !secrets, overlayScale) + legendBox, map.width, map.height) : "";
   const pick = (x: number, y: number) => {
     if (!map) return;
     if (mode === "pin" && sheetKey) {
@@ -751,6 +753,10 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
         <details className="menu" ref={exportMenu}>
           <summary>{t("action.export")}</summary>
           <div>
+            <label className="check" title={t("export.secretsHint")}>
+              <input type="checkbox" checked={secrets} onChange={(event) => setSecrets(event.target.checked)} />
+              🔒 {t("export.secrets")}
+            </label>
             <button
               type="button"
               disabled={!map}
@@ -783,7 +789,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
               onClick={() => {
                 closeExport();
                 const data = level.data();
-                if (data) download(`${fileName}.json`, new Blob([JSON.stringify(data)], { type: "application/json" }));
+                if (data) download(`${fileName}.json`, new Blob([JSON.stringify(secrets ? { ...(data as object), gm: patch } : data)], { type: "application/json" }));
               }}
             >
               {t("action.exportJson")}

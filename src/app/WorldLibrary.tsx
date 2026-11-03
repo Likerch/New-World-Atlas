@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { ERA_IDS, randomSeed, settingOf, SETTINGS, TOP_LEVELS, type EraId, type Setting, type TopLevel, type WorldDoc } from "../core/index";
 import type { T } from "./i18n";
 import { SettingPanel } from "./SettingPanel";
+import { packOwn, readPack } from "./pack";
 import type { NewWorld, Snapshot, Worlds } from "./worlds";
 
 /** Worlds to try the Atlas on: each a different age, from a different top map. */
@@ -39,6 +40,7 @@ export function WorldLibrary({ t, worlds, onClose, onWorldSetting }: { t: T; wor
     worlds.snapshots(world.id).then(setShots);
   }, [world.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const picker = useRef<HTMLInputElement>(null);
+  const packPicker = useRef<HTMLInputElement>(null);
   const when = (time: number) => new Date(time).toLocaleString(t.locale);
   const era = (setting: Partial<Setting>) => t(`era.${settingOf(setting).era}`);
 
@@ -257,6 +259,33 @@ export function WorldLibrary({ t, worlds, onClose, onWorldSetting }: { t: T; wor
           >
             ✨ {t("worlds.create")}
           </button>
+          <h3>{t("pack.title")}</h3>
+          <p className="muted">{t("pack.hint")}</p>
+          <div className="row-buttons">
+            <button type="button" onClick={() => download("own-content.atlas-pack.json", packOwn())}>
+              📦 {t("pack.save")}
+            </button>
+            <button type="button" onClick={() => packPicker.current?.click()}>
+              📂 {t("pack.load")}
+            </button>
+            <input
+              ref={packPicker}
+              type="file"
+              accept=".json,application/json"
+              hidden
+              onChange={async (event) => {
+                const file = event.target.files?.[0];
+                event.target.value = "";
+                if (!file) return;
+                try {
+                  const count = readPack(JSON.parse(await file.text()));
+                  alert(count === null ? t("pack.notPack") : t("pack.loaded", { count }));
+                } catch {
+                  alert(t("pack.notPack"));
+                }
+              }}
+            />
+          </div>
           <h3>{t("demo.title")}</h3>
           <div className="row-buttons">
             {DEMOS.map((demo) => (

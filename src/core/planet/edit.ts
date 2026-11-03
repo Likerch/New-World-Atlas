@@ -15,7 +15,7 @@ export interface PlanetEdits {
   /** Relief brush strokes. */
   terrain: Stroke[];
   /** A heightmap from a picture, 0–100 by row: it replaces the generated relief before any stroke. */
-  image?: { width: number; height: number; heights: number[] };
+  image?: { width: number; height: number; heights: number[]; box?: [number, number, number, number] };
   /** Land given to another realm: cell → state. */
   owners: Record<number, number>;
   /** Towns moved, by id: where they stand now. */

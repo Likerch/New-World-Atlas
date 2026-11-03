@@ -1,6 +1,6 @@
 // Planet-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { parseRecipe, recipeText, generateArea, koppenOf, KOPPEN, planetGeoJSON, sculpt, zonesOf, cellKm2, pastPlanet, shiftLanguage, createLanguage, createRng, armsOf, emblemOf, MIXES, SETTINGS, settingFromText, settingToText, coatOfArms, editPlanet, emptyEdits, foundedSize, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
+import { fromGeoJSON, parseRecipe, recipeText, generateArea, koppenOf, KOPPEN, planetGeoJSON, sculpt, zonesOf, cellKm2, pastPlanet, shiftLanguage, createLanguage, createRng, armsOf, emblemOf, MIXES, SETTINGS, settingFromText, settingToText, coatOfArms, editPlanet, emptyEdits, foundedSize, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -395,6 +395,24 @@ test("a stage thrown again leaves the stages before it; families of tongues", ()
   assert.deepEqual(names.burgs.map((b) => b.name), base.burgs.map((b) => b.name), "names moved the towns");
   const kin = generatePlanet({ seed: "reroll", cells: 3000, families: 2 });
   assert.equal(new Set(kin.cultures.slice(1).map((c) => c.family)).size, Math.min(2, kin.cultures.length - 1));
+});
+
+test("relief and names from GeoJSON: cells with a height, named places, north up", () => {
+  const square = (x: number, y: number, h: number) => ({ type: "Feature", properties: { height: h }, geometry: { type: "Polygon", coordinates: [[[x, y], [x + 10, y], [x + 10, y + 10], [x, y + 10], [x, y]]] } });
+  const doc = { type: "FeatureCollection", features: [square(0, 0, 5), square(10, 0, 70), square(0, 10, 70), square(10, 10, 5), { type: "Feature", properties: { name: "Northport", capital: true }, geometry: { type: "Point", coordinates: [15, 15] } }] };
+  const read = fromGeoJSON(doc, { width: 1600, height: 1000 })!;
+  const { width, height, heights } = read.image!;
+  const at = (fx: number, fy: number) => heights[Math.floor(fy * height) * width + Math.floor(fx * width)];
+  // North up: the high square at (10–20, 0–10) lies in the lower right, the one at (0–10, 10–20) in the upper left.
+  assert.equal(at(0.6, 0.75), 70);
+  assert.equal(at(0.4, 0.25), 70);
+  assert.equal(at(0.6, 0.25), 5);
+  const [x, y, words, size] = read.labels[0];
+  assert.equal(words, "Northport");
+  assert.ok(x > 800 && y < 500 && size > 9, "the capital stands in the north-east, large");
+  const places = fromGeoJSON({ type: "FeatureCollection", features: [doc.features[4]] }, { width: 1600, height: 1000 }, read.image!.box)!;
+  assert.deepEqual(places.labels[0].slice(0, 2), read.labels[0].slice(0, 2), "a file of places alone lands where the relief put them");
+  assert.equal(fromGeoJSON({ type: "FeatureCollection", features: [] }, { width: 1600, height: 1000 }), null);
 });
 
 console.log(`planet: ${passed} regressions passed`);

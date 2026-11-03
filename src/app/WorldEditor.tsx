@@ -46,6 +46,8 @@ interface Props {
   /** A change to the edits (one undo step). */
   change: (next: (current: PlanetEdits) => PlanetEdits) => void;
   onImage: (file: File) => void;
+  /** Relief and place names from a GeoJSON file (Azgaar's cells and burgs, or any GIS data). */
+  onGeo?: (file: File) => void;
   canUndo: boolean;
   onUndo: () => void;
   onReset: () => void;
@@ -99,7 +101,7 @@ export function editAt(planet: Planet, edits: PlanetEdits | null, tool: EditTool
   }
 }
 
-export function WorldEditor({ t, nm, planet, edits, tool, setTool, brush, setBrush, paint, setPaint, moving, started, selection, change, onImage, canUndo, onUndo, onReset, tools }: Props) {
+export function WorldEditor({ t, nm, planet, edits, tool, setTool, brush, setBrush, paint, setPaint, moving, started, selection, change, onImage, onGeo, canUndo, onUndo, onReset, tools }: Props) {
   const towns = edits ? Object.keys(edits.moved).length + edits.added.length + edits.removed.length + Object.keys(edits.towns ?? {}).length : 0;
   const realm = !tools && selection?.kind === "state" && selection.id ? planet.states[selection.id] : null;
   const town = selection?.kind === "burg" ? planet.burgs[selection.id] : null;
@@ -166,6 +168,20 @@ export function WorldEditor({ t, nm, planet, edits, tool, setTool, brush, setBru
         <label>
           🖼 {t("editor.image")}
           <input type="file" accept="image/*" onChange={(event) => event.target.files?.[0] && onImage(event.target.files[0])} />
+        </label>
+      ) : null}
+      {onGeo && (!tools || tools.includes("raise")) ? (
+        <label title={t("editor.geoHint")}>
+          🗺 {t("editor.geo")}
+          <input
+            type="file"
+            accept=".json,.geojson,application/json,application/geo+json"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) onGeo(file);
+            }}
+          />
         </label>
       ) : null}
       {edits?.image ? (
