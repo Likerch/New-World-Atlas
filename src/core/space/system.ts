@@ -171,8 +171,9 @@ export function starContext(galaxy: Galaxy, starId: number, hops?: number): Star
   const empire = galaxy.empires[star.empire];
   let jumps = hops ?? 99;
   if (hops === undefined && star.empire && empire) {
+    // Jumps along lanes, gates and wormholes, as the galaxy's survey counts them.
     const next = galaxy.stars.map(() => [] as number[]);
-    for (const [a, b] of galaxy.lanes) (next[a].push(b), next[b].push(a));
+    for (const [a, b] of [...galaxy.lanes, ...(galaxy.gates ?? []), ...(galaxy.wormholes ?? [])]) (next[a].push(b), next[b].push(a));
     const seen = new Map([[empire.capital, 0]]);
     for (let queue = [empire.capital]; queue.length && !seen.has(starId); ) {
       const after: number[] = [];
@@ -454,11 +455,16 @@ function placeSites(system: Bare, star: Star, context: StarContext, rng: Rng, op
   const tongue = { ...(system.language ?? createLanguage(rng.fork("tongue"))) };
   const sites: Site[] = [];
   const outer = Math.max(system.frost * 1.2, ...bodies.map((b) => b.orbit), 1);
-  const add = (kind: SiteKind, at: { body?: Body | null; moon?: number; orbit?: number; angle?: number }, crew: number, extra: Partial<Site> = {}) => {
+  const add = (kind: SiteKind, at: { body?: Body | null; moon?: number; orbit?: number; angle?: number }, crew: number, extra: Partial<Site> = {}, own: Rng = rng) => {
     const body = at.body ?? null;
-    sites.push({ id: sites.length, kind, name: name(tongue, rng, "plain"), body: body?.id ?? null, ...(at.moon !== undefined ? { moon: at.moon } : {}), orbit: body ? body.orbit : (at.orbit ?? outer), angle: body ? body.angle : (at.angle ?? rng.float(-0.7, 0.7)), crew: Math.round(crew), ...extra });
+    sites.push({ id: sites.length, kind, name: name(tongue, own, "plain"), body: body?.id ?? null, ...(at.moon !== undefined ? { moon: at.moon } : {}), orbit: body ? body.orbit : (at.orbit ?? outer), angle: body ? body.angle : (at.angle ?? own.float(-0.7, 0.7)), crew: Math.round(crew), ...extra });
   };
-  for (const b of bodies) if (b.station) add(star.feature === "station" && b.id === 0 ? "station" : stationKind(context, rng), { body: b }, rng.float(200, 6000), star.feature === "station" && b.id === 0 ? { main: true } : {});
+  // Each world's station draws from its own stream: a station the GM adds or takes away changes no other.
+  for (const b of bodies) {
+    if (!b.station) continue;
+    const own = rng.fork(`station-${b.id}`);
+    add(star.feature === "station" && b.id === 0 ? "station" : stationKind(context, own), { body: b }, own.float(200, 6000), star.feature === "station" && b.id === 0 ? { main: true } : {}, own);
+  }
   const feature = star.feature;
   if (feature && !(feature === "station" && sites.some((s) => s.main))) {
     const kind = FEATURE_SITE[feature];

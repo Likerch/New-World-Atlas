@@ -207,6 +207,7 @@ export function useUniverseLevel(ctx: LevelContext, links: SpaceLinks, setting?:
             let near: number | null = null;
             let gap = Infinity;
             for (const a of universe.anomalies) {
+              if (ctx.players && a.custom && universe.params.custom.find((kind) => kind.id === a.custom)?.secret) continue;
               const d = anomalyDistance(a, x, y);
               const reach = a.kind === "cosmic-string" || a.kind === "bubble-wall" ? 10 : Math.max(12, a.kind === "great-attractor" || a.kind === "dark-flow" || a.kind === "custom" ? a.size : 12);
               if (d < reach && d < gap) {

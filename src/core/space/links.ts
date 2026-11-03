@@ -3,6 +3,8 @@
 // the system's age, a colony as a habitat city, a ringworld's face and a rogue planet as planets, and the game master's
 // own things as whatever map they were given. From the universe: a galaxy with what its node there holds, a crystal
 // sphere's system, a plane of existence as a world, a strange thing as a map of its own.
+import { createLanguage } from "../language";
+import { createRng } from "../random";
 import { ERA_BUILDINGS, type BuildingParams, type BuildingType } from "../building/plan";
 import type { CityParams } from "../city/model";
 import type { Language } from "../language";
@@ -69,9 +71,14 @@ const SITE_FEATURE: Partial<Record<SiteKind, SpaceFeature>> = {
  * not goblins. */
 export function siteOfStar(galaxy: Galaxy, starId: number): LocalLink | null {
   const star = galaxy.stars[starId];
-  if (!star?.feature) return null;
+  // A ringworld's face and a rogue planet are worlds: they open as planets, from the star's system.
+  if (!star?.feature || star.feature === "ringworld" || star.feature === "rogue-planet") return null;
   const local = FEATURE_LOCAL[star.feature];
-  return { params: { seed: `${galaxy.params.seed}/star-${starId}/site`, kind: local.kind, theme: local.theme, danger: local.danger ?? 2, age: localAge(galaxy.age), name: star.name }, language: star.empire ? galaxy.empires[star.empire].language : null };
+  if (!local) return null;
+  // The tongue its system speaks: its power's, or a free world's own (as generateSystem gives it).
+  const seed = `${galaxy.params.seed}/star-${starId}`;
+  const language = star.empire ? galaxy.empires[star.empire].language : star.independent ? createLanguage(createRng(seed).fork("free-tongue")) : null;
+  return { params: { seed: `${seed}/site`, kind: local.kind, theme: local.theme, danger: local.danger ?? 2, age: localAge(galaxy.age), name: star.name }, language };
 }
 
 /** The age a local map out in space lives in: the far future, or the world's own when the stars follow another age. */

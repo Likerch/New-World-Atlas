@@ -1,6 +1,6 @@
 // Galaxy and star-system regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { anomalyDistance, anomalyPoint, bodyCode, renderSector, sectorLayout, sectorPick, buildingOfSite, localOfBelt, systemLegend, cityOfBody, cleanGalaxyEdits, cleanKind, cosmicHooks, editGalaxy, editUniverse, emptyGalaxyEdits, filamentPath, galaxyOfNode, generateUniverse, localFromStar, localOfSite, openingOfAnomaly, powersOf, renameGalaxy, renderUniverse, shapeOf, siteOfStar, skyOf, starLore, surveyGalaxy, systemLore, tradeCodes, GALAXY_SHAPES, generateGalaxy, generateLoneSystem, generatePlanet, generateSystem, planetFromBody, renderGalaxy, renderSystem, type SpaceFeature } from "../src/core/index";
+import { loneSystemKeyOf, mapKeyOf, systemKeyOf, galaxyParams, anomalyDistance, anomalyPoint, bodyCode, renderSector, sectorLayout, sectorPick, buildingOfSite, localOfBelt, systemLegend, cityOfBody, cleanGalaxyEdits, cleanKind, cosmicHooks, editGalaxy, editUniverse, emptyGalaxyEdits, filamentPath, galaxyOfNode, generateUniverse, localFromStar, localOfSite, openingOfAnomaly, powersOf, renameGalaxy, renderUniverse, shapeOf, siteOfStar, skyOf, starLore, surveyGalaxy, systemLore, tradeCodes, GALAXY_SHAPES, generateGalaxy, generateLoneSystem, generatePlanet, generateSystem, planetFromBody, renderGalaxy, renderSystem, type SpaceFeature } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -342,12 +342,18 @@ test("every point of interest opens as its own map; the old six as they were; st
   const galaxy = generateGalaxy({ seed: "links", anomalies: 3 });
   for (const star of galaxy.stars.filter((s) => s.feature)) {
     const site = siteOfStar(galaxy, star.id);
+    // A ringworld's face and a rogue planet open as planets from their system, the same from both levels.
+    if (star.feature === "ringworld" || star.feature === "rogue-planet") {
+      assert.equal(site, null, `${star.feature} opens a local map from the galaxy`);
+      continue;
+    }
     assert.ok(site, `${star.feature} opens nothing`);
     const old = localFromStar(galaxy, star.id);
     if (old) assert.deepEqual([site!.params.seed, site!.params.theme, site!.params.kind], [old.params.seed, old.params.theme, old.params.kind], `${star.feature} moved its map`);
     const system = generateSystem(galaxy, star.id);
     const main = system.sites.find((s) => s.main);
     if (main && localOfSite(system, main)) assert.equal(localOfSite(system, main)!.params.seed, site!.params.seed, "the same place from the galaxy and from the system");
+    if (star.independent) assert.deepEqual(site!.language?.consonants, system.language?.consonants, "a free world's place speaks its system's tongue");
   }
   const capital = generateSystem(galaxy, galaxy.empires[1].capital);
   const port = capital.sites.find((s) => s.kind === "highport")!;
@@ -449,6 +455,42 @@ test("a sector map lays each of its stars on a hex of its own, and a click finds
       assert.ok(hex.x > 0 && hex.x < 1600 && hex.y > 0 && hex.y < 1000, "a hex off the sheet");
     }
     assert.doesNotMatch(renderSector(galaxy, survey, sector.id, { highlightStar: layout.hexes[0].star }), /NaN|undefined|Infinity/u);
+  }
+});
+
+test("review fixes: kinds are cleaned, odd edits are refused, keys hold, stations keep to themselves", () => {
+  const evil = { id: "x", name: "X", glyph: "!", color: '#000" onmouseover="alert(1)', count: 5, where: "anywhere" as const, area: true };
+  const galaxy = generateGalaxy({ seed: "evil", custom: [evil] as never });
+  assert.ok(!renderGalaxy(galaxy).includes("onmouseover"), "a colour carried markup into the map");
+  assert.ok(!renderUniverse(generateUniverse({ seed: "evil", custom: [evil] as never })).includes("onmouseover"));
+  const g = generateGalaxy({ seed: "edit-test" });
+  const other = g.empires[2].capital;
+  const moved = editGalaxy(g, { ...emptyGalaxyEdits(), capitals: { 1: other } });
+  assert.equal(moved.empires[2].capital, other, "a capital was taken from its power");
+  assert.equal(moved.stars[other].empire, 2);
+  const odd = editGalaxy(g, cleanGalaxyEdits({ stars: { 3: { feature: "space-whale", empire: "x", settled: "yes" } } })!);
+  assert.equal(odd.stars[3].feature, g.stars[3].feature, "an unknown feature was set");
+  const node = generateUniverse({ seed: "ukey-0" });
+  const gated = node.gates?.[0];
+  if (gated) {
+    const params = galaxyOfNode(node, gated[0]);
+    const renamed = { ...params, origin: { ...params.origin, gate: "Another Name" } };
+    assert.equal(mapKeyOf("galaxy", params as never), mapKeyOf("galaxy", renamed as never), "renaming a neighbour moved a galaxy's notes");
+  }
+  assert.notEqual(systemKeyOf({ seed: "same-seed" }, 5), systemKeyOf({ seed: "same-seed", stars: 1200 }, 5), "two galaxies of one seed share a system's notes");
+  assert.equal(systemKeyOf(galaxyParams({ seed: "same-seed" }), 5), "system:same-seed/star-5", "a galaxy of its seed's own keeps its old system keys");
+  assert.notEqual(loneSystemKeyOf({ seed: "l", worlds: 5 }), loneSystemKeyOf({ seed: "l", worlds: 7 }));
+  // A station the GM adds changes no other station.
+  const stars = generateGalaxy({ seed: "links" });
+  for (const star of stars.stars.filter((s) => s.settled).slice(0, 30)) {
+    const before = generateSystem(stars, star.id);
+    const target = before.bodies.find((b) => !b.station && !b.removed);
+    if (!target) continue;
+    const after = generateSystem(stars, star.id, { edits: { bodies: { [target.id]: { station: true } }, added: [], removed: [] } });
+    for (const site of before.sites.filter((s) => s.body !== null && s.body !== target.id && !s.main && s.kind !== "highport")) {
+      const same = after.sites.find((s) => s.body === site.body && s.moon === site.moon && s.kind === site.kind);
+      assert.ok(same && same.name === site.name, `a station over world ${site.body} changed when another was added`);
+    }
   }
 });
 

@@ -6,7 +6,7 @@
 // and takes them out, and prints the system's card.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CustomKinds, loadKinds, saveKinds } from "../CustomKinds";
-import {
+import { systemKeyOf, loneSystemKeyOf, siteKey, cleanKind,
   BODY_KINDS,
   bodyCode,
   bodyOf,
@@ -95,9 +95,9 @@ export function useSystemLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
   const [input, setInput] = useState<SystemParams>(() => ({ seed: randomSeed() }));
   const [kinds, setKinds] = useState<CustomKind[]>(() => loadKinds("atlas.kinds.system"));
   const [applied, setApplied] = useState<CustomKind[]>(kinds);
-  const seed = source ? `${source.galaxy.params.seed}/star-${source.star}` : lone?.seed ?? null;
-  // A lone system is keyed apart from a galaxy's star of the same seed: their worlds are not the same.
-  const mapKey = seed ? (source ? `system:${seed}` : `system:lone/${seed}`) : null;
+  // A galaxy's star is keyed by its galaxy as grown (not its seed alone); a lone system by what shapes it, apart from a
+  // galaxy's star of the same seed.
+  const mapKey = source ? systemKeyOf(source.galaxy.params, source.star) : lone ? loneSystemKeyOf(lone) : null;
   const patch = ctx.patch(mapKey);
   const edits = useMemo(() => cleanSystemEdits(patch.changes?.system), [patch.changes?.system]);
   const settingKey = JSON.stringify(setting ?? {});
@@ -148,11 +148,11 @@ export function useSystemLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
     setInput({ seed: `${galaxy.params.seed}/star-${star}` });
     reset();
   };
-  const makeLone = (next: SystemParams) => {
+  const makeLone = (next: SystemParams, custom: CustomKind[] = kinds) => {
     setSource(null);
     setLone(next);
     setInput(next);
-    setApplied(kinds);
+    setApplied(custom);
     reset();
   };
   // The galaxy a restored system hangs from, with the game master's edits and names on it.
@@ -170,6 +170,18 @@ export function useSystemLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
     lastSetting.current = settingKey;
     if (source) restoreFrom(source.galaxy.params, source.star);
   }, [settingKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The galaxy changed under this star (its owner repainted, a capital moved, lanes cut, names given): the system
+  // follows it at once rather than at the next visit.
+  const galaxyKey = source ? mapKeyOf("galaxy", source.galaxy.params as unknown as Record<string, unknown>) : null;
+  const galaxyPatch = ctx.patch(galaxyKey);
+  const galaxyPrint = `${galaxyKey}|${JSON.stringify(galaxyPatch.changes?.galaxy ?? null)}|${JSON.stringify(galaxyPatch.names)}`;
+  const lastGalaxy = useRef(galaxyPrint);
+  useEffect(() => {
+    const before = lastGalaxy.current;
+    lastGalaxy.current = galaxyPrint;
+    if (before === galaxyPrint || !source || before.split("|")[0] !== galaxyKey) return;
+    restoreFrom(source.galaxy.params, source.star);
+  }, [galaxyPrint]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const change = (next: (current: SystemEdits) => SystemEdits) => {
     setHistory((past) => [...past.slice(-40), patch.changes?.system as SystemEdits | undefined]);
@@ -184,8 +196,6 @@ export function useSystemLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
         const current = cleanGalaxyEdits(p.changes?.galaxy) ?? emptyGalaxyEdits();
         return { ...p, changes: { ...p.changes, galaxy: { ...current, stars: { ...current.stars, [source.star]: { ...current.stars[source.star], empire: Number(value) } } } } };
       });
-      const edited = editGalaxy(source.galaxy, { ...emptyGalaxyEdits(), stars: { [source.star]: { empire: Number(value) } } });
-      setSource({ ...source, galaxy: edited });
     } else change((e) => ({ ...e, owner: value }));
   };
 
@@ -205,7 +215,7 @@ export function useSystemLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
     const kind = site.custom ? custom.get(site.custom) : undefined;
     const entity = `site:${site.kind}:${site.body ?? "free"}${site.moon !== undefined ? `:${site.moon}` : ""}`;
     if (kind) {
-      const way = openingOf(kind, `${system.seed}/site-${site.id}`, siteName(site), system.age, system.language);
+      const way = openingOf(kind, siteKey(system, site), siteName(site), system.age, system.language);
       if (way?.local) links.openLocal(way.local, entity);
       else if (way?.building) links.openBuilding(way.building, entity);
       else if (way?.planet) links.openPlanet(way.planet, entity);
@@ -225,13 +235,15 @@ export function useSystemLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
     if (tool === "add") {
       const { centre, maxOrbit } = systemLayout(system, view);
       const r = Math.hypot(x - centre[0], y - centre[1]);
-      const span = view === "orbits" ? [46, SYSTEM_SIZE.height / 2 - 70] : [90, SYSTEM_SIZE.width - 260];
+      // The inverse of systemLayout's rOf: the same offsets and spans as the map is drawn with.
+      const span = view === "orbits" ? [46, SYSTEM_SIZE.height / 2 - 110] : [90, SYSTEM_SIZE.width - 260];
       const orbit = Math.max(0.02, ((r - span[0]) / span[1]) ** 2 * maxOrbit);
       const angle = Math.atan2(y - centre[1], x - centre[0]);
       change((e) => ({ ...e, added: [...e.added, { orbit: Math.round(orbit * 1000) / 1000, kind: addKind, angle: Math.round(angle * 100) / 100 }] }));
       return;
     }
-    const site = system.sites.find((s) => Math.hypot(sitePoint(system, s, view, day).x - x, sitePoint(system, s, view, day).y - y) < 9);
+    const hidden = (s: Site) => ctx.players && !!s.custom && !!custom.get(s.custom)?.secret;
+    const site = system.sites.find((s) => !hidden(s) && Math.hypot(sitePoint(system, s, view, day).x - x, sitePoint(system, s, view, day).y - y) < 9);
     if (site && !tool) return setSelection({ kind: "site", id: site.id });
     for (const b of bodies)
       for (let k = 0; k < b.moons.length; k++) {
@@ -271,7 +283,7 @@ export function useSystemLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
     setSeed: (value) => setInput((current) => ({ ...current, seed: value })),
     generate: (value) => {
       const plain = input.spectral === undefined && input.settled === undefined && input.worlds === undefined && input.companion === undefined && input.feature === undefined && input.natives === undefined && input.form === undefined;
-      if (!value && source && input.seed === seed && plain) {
+      if (!value && source && input.seed === `${source.galaxy.params.seed}/star-${source.star}` && plain) {
         setApplied(kinds);
         reset();
       } else makeLone(value ? { ...input, seed: value } : input);
@@ -284,9 +296,11 @@ export function useSystemLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
     // A system cut from a galaxy is remembered by its galaxy and star; a lone one by its own parameters.
     params: system ? (source ? { galaxy: source.galaxy.params as unknown as Record<string, unknown>, star: source.star, ...(applied.length ? { custom: applied } : {}) } : ({ ...lone, ...(applied.length ? { custom: applied } : {}) } as unknown as Record<string, unknown>)) : null,
     restore: (saved) => {
-      if (Array.isArray(saved.custom)) setApplied(saved.custom as CustomKind[]);
+      // The kinds the system was saved with, not the ones the panel holds now.
+      const custom = (Array.isArray(saved.custom) ? (saved.custom as CustomKind[]) : []).map(cleanKind);
+      setApplied(custom);
       if (saved.galaxy) restoreFrom(saved.galaxy as Partial<GalaxyParams>, saved.star as number);
-      else makeLone(saved as unknown as SystemParams);
+      else makeLone(saved as unknown as SystemParams, custom);
     },
     selected: !system ? null : { key: selectedKey!, label: selectedSite ? siteName(selectedSite) : selectedMoon && selectedBody ? `${nm(selectedBody.name)} ${selectedMoon.name}` : selectedBody ? nm(selectedBody.name) : nm(system.name) },
     map: system

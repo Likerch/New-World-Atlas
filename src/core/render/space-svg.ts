@@ -466,7 +466,7 @@ export function renderGalaxy(galaxy: Galaxy, options: SpaceRenderOptions = {}): 
       }
     }
     out.push(`</g>`);
-    if (layers.sectors && survey) out.push(`<g font-size="8" font-style="italic" fill="#e6ecff" opacity="0.6" text-anchor="middle">${survey.sectors.map((sector) => `<text x="${r1(galaxy.stars[sector.capital].x)}" y="${r1(galaxy.stars[sector.capital].y - 9)}">${text(sector.name)}</text>`).join("")}</g>`);
+    if (layers.sectors && survey) out.push(`<g font-size="8" font-style="italic" fill="#e6ecff" opacity="0.6" text-anchor="middle">${survey.sectors.map((sector) => `<text x="${r1(galaxy.stars[sector.capital].x)}" y="${r1(galaxy.stars[sector.capital].y - 9)}">${text(galaxy.stars[sector.capital].name)}</text>`).join("")}</g>`);
     for (const nebula of galaxy.nebulae) out.push(`<text x="${r1(nebula.x)}" y="${r1(nebula.y)}" text-anchor="middle" font-size="9" font-style="italic" fill="${nebula.color}" opacity="0.7">${text(nebula.name)}</text>`);
     for (const zone of zones) out.push(`<text x="${r1(zone.x)}" y="${r1(zone.y + zone.r * zone.squash + 10)}" text-anchor="middle" font-size="8" font-style="italic" fill="${zone.kind === "custom" ? (custom.get(zone.custom ?? "")?.color ?? "#ffd27a") : ZONE_STYLE[zone.kind].edge}" opacity="0.8">${text(zone.name)}</text>`);
   }

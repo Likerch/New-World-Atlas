@@ -123,7 +123,7 @@ export interface Universe {
 
 /** A universe's parameters; a setting of magic sees crystal spheres unless told otherwise. */
 export function universeParams(input: Partial<UniverseParams> = {}, setting?: Partial<Setting> | null): UniverseParams {
-  return {
+  const params: UniverseParams = {
     seed: input.seed || randomSeed(),
     galaxies: input.galaxies ?? 320,
     width: 1600,
@@ -138,6 +138,8 @@ export function universeParams(input: Partial<UniverseParams> = {}, setting?: Pa
     cosmology: setting && spaceAge(setting).fantasy ? "spheres" : "web",
     ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined && v !== "")),
   };
+  params.custom = Array.isArray(params.custom) ? params.custom.map(cleanKind) : [];
+  return params;
 }
 
 /** The galaxy-map shape a galaxy of a kind is drawn with. */

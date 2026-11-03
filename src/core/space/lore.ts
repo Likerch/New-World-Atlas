@@ -9,7 +9,8 @@ import type { EraId } from "../setting";
 import type { Galaxy, SpaceFeature } from "./galaxy";
 import type { StarContext, TradeCode, WorldProfile, WorldTag } from "./profile";
 import type { GalaxySurvey } from "./survey";
-import type { Site, SiteKind, StarSystem } from "./system";
+import { inEllipse, type Site, type SiteKind, type StarSystem } from "./system";
+import { siteKey } from "./links";
 import type { Universe } from "./universe";
 
 /** The tongue a star's people speak: its power's, a free world's own, or one for whoever happens to be there. */
@@ -201,7 +202,7 @@ export function galaxyLoreInput(galaxy: Galaxy, survey: GalaxySurvey | null, sta
       return !best || d < best.d ? { name: other.name, d } : best;
     }, null);
   const gate = (galaxy.gates ?? []).find(([a, b]) => a === starId || b === starId) ?? galaxy.wormholes.find(([a, b]) => a === starId || b === starId);
-  const zone = (galaxy.zones ?? []).find((z) => z.kind !== "custom" && Math.hypot(z.x - star.x, z.y - star.y) < z.r);
+  const zone = (galaxy.zones ?? []).find((z) => z.kind !== "custom" && inEllipse(z, star.x, star.y));
   return {
     ...(power ? { power: power.name } : {}),
     ...(enemyId ? { enemy: galaxy.empires[enemyId].name } : {}),
@@ -227,7 +228,7 @@ export function systemLore(system: StarSystem, galaxy: Galaxy | null, survey: Ga
 export function siteLore(system: StarSystem, site: Site): Npc[] {
   const roles = SITE_ROLES[site.kind];
   if (!roles || (!site.crew && site.kind !== "relay")) return [];
-  return crowdOf(`${system.seed}/site-${site.kind}-${site.body ?? "free"}-${site.moon ?? ""}`, tongueOf(system.seed, system.language, true), roles, roles.length, system.age.era);
+  return crowdOf(`${siteKey(system, site)}/keepers`, tongueOf(system.seed, system.language, true), roles, roles.length, system.age.era);
 }
 
 /** Who governs a settled world of a system (its main world's governor is the system's). */

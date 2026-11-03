@@ -189,7 +189,7 @@ const FEATURES: [SpaceFeature, number][] = [["ruins", 3], ["station", 4], ["anom
 export function galaxyParams(input: Partial<GalaxyParams> = {}): GalaxyParams {
   const seed = input.seed || randomSeed();
   const rng = createRng(seed).fork("galaxy-params");
-  return {
+  const params: GalaxyParams = {
     seed,
     shape: rng.weighted<GalaxyShape>([["spiral", 5], ["barred", 3], ["elliptical", 2], ["ring", 1], ["clusters", 1]]),
     stars: rng.int(500, 900),
@@ -201,7 +201,13 @@ export function galaxyParams(input: Partial<GalaxyParams> = {}): GalaxyParams {
     custom: [],
     ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined && value !== "")),
   };
+  // The GM's kinds as a file or this browser gives them may say anything: only clean ones go on.
+  params.custom = Array.isArray(params.custom) ? params.custom.map(cleanKind) : [];
+  return params;
 }
+
+/** The features a star may have: what a file or an edit names otherwise is not one. */
+export const SPACE_FEATURES: SpaceFeature[] = ["ruins", "station", "anomaly", "derelict", "pirate-base", "relay", "shipyard", "research", "quarantine", "wormhole", "dyson-sphere", "ringworld", "jump-gate", "graveyard", "leviathan", "time-rift", "rogue-planet", "vault", "trade-hub", "mining", "prison", "beacon"];
 
 /** Wonders past the old points of interest: where each turns up, and how often. */
 const WONDERS: [SpaceFeature, number, (star: Star) => boolean][] = [
@@ -447,7 +453,7 @@ export function generateGalaxy(input: Partial<GalaxyParams> = {}, setting?: Part
       const d = Math.hypot(star.x - cx, star.y - cy) / R;
       return kind.where === "claimed" ? star.empire > 0 : kind.where === "unclaimed" ? star.empire === 0 : kind.where === "core" ? d < 0.35 : kind.where === "rim" ? d > 0.7 : kind.where === "nebula" ? nebulae.some((n) => Math.hypot(n.x - star.x, n.y - star.y) < n.r) : true;
     };
-    const options = own.shuffle(stars.filter((star) => fits(star) && !star.capital));
+    const options = own.shuffle(stars.filter((star) => fits(star) && !star.capital && (kind.area || !star.custom)));
     for (const star of options.slice(0, kind.count)) {
       if (kind.area) zones.push({ id: zones.length, kind: "custom", custom: kind.id, x: star.x, y: star.y, r: own.float(35, 80), angle: own.float(0, Math.PI), squash: own.float(0.55, 1), name: kind.name || name(own.pick(tongues), own, "plain") });
       else star.custom = kind.id;

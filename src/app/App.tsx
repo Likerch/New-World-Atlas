@@ -12,6 +12,8 @@ import {
   localFromCavern,
   cityFromBurg,
   editPlanet,
+  loneSystemKeyOf,
+  type SystemParams,
   buildingOfMarker,
   localAt,
   generateArea,
@@ -425,7 +427,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     openLoneSystem: (params, entity) => {
       const base = { seed: randomSeed(), ...params } as Record<string, unknown>;
       linkTo("system", from(), entity, base);
-      system.restore!(resolve(world, `system:lone/${base.seed}`, base));
+      system.restore!(resolve(world, loneSystemKeyOf(base as unknown as SystemParams), base));
       setView("system");
     },
     openLocal: (link, entity) => openLocal(from(), link, entity),

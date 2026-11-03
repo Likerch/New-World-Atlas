@@ -2,7 +2,7 @@
 // changes.system), are laid over the generator's output every time it is made, and can be undone step by step or thrown
 // away: a star repainted to another power or another class, a capital moved, a lane drawn or cut, a gate or a wonder
 // set down; a world of another kind, its people, a station, an owner, a world put in or taken out.
-import { pairGates, SPECTRA, type Galaxy, type SpaceFeature, type SpectralClass } from "./galaxy";
+import { SPACE_FEATURES, pairGates, SPECTRA, type Galaxy, type SpaceFeature, type SpectralClass } from "./galaxy";
 import type { Body, BodyKind } from "./system";
 
 export interface StarEdit {
@@ -65,7 +65,8 @@ export function editGalaxy(galaxy: Galaxy, edits: GalaxyEdits | null | undefined
   // Capitals first: the new capital is its power's, and settled.
   for (const [key, to] of Object.entries(e.capitals)) {
     const power = empires[Number(key)];
-    if (!power || !Number(key) || !valid(to)) continue;
+    // Onto another power's capital it cannot go: that power would be left without one.
+    if (!power || !Number(key) || !valid(to) || (stars[to].capital && stars[to].empire !== power.id)) continue;
     if (stars[power.capital]) stars[power.capital].capital = false;
     Object.assign(stars[to], { capital: true, empire: power.id, settled: true, independent: false });
     power.capital = to;
@@ -74,13 +75,13 @@ export function editGalaxy(galaxy: Galaxy, edits: GalaxyEdits | null | undefined
     const star = stars[Number(key)];
     if (!star) continue;
     if (change.spectral && SPECTRA[change.spectral]) star.spectral = change.spectral;
-    if (change.feature !== undefined) {
+    if (change.feature !== undefined && (change.feature === null || SPACE_FEATURES.includes(change.feature))) {
       star.feature = change.feature;
       if (change.feature !== "jump-gate") delete star.farGate;
     }
-    if (change.settled !== undefined && !star.capital) star.settled = change.settled;
+    if (typeof change.settled === "boolean" && !star.capital) star.settled = change.settled;
     // A capital stays its power's: move the capital first.
-    if (change.empire !== undefined && empires[change.empire] && !star.capital) star.empire = change.empire;
+    if (Number.isInteger(change.empire) && empires[change.empire!] && !star.capital) star.empire = change.empire!;
     star.independent = !star.empire && star.settled;
   }
   const lanes = galaxy.lanes.filter((lane) => !e.cut.some((cut) => same(cut, lane)));
@@ -91,6 +92,8 @@ export function editGalaxy(galaxy: Galaxy, edits: GalaxyEdits | null | undefined
   const taken = new Set(joined.flat());
   const gates = [...joined, ...pairGates(stars.filter((star) => !taken.has(star.id)))];
   const wormholes = galaxy.wormholes.filter(([a, b]) => stars[a].feature === "wormhole" && stars[b].feature === "wormhole");
+  // A wormhole the GM closed at one end is closed at the other too.
+  for (const [a, b] of galaxy.wormholes) for (const id of [a, b]) if (stars[id].feature === "wormhole" && !wormholes.some((pair) => pair.includes(id))) stars[id].feature = null;
   for (const empire of empires) empire.stars = 0;
   for (const star of stars) empires[star.empire].stars++;
   return { ...galaxy, stars, empires, lanes, gates, wormholes };
@@ -172,7 +175,7 @@ export function applySystemEdits(bodies: Body[], edits: SystemEdits | null | und
     reshape(body, add.kind, star);
     const change = e.bodies[next];
     if (change?.kind && KINDS.includes(change.kind)) reshape(body, change.kind, star);
-    if (change?.population !== undefined) body.population = Math.max(0, change.population);
+    if (change?.population !== undefined && Number.isFinite(change.population)) body.population = Math.max(0, change.population);
     if (change?.station !== undefined) body.station = !!change.station;
     if (change?.owner !== undefined) body.owner = change.owner;
     out.push(body);

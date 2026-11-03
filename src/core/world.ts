@@ -173,6 +173,27 @@ const SHAPED: Partial<Record<MapLevel, [(seed: string) => object, string[]]>> = 
   universe: [(seed) => universeParams({ seed }), ["custom"]],
 };
 
+/** What a key leaves out of the parameters it prints: names handed down (a gate's far galaxy, a far power), which the
+ * GM may rename without the map becoming another. */
+const unnamed = (level: MapLevel, field: string, value: unknown): unknown => {
+  if (level !== "galaxy" || field !== "origin" || !value || typeof value !== "object") return value;
+  const origin = value as { gate?: unknown; power?: Record<string, unknown> };
+  return { ...origin, ...(origin.gate !== undefined ? { gate: true } : {}), ...(origin.power ? { power: { ...origin.power, name: undefined } } : {}) };
+};
+
+/** A galaxy's star system: keyed by its galaxy as grown, so the same seed grown otherwise does not share its notes. */
+export function systemKeyOf(galaxy: Record<string, unknown> | object, star: number): string {
+  return `system:${mapKeyOf("galaxy", galaxy as Record<string, unknown>).slice("galaxy:".length)}/star-${star}`;
+}
+
+/** A lone star system: its seed, and a print of what shapes it besides (class, worlds, companion, settlers…). */
+export function loneSystemKeyOf(params: Record<string, unknown> | object): string {
+  const own = params as Record<string, unknown>;
+  const fields = Object.keys(own).filter((field) => !["seed", "name", "custom"].includes(field) && own[field] !== undefined).sort();
+  const plain = `system:lone/${String(own.seed)}`;
+  return fields.length ? `${plain}~${hashString(fields.map((field) => `${field}=${JSON.stringify(own[field])}`).join("&")).toString(36)}` : plain;
+}
+
 /** A map's key for the GM's names, notes, pins and edits: its level and seed, and a short print of the settings it
  * grew from when they are not its seed's own, so the same seed grown another way does not wear another map's notes. */
 export function mapKeyOf(level: MapLevel, params: Record<string, unknown>): string {
@@ -184,18 +205,30 @@ export function mapKeyOf(level: MapLevel, params: Record<string, unknown>): stri
   const differs = Object.keys(params)
     .filter((field) => !["seed", "name", "world", ...shaped[1]].includes(field) && params[field] !== undefined && !same(params[field], own[field]))
     .sort();
-  return differs.length ? `${plain}~${hashString(differs.map((field) => `${field}=${JSON.stringify(params[field])}`).join("&")).toString(36)}` : plain;
+  return differs.length ? `${plain}~${hashString(differs.map((field) => `${field}=${JSON.stringify(unnamed(level, field, params[field]))}`).join("&")).toString(36)}` : plain;
 }
 
 /** A world saved before map keys carried their print: each map, its patch and the links to it move to its key now. */
 export function rekey(world: WorldDoc): WorldDoc {
   const moves = new Map<string, string>();
   for (const [key, map] of Object.entries(world.maps)) {
-    // Only a map keyed by its level and seed alone, of a kind whose key now carries a print.
-    if (!SHAPED[map.level] || key !== `${map.level}:${String(map.params.seed)}`) continue;
+    // A map of a kind whose key carries a print, keyed otherwise than its parameters key it now.
+    const plain = `${map.level}:${String(map.params.seed)}`;
+    if (!SHAPED[map.level] || (key !== plain && !key.startsWith(`${plain}~`))) continue;
     const next = mapKeyOf(map.level, map.params);
     if (next !== key && !world.maps[next]) moves.set(key, next);
   }
+  // The local map of a star's place once hung by the star's own entity, so renaming the place renamed the star.
+  let sites = false;
+  const steps = Object.fromEntries(
+    Object.entries(world.maps).map(([key, map]) => {
+      const parent = map.parent ? world.maps[map.parent] : undefined;
+      if (map.level !== "local" || parent?.level !== "galaxy" || !map.step || !/^star:\d+$/u.test(map.step.entity)) return [key, map];
+      sites = true;
+      return [key, { ...map, step: { ...map.step, entity: `${map.step.entity}:site` } }];
+    }),
+  );
+  if (sites) world = { ...world, maps: steps };
   if (!moves.size) return world;
   const to = (key: string | null) => (key !== null ? moves.get(key) ?? key : null);
   const maps = Object.fromEntries(Object.entries(world.maps).map(([key, map]) => [to(key)!, { ...map, parent: to(map.parent) }]));

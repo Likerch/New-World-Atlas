@@ -5,7 +5,7 @@
 // kept in the map's patch, undoable and resettable.
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CustomKinds, loadKinds, saveKinds } from "../CustomKinds";
-import {
+import { systemKeyOf,
   cleanGalaxyEdits,
   cleanSystemEdits,
   countGalaxyEdits,
@@ -78,7 +78,7 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
   const edits = useMemo(() => cleanGalaxyEdits(patch.changes?.galaxy), [patch.changes?.galaxy]);
   const edited = useMemo(() => (raw ? editGalaxy(raw, edits) : null), [raw, edits]);
   // A world the game master reshaped in its system shows its new profile here too.
-  const systemEdits = (id: number) => (edited ? cleanSystemEdits(ctx.patch(`system:${edited.params.seed}/star-${id}`).changes?.system) : null);
+  const systemEdits = (id: number) => (edited ? cleanSystemEdits(ctx.patch(systemKeyOf(edited.params, id)).changes?.system) : null);
   const systemEditsKey = edited ? edited.stars.map((star) => (systemEdits(star.id) ? `${star.id}:${JSON.stringify(systemEdits(star.id))}` : "")).filter(Boolean).join("|") : "";
   const survey = useMemo(() => (edited ? surveyGalaxy(edited, systemEdits) : null), [edited, systemEditsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   const galaxy = useMemo(() => (edited ? renameGalaxy(edited, names) : null), [edited, names]);
@@ -112,6 +112,8 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
       setHistory([]);
       setPending(null);
       setSectorView(null);
+      setPower(1);
+      setFilter((current) => ({ ...current, power: NO_FILTER.power }));
       setVersion((v) => v + 1);
     });
   // The world's setting changed: the same galaxy, grown again in it.
@@ -124,6 +126,7 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
   const set = <K extends keyof GalaxyParams>(key: K, value: GalaxyParams[K]) => setInput((current) => ({ ...current, [key]: value }));
 
   const kinds = new Map((galaxy?.params.custom ?? []).map((kind) => [kind.id, kind]));
+  const secret = (id?: string) => ctx.players && !!id && !!kinds.get(id)?.secret;
   const filtering = Object.values(filter).some(Boolean);
   const matches = useMemo(() => {
     if (!galaxy || !survey) return [];
@@ -146,7 +149,7 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
   }, [galaxy, survey, filter, nm]);
   const marked = useMemo(() => (filtering ? matches.map((s) => s.id) : []), [filtering, matches]);
   // Without a filter the list shows the notable stars.
-  const listed = filtering ? matches : matches.filter((s) => s.capital || s.feature || s.custom || s.independent || s.natives);
+  const listed = filtering ? matches : matches.filter((s) => s.capital || s.feature || (s.custom && !secret(s.custom)) || s.independent || s.natives);
   const svg = useMemo(() => (galaxy ? renderGalaxy(galaxy, { script: ctx.script, highlight: empire, highlightZone: zone, highlightStar: star, survey, layers, marked, pending, players: ctx.players }) : ""), [galaxy, ctx.script, empire, zone, star, survey, layers, marked, pending, ctx.players]);
   const legend = useMemo(() => (galaxy ? galaxyLegend(galaxy, survey, layers, ctx.players) : undefined), [galaxy, survey, layers, ctx.players]);
   const sector = galaxy && survey && sectorView !== null && survey.sectors[sectorView] ? survey.sectors[sectorView] : null;
@@ -172,7 +175,7 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
     if (tool === "paint") {
       if (!target.capital) editStar(id, { empire: power });
     } else if (tool === "capital") {
-      if (power > 0) change((e) => ({ ...e, capitals: { ...e.capitals, [power]: id } }));
+      if (power > 0 && !(target.capital && target.empire !== power)) change((e) => ({ ...e, capitals: { ...e.capitals, [power]: id } }));
     } else if (pending === null) setPending(id);
     else if (pending !== id) {
       const pair: [number, number] = [pending, id];
@@ -182,7 +185,7 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
           if (exists) return e.added.some((lane) => sameLane(lane, pair)) ? { ...e, added: e.added.filter((lane) => !sameLane(lane, pair)) } : { ...e, cut: [...e.cut, pair] };
           return e.cut.some((lane) => sameLane(lane, pair)) ? { ...e, cut: e.cut.filter((lane) => !sameLane(lane, pair)) } : { ...e, added: [...e.added, pair] };
         });
-      } else change((e) => ({ ...e, gates: e.gates.some((gate) => sameLane(gate, pair)) ? e.gates.filter((gate) => !sameLane(gate, pair)) : [...e.gates, pair] }));
+      } else change((e) => ({ ...e, gates: e.gates.some((gate) => sameLane(gate, pair)) ? e.gates.filter((gate) => !sameLane(gate, pair)) : [...e.gates.filter((gate) => !gate.includes(pair[0]) && !gate.includes(pair[1])), pair] }));
       setPending(null);
     }
   };
@@ -279,7 +282,7 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
               if (onStar) applyTool(best);
               return;
             }
-            const region = onStar ? undefined : galaxy.zones.find((z) => inEllipse(z, x, y));
+            const region = onStar ? undefined : galaxy.zones.find((z) => !secret(z.custom) && inEllipse(z, x, y));
             const reach = Math.sqrt((galaxy.params.width * galaxy.params.height) / galaxy.stars.length) * 1.4;
             const realm = !onStar && !region && best >= 0 && distance < reach ? galaxy.stars[best].empire : 0;
             const cloud = !onStar && !region && !realm ? galaxy.nebulae.find((n) => Math.hypot(n.x - x, n.y - y) < n.r * 0.7) : undefined;
@@ -447,9 +450,9 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
               ) : selected.feature === "jump-gate" && !selected.farGate ? (
                 <p className="muted">{t("space.gateDormant")}</p>
               ) : null}
-              {selected.custom && kinds.get(selected.custom) ? <CustomThing t={t} kind={kinds.get(selected.custom)!} onOpen={() => openCustom(selected.id)} /> : null}
+              {selected.custom && kinds.get(selected.custom) && !secret(selected.custom) ? <CustomThing t={t} kind={kinds.get(selected.custom)!} onOpen={() => openCustom(selected.id)} /> : null}
               {galaxy.zones
-                .filter((z) => inEllipse(z, selected.x, selected.y))
+                .filter((z) => !secret(z.custom) && inEllipse(z, selected.x, selected.y))
                 .map((z) => (
                   <Row key={z.id} label={t("zone.inside")} value={zoneName(z)} />
                 ))}
@@ -469,7 +472,7 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
                 ☀️ {t("action.openSystem")}
               </button>
               {site ? (
-                <button type="button" className="wide" onClick={() => links.openLocal(site, `star:${selected.id}`)}>
+                <button type="button" className="wide" onClick={() => links.openLocal(site, `star:${selected.id}:site`)}>
                   🗺️ {t("action.openLocal")}
                 </button>
               ) : null}
@@ -660,7 +663,7 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
                   </li>
                 ))
               : tab === "zones"
-                ? galaxy.zones.map((z) => (
+                ? galaxy.zones.filter((z) => !secret(z.custom)).map((z) => (
                     <li
                       key={z.id}
                       aria-selected={zone === z.id}
@@ -689,7 +692,7 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
                           {nm(s.name)}
                         </span>
                         <small>
-                          <code>{survey.worlds[s.id].code}</code> {s.feature ? FEATURE_GLYPH[s.feature] : s.custom ? kinds.get(s.custom)?.glyph : ""}
+                          <code>{survey.worlds[s.id].code}</code> {s.feature ? FEATURE_GLYPH[s.feature] : s.custom && !secret(s.custom) ? kinds.get(s.custom)?.glyph : ""}
                         </small>
                       </li>
                     ))}

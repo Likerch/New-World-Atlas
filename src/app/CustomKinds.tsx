@@ -1,14 +1,14 @@
 // The game master's own kinds of thing for a space map: each a row with its mark, colour, name, how many, where it
 // turns up and whether it is a region; what it is, whether the players may see it, and what it opens into. They are
 // kept in this browser, so the next map starts with them.
-import type { CustomKind, KindOpening, Placement } from "../core/index";
+import { cleanKind, type CustomKind, type KindOpening, type Placement } from "../core/index";
 import type { T } from "./i18n";
 import { NumberInput } from "./NumberInput";
 
 export function loadKinds(key: string): CustomKind[] {
   try {
     const kinds = JSON.parse(localStorage.getItem(key) ?? "[]");
-    return Array.isArray(kinds) ? kinds : [];
+    return Array.isArray(kinds) ? kinds.map(cleanKind) : [];
   } catch {
     return [];
   }
