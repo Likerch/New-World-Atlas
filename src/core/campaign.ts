@@ -29,6 +29,9 @@ export interface MapPatch {
   fog: { enabled: boolean; revealed: [number, number, number][] };
   /** A planet's edits from the world editor. */
   edits?: PlanetEdits;
+  /** Other levels' edits over what was generated (a galaxy's, a city's, a building's…), each under its own name, so
+   * they can be undone or thrown away one by one. */
+  changes?: Record<string, unknown>;
 }
 
 export interface Campaign {
