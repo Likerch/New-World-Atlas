@@ -175,7 +175,7 @@ test("a place has one handbook page at every scale; pages are safe Markdown, fou
 test("golden prints: the generator draws the same maps until its version says otherwise", () => {
   // A change to what the generator draws must come with a new GENERATOR (the app then tells the GM the old maps were
   // made by an older one) and new prints here.
-  const golden = { generator: "2026.11.2", planet: 1889868844, region: 1343108870, galaxy: 2739417600, local: 4248020585 };
+  const golden = { generator: "2026.11.3", planet: 572519043, region: 81653941, galaxy: 2739417600, local: 4248020585 };
   const planet = generatePlanet({ seed: "golden", template: "continents", cells: 4000 });
   const region = generateRegion(planet, planet.provinces.slice(1).sort((a, b) => b.cells - a.cells)[0].id, 4000);
   const galaxy = generateGalaxy({ seed: "golden" });

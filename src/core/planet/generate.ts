@@ -6,7 +6,7 @@ import { createRng, hashString, randomSeed } from "../random";
 import { isClassic, peopleOf, settingOf } from "../setting";
 import { settleAge } from "./age";
 import { biomeOf } from "./biomes";
-import { precipitation, temperatures } from "./climate";
+import { maritime, precipitation, temperatures } from "./climate";
 import { placeBurgs } from "./burgs";
 import { heightsFromImage, sculpt, type PlanetEdits } from "./edit";
 import { settleCultures, suitability } from "./cultures";
@@ -78,6 +78,7 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   const ocean = (cell: number) => height[cell] < SEA_LEVEL && sea.features[sea.feature[cell]].kind === "ocean";
   const temperature = temperatures(mesh, params, height, rng.fork("temperature"));
   const rain = precipitation(mesh, params, height, ocean, temperature, rng.fork("rain"));
+  maritime(mesh, params, ocean, temperature, rain);
   const hydro = hydrology(mesh, height, ocean, rain, scale, undefined, evaporationOf(temperature));
   const water = new Uint8Array(mesh.cells);
   for (let cell = 0; cell < mesh.cells; cell++) water[cell] = ocean(cell) || hydro.lake[cell] ? 1 : 0;

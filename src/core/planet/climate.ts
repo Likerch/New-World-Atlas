@@ -89,3 +89,56 @@ export function precipitation(mesh: Mesh, params: PlanetParams, height: Float32A
   }
   return out;
 }
+
+/**
+ * The sea's hand on the coasts and its absence inland: warm currents along the oceans' western sides in the warm
+ * latitudes (the continents' eastern shores, mild and wet), cold ones along their eastern sides in the subtropics (the
+ * continents' western shores, cool and dry: the coastal deserts), the westerlies' mild wet air on the western shores of
+ * the middle latitudes; and the deeper cold of great interiors far from any sea.
+ */
+export function maritime(mesh: Mesh, params: PlanetParams, ocean: (cell: number) => boolean, temperature: Float32Array, rain: Float32Array): void {
+  const n = mesh.cells;
+  // How many cells from the ocean, and where along x the nearest ocean lies.
+  const reach = new Int32Array(n).fill(-1);
+  const seaX = new Float32Array(n);
+  let ring: number[] = [];
+  for (let cell = 0; cell < n; cell++) {
+    if (!ocean(cell)) continue;
+    reach[cell] = 0;
+    seaX[cell] = mesh.x[cell];
+    ring.push(cell);
+  }
+  for (let step = 1; ring.length && step <= 30; step++) {
+    const next: number[] = [];
+    for (const cell of ring) {
+      for (const m of mesh.neighbors[cell]) {
+        if (reach[m] >= 0) continue;
+        reach[m] = step;
+        seaX[m] = seaX[cell];
+        next.push(m);
+      }
+    }
+    ring = next;
+  }
+  if (ring.length === n) return;
+  for (let cell = 0; cell < n; cell++) {
+    if (ocean(cell)) continue;
+    const latitude = Math.abs(latitudeOf(params, mesh.y[cell]));
+    const far = reach[cell] < 0 ? 31 : reach[cell];
+    const shore = Math.max(0, 1 - (far - 1) / 4);
+    const seaWest = seaX[cell] < mesh.x[cell];
+    if (shore > 0) {
+      if (seaWest && latitude >= 12 && latitude < 35) {
+        temperature[cell] -= 3 * shore;
+        rain[cell] *= 1 - 0.45 * shore;
+      } else if (seaWest && latitude >= 38 && latitude < 65) {
+        temperature[cell] += 3 * shore;
+        rain[cell] *= 1 + 0.25 * shore;
+      } else if (!seaWest && latitude < 38) {
+        temperature[cell] += 1.5 * shore;
+        rain[cell] *= 1 + 0.2 * shore;
+      }
+    }
+    if (latitude > 35 && far > 6) temperature[cell] -= Math.min(4, (far - 6) * 0.15) * ((latitude - 35) / 55 + 0.3);
+  }
+}
