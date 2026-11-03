@@ -68,6 +68,7 @@ import { setUnits } from "./format";
 import { printAtlas } from "./book";
 import { Handbook } from "./Handbook";
 import { Search } from "./Search";
+import { CheatSheet, Tour } from "./Help";
 import { growPlanet } from "./work";
 
 function download(name: string, blob: Blob) {
@@ -186,6 +187,25 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   // The handbook (at a page, or at its index) and the world's search.
   const [book, setBook] = useState<{ key: string; map: string; entity: string; name: string } | null | "index">(null);
   const [searching, setSearching] = useState(false);
+  const [help, setHelp] = useState(false);
+  // The tour shows itself once, on the first visit.
+  const [touring, setTouring] = useState(() => {
+    try {
+      return !localStorage.getItem("atlas.toured");
+    } catch {
+      return false;
+    }
+  });
+  const endTour = () => {
+    setTouring(false);
+    try {
+      localStorage.setItem("atlas.toured", "1");
+    } catch {
+      // A private window: the tour may show again next time.
+    }
+  };
+  // Back and forward in the browser walk the levels the GM went through.
+  const popping = useRef(false);
   const closeExport = () => exportMenu.current?.removeAttribute("open");
   const setLegendOpen = (open: boolean) => {
     setLegendOpenState(open);
@@ -521,15 +541,37 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     if (last && last.level !== world.top) openMap(world.last.key!);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
-    history.replaceState(null, "", `?view=${view}`);
+    if (popping.current) popping.current = false;
+    else if (new URLSearchParams(location.search).get("view") !== view) history.pushState(null, "", `?view=${view}`);
     const key = levelKey(view);
     if (key && world.maps[key] && world.last.key !== key) worlds.update((current) => ({ ...current, last: { ...current.last, key } }), true);
   }, [view]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
+    const onPop = () => {
+      const next = new URLSearchParams(location.search).get("view") as LevelId | null;
+      if (!next || next === view || !byId[next]) return;
+      popping.current = true;
+      showLevel(next);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  });
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      const typing = (event.target as Element | null)?.closest?.("input, textarea, select, [contenteditable]");
-      if (typing || !(event.ctrlKey || event.metaKey)) return;
+      const typing = (event.target as Element | null)?.closest?.("input, textarea, select, [contenteditable], dialog");
+      if (typing) return;
+      if (!event.ctrlKey && !event.metaKey && !event.altKey) {
+        // ? for help, / to search, 1–9 for the levels in the bar.
+        const tabs = levels.filter((item) => shown.includes(item.id));
+        if (event.key === "?") setHelp(true);
+        else if (event.key === "/") setSearching(true);
+        else if (/^[1-9]$/u.test(event.key) && tabs[Number(event.key) - 1]) showLevel(tabs[Number(event.key) - 1].id);
+        else return;
+        event.preventDefault();
+        return;
+      }
       const key = event.key.toLowerCase();
       if (key === "k") setSearching(true);
       else if (key === "z" && !event.shiftKey) worlds.undo();
@@ -748,6 +790,9 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
             ))}
           </div>
         </details>
+        <button type="button" className="ghost" onClick={() => setHelp(true)} title={`${t("help.title")} (?)`} aria-label={t("help.title")}>
+          ?
+        </button>
         <button type="button" className="ghost" onClick={() => setLocale(locale === "ru" ? "en" : "ru")}>
           {locale === "ru" ? "EN" : "RU"}
         </button>
@@ -838,6 +883,17 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
           onClose={() => setBook(null)}
         />
       ) : null}
+      {help ? (
+        <CheatSheet
+          t={t}
+          onClose={() => setHelp(false)}
+          onTour={() => {
+            setHelp(false);
+            setTouring(true);
+          }}
+        />
+      ) : null}
+      {touring && !help ? <Tour t={t} onClose={endTour} /> : null}
       {searching ? (
         <Search
           t={t}

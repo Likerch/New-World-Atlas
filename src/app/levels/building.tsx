@@ -20,6 +20,7 @@ import {
   generateBuilding,
   generateRoom,
   localFromHatch,
+  localFromCellar,
   materialOf,
   neighbours,
   PX,
@@ -490,6 +491,11 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null, o
                   {hatch && openLocal && !ctx.players ? (
                     <button type="button" className="primary wide" onClick={() => openLocal(localFromHatch(plan, language), `hatch:${current.level}:${selectedRoom.id}`)}>
                       ⬇ {t("action.downHatch")}
+                    </button>
+                  ) : null}
+                  {current.level < 0 && openLocal && !ctx.players && localFromCellar(plan, language) ? (
+                    <button type="button" className="wide" onClick={() => openLocal(localFromCellar(plan, language), "cellar")}>
+                      🕯 {t("action.cellarDeep")}
                     </button>
                   ) : null}
                   {close === null ? (

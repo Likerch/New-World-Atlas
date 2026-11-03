@@ -1186,3 +1186,33 @@ dialog.modal::backdrop {
 .room-list .chip select {
   max-width: 120px;
 }
+
+/* Help: the cheat sheet and the tour. */
+dialog.cheat {
+  width: min(560px, 100%);
+}
+kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  white-space: nowrap;
+}
+dialog.tour {
+  width: min(440px, 100%);
+}
+dialog.tour-levels {
+  margin-top: 70px;
+}
+dialog.tour-map {
+  margin: auto;
+}
+dialog.tour-inspector {
+  margin-right: 24px;
+}
+dialog.tour-controls,
+dialog.tour-gm {
+  margin-left: 24px;
+}
