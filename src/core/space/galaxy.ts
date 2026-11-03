@@ -2,14 +2,18 @@
 // hyperlanes between neighbours (always one connected network), wormholes between far stars, nebulae, interstellar
 // powers that spread along the lanes, and points of interest for a game master: ruins and stations, megastructures,
 // graveyards of ships and things that live between the stars; regions of trouble (ion storms, dead zones, rifts);
-// and whatever kinds of thing the game master invents.
+// and whatever kinds of thing the game master invents. Free worlds outside the powers, peoples who have never left
+// their world, jump gates joined in pairs; the world's setting tunes it all (who rules, how far things have fallen),
+// and a galaxy opened from the universe brings what its node there had: a far power, a gate, the strange nearby.
 import Delaunator from "delaunator";
 import { paletteColor } from "../color";
 import type { Point } from "../geometry";
 import { createLanguage, name, type Language } from "../language";
 import { PriorityQueue } from "../queue";
 import { createRng, randomSeed, type Rng } from "../random";
+import type { Rule, Setting } from "../setting";
 import { cleanKind, type CustomKind } from "./custom";
+import { spaceAge, type SpaceAge } from "./profile";
 
 export type GalaxyShape = "spiral" | "barred" | "elliptical" | "ring" | "clusters";
 export const GALAXY_SHAPES: GalaxyShape[] = ["spiral", "barred", "elliptical", "ring", "clusters"];
@@ -30,7 +34,10 @@ export const SPECTRA: Record<SpectralClass, { weight: number; color: string; lum
   BH: { weight: 0.002, color: "#111111", luminosity: 0, mass: 10, size: 1.8 },
 };
 
-export type EmpireForm = "empire" | "republic" | "hegemony" | "collective" | "union" | "dominion" | "consortium" | "federation" | "theocracy";
+export type EmpireForm = "empire" | "republic" | "hegemony" | "collective" | "union" | "dominion" | "consortium" | "federation" | "theocracy" | "kingdom" | "hive" | "technocracy" | "corporate" | "machine" | "pirate-kingdom" | "nomad-fleet" | "junta" | "directorate";
+export const EMPIRE_FORMS: EmpireForm[] = ["empire", "republic", "hegemony", "collective", "union", "dominion", "consortium", "federation", "theocracy", "kingdom", "hive", "technocracy", "corporate", "machine", "pirate-kingdom", "nomad-fleet", "junta", "directorate"];
+/** What a power's people are. */
+export type Nature = "human" | "humanoid" | "insectoid" | "reptilian" | "avian" | "aquatic" | "machine" | "energy" | "plantlike" | "lithoid" | "amorphous";
 export type SpaceFeature =
   | "ruins"
   | "station"
@@ -86,6 +93,12 @@ export interface Star {
   feature: SpaceFeature | null;
   /** One of the game master's own kinds of thing found here. */
   custom?: string;
+  /** Settled, but by no power: a free world. */
+  independent?: boolean;
+  /** People who have never left their world live here. */
+  natives?: boolean;
+  /** A gate to another galaxy: that galaxy's name. */
+  farGate?: string;
 }
 
 export interface Empire {
@@ -96,7 +109,11 @@ export interface Empire {
   capital: number;
   stars: number;
   species: string;
+  /** What its people are. */
+  nature: Nature;
   language: Language;
+  /** The far power of the universe this one belongs to, by name. */
+  branch?: string;
 }
 
 export interface Nebula {
@@ -122,6 +139,18 @@ export interface GalaxyParams {
   anomalies: number;
   /** The game master's own kinds of thing. */
   custom: CustomKind[];
+  /** What the galaxy's node in the universe hands down: the strange nearby, a gate to another galaxy, a far power. */
+  origin?: GalaxyOrigin;
+}
+
+/** What a galaxy opened from the universe brings with it. */
+export interface GalaxyOrigin {
+  /** Strange things of the universe near it, by kind ("great-attractor", "white-hole"…). */
+  touched?: string[];
+  /** The galaxy a gate here leads to. */
+  gate?: string;
+  /** A power of the universe that holds this galaxy too. */
+  power?: { name: string; form: EmpireForm; color: string };
 }
 
 export interface Galaxy {
@@ -133,11 +162,28 @@ export interface Galaxy {
   empires: Empire[];
   nebulae: Nebula[];
   zones: Zone[];
+  /** Jump gates joined in pairs. */
+  gates: [number, number][];
   /** Light years per map unit. */
   scale: number;
+  /** The age the stars live in. */
+  age: SpaceAge;
 }
 
 const FORMS: EmpireForm[] = ["empire", "republic", "hegemony", "collective", "union", "dominion", "consortium", "federation", "theocracy"];
+/** Forms past the first nine, which a power takes now and then. */
+const NEW_FORMS: EmpireForm[] = ["kingdom", "hive", "technocracy", "corporate", "machine", "pirate-kingdom", "nomad-fleet", "junta", "directorate"];
+/** The forms a setting's kind of rule favours. */
+const RULE_FORMS: Record<Rule, EmpireForm[]> = {
+  any: [],
+  crowns: ["empire", "kingdom", "dominion"],
+  people: ["republic", "federation", "union"],
+  faith: ["theocracy"],
+  force: ["hegemony", "junta", "empire"],
+  trade: ["consortium", "corporate", "directorate"],
+  machines: ["machine", "collective", "technocracy"],
+};
+const NATURES: [Nature, number][] = [["human", 3], ["humanoid", 4], ["insectoid", 2], ["reptilian", 2], ["avian", 1.5], ["aquatic", 1.5], ["machine", 1], ["energy", 0.5], ["plantlike", 1], ["lithoid", 1], ["amorphous", 0.7]];
 const FEATURES: [SpaceFeature, number][] = [["ruins", 3], ["station", 4], ["anomaly", 3], ["derelict", 3], ["pirate-base", 2], ["relay", 2], ["shipyard", 2], ["research", 2], ["quarantine", 1]];
 
 export function galaxyParams(input: Partial<GalaxyParams> = {}): GalaxyParams {
@@ -236,8 +282,10 @@ function place(params: GalaxyParams, rng: Rng): Point[] {
   return points;
 }
 
-export function generateGalaxy(input: Partial<GalaxyParams> = {}): Galaxy {
+/** A galaxy of the given parameters, in the world's setting (none, or the classic medieval world, is the far future). */
+export function generateGalaxy(input: Partial<GalaxyParams> = {}, setting?: Partial<Setting> | null): Galaxy {
   const params = galaxyParams(input);
+  const age = spaceAge(setting);
   const rng = createRng(params.seed);
   const points = place(params, rng.fork("stars"));
   const n = points.length;
@@ -277,7 +325,7 @@ export function generateGalaxy(input: Partial<GalaxyParams> = {}): Galaxy {
   }
 
   // Powers: capitals at sunlike stars well apart, spreading along the lanes.
-  const empires: Empire[] = [{ id: 0, name: "", form: "empire", color: "#666666", capital: -1, stars: 0, species: "", language: tongues[0] }];
+  const empires: Empire[] = [{ id: 0, name: "", form: "empire", color: "#666666", capital: -1, stars: 0, species: "", nature: "humanoid", language: tongues[0] }];
   const sunlike = stars.filter((star) => ["F", "G", "K"].includes(star.spectral)).map((star) => star.id);
   const gap = Math.min(params.width, params.height) / Math.sqrt(params.empires) / 1.6;
   const hue = rng.next();
@@ -288,12 +336,16 @@ export function generateGalaxy(input: Partial<GalaxyParams> = {}): Galaxy {
     for (const id of capitals.shuffle([...pool])) {
       if (empires.length > params.empires) break;
       if (empires.slice(1).some((empire) => empire.capital === id || Math.hypot(stars[empire.capital].x - stars[id].x, stars[empire.capital].y - stars[id].y) < spread)) continue;
-      const own = rng.fork(`empire-${empires.length}`);
       const language = tongues[(empires.length - 1) % tongues.length];
-      empires.push({ id: empires.length, name: name(language, own, "land"), form: own.pick(FORMS), color: paletteColor(empires.length, hue, 0.7, 0.58), capital: id, stars: 0, species: name(language, own, "people"), language });
+      empires.push({ ...founding(rng, empires.length, language), color: paletteColor(empires.length, hue, 0.7, 0.58), capital: id, stars: 0, language });
     }
     if (empires.length > params.empires) break;
   }
+  // Forms past the first nine and the forms the setting's rule favours; what each power's people are; the far power of
+  // the universe that holds one of them. Each from a stream of its own, so stars, names and borders stay where they were.
+  reform(empires.slice(1), rng, age);
+  const branch = params.origin?.power;
+  if (branch && empires[1]) Object.assign(empires[1], { name: branch.name, form: branch.form, color: branch.color, branch: branch.name });
   const best = new Float64Array(n).fill(Infinity);
   const queue = new PriorityQueue<[number, number]>();
   const reach = empires.map(() => rng.float(0.7, 1.4));
@@ -331,6 +383,14 @@ export function generateGalaxy(input: Partial<GalaxyParams> = {}): Galaxy {
     star.name = called;
   }
 
+  // Free worlds out of the powers' reach (more where the setting is crowded or fallen), and peoples who never left
+  // their world, each from a stream of its own.
+  const free = rng.fork("independents");
+  const share = Math.min(0.5, 0.07 * age.setting.density * (1 + age.setting.decline));
+  for (const star of stars) if (!star.empire && ["F", "G", "K", "M"].includes(star.spectral) && free.chance(share)) Object.assign(star, { settled: true, independent: true });
+  const tribes = rng.fork("natives");
+  for (const star of stars) if (!star.capital && ["F", "G", "K"].includes(star.spectral) && tribes.chance(0.03)) star.natives = true;
+
   // Points of interest, wormholes and nebulae.
   const features = rng.fork("features");
   const strange = Math.max(0, Math.min(3, params.anomalies));
@@ -358,16 +418,29 @@ export function generateGalaxy(input: Partial<GalaxyParams> = {}): Galaxy {
     const options = WONDERS.filter(([, , fits]) => fits(star));
     if (options.length) star.feature = wonders.weighted(options.map(([kind, weight]): [SpaceFeature, number] => [kind, weight]));
   }
+  // A fallen age leaves ruins, wrecks, graveyards and sealed worlds.
+  if (age.setting.decline > 0) {
+    const ruin = rng.fork("fallen");
+    for (const star of stars) if (!star.capital && !star.feature && ruin.chance(age.setting.decline * 0.12)) star.feature = ruin.pick<SpaceFeature>(["ruins", "derelict", "graveyard", "quarantine", "ruins"]);
+  }
   const zoneRng = rng.fork("zones");
   const zones: Zone[] = [];
   for (let k = Math.round(zoneRng.int(3, 7) * strange); k > 0; k--) {
     const star = zoneRng.pick(stars);
     zones.push({ id: zones.length, kind: zoneRng.weighted(ZONE_WEIGHTS), x: star.x + zoneRng.float(-20, 20), y: star.y + zoneRng.float(-20, 20), r: zoneRng.float(30, 95), angle: zoneRng.float(0, Math.PI), squash: zoneRng.float(0.45, 1), name: name(zoneRng.pick(tongues), zoneRng, "plain") });
   }
-  // The game master's own kinds: points at fitting stars, or regions round them.
   const cx = params.width / 2,
     cy = params.height / 2;
   const R = Math.min(params.width, params.height) * 0.46;
+  touch(params, stars, zones, tongues, rng);
+  // A gate to another galaxy stands on the rim; the galaxy's own gates answer each other in pairs.
+  if (params.origin?.gate) {
+    const rim = rng.fork("far-gate");
+    const options = stars.filter((star) => !star.capital && !star.feature && Math.hypot(star.x - cx, star.y - cy) > R * 0.6);
+    if (options.length) Object.assign(rim.pick(options), { feature: "jump-gate", farGate: params.origin.gate });
+  }
+  const gates = pairGates(stars);
+  // The game master's own kinds: points at fitting stars, or regions round them.
   (params.custom ?? []).map(cleanKind).forEach((kind) => {
     const own = rng.fork(`custom-${kind.id}`);
     const fits = (star: Star) => {
@@ -380,5 +453,80 @@ export function generateGalaxy(input: Partial<GalaxyParams> = {}): Galaxy {
       else star.custom = kind.id;
     }
   });
-  return { params, name: params.name || name(tongues[0], rng.fork("galaxy-name"), "land"), stars, lanes, wormholes, empires, nebulae, zones, scale: 100_000 / Math.min(params.width, params.height) };
+  return { params, name: params.name || name(tongues[0], rng.fork("galaxy-name"), "land"), stars, lanes, wormholes, empires, nebulae, zones, gates, scale: 100_000 / Math.min(params.width, params.height), age };
+}
+
+/** A power as it is founded: its name, first form and people, from its own stream and its tongue. */
+function founding(rng: Rng, id: number, language: Language): Pick<Empire, "id" | "name" | "form" | "species" | "nature"> {
+  const own = rng.fork(`empire-${id}`);
+  // The order of the draws is the order they always had: the name, the form, the people.
+  const called = name(language, own, "land");
+  const form = own.pick(FORMS);
+  return { id, name: called, form, species: name(language, own, "people"), nature: "humanoid" };
+}
+
+/** Forms past the first nine and the forms the setting's rule favours, and what each power's people are. */
+function reform(powers: Pick<Empire, "form" | "nature">[], rng: Rng, age: SpaceAge) {
+  const forms = rng.fork("forms");
+  const favoured = RULE_FORMS[age.setting.rule] ?? [];
+  for (const power of powers) {
+    if (favoured.length && forms.chance(0.7)) power.form = forms.pick(favoured);
+    else if (forms.chance(0.3)) power.form = forms.pick(NEW_FORMS);
+    power.nature = power.form === "machine" ? "machine" : power.form === "hive" && forms.chance(0.7) ? "insectoid" : forms.weighted(NATURES);
+  }
+}
+
+/** The powers a galaxy of this seed will hold, named and formed as its map will have them (the first ones, if the
+ * galaxy finds room for fewer): the universe shows them before the galaxy is made. */
+export function powersOf(seed: string, count: number, setting?: Partial<Setting> | null): Pick<Empire, "name" | "form" | "species" | "nature">[] {
+  const rng = createRng(seed);
+  const tongues = Array.from({ length: 10 }, (_, k) => createLanguage(rng.fork(`tongue-${k}`)));
+  const powers = Array.from({ length: count }, (_, k) => founding(rng, k + 1, tongues[k % tongues.length]));
+  reform(powers, rng, spaceAge(setting));
+  return powers;
+}
+
+/** Each gate joined to the nearest other gate, its own power's first; a gate left over stands dormant. */
+export function pairGates(stars: Star[]): [number, number][] {
+  const open = stars.filter((star) => star.feature === "jump-gate" && !star.farGate);
+  const linked = new Set<number>();
+  const gates: [number, number][] = [];
+  for (const a of open) {
+    if (linked.has(a.id)) continue;
+    const far = (b: Star) => Math.hypot(a.x - b.x, a.y - b.y) * (b.empire === a.empire ? 1 : 2);
+    const b = open.filter((other) => other !== a && !linked.has(other.id)).reduce<Star | null>((pick, other) => (!pick || far(other) < far(pick) ? other : pick), null);
+    if (!b) continue;
+    linked.add(a.id).add(b.id);
+    gates.push([a.id, b.id]);
+  }
+  return gates;
+}
+
+/** What the strange things of the universe near a galaxy leave in it: rifts, storms, seas of plasma, a wandering black
+ * hole, precursor vaults, breaks in time. Each from a stream of its own, so a galaxy without them is as it was. */
+function touch(params: GalaxyParams, stars: Star[], zones: Zone[], tongues: Language[], rng: Rng) {
+  const W = params.width,
+    H = params.height;
+  for (const kind of params.origin?.touched ?? []) {
+    const own = rng.fork(`origin-${kind}`);
+    const region = (zone: ZoneKind, r: [number, number], squash: [number, number] = [0.45, 1], at = own.pick(stars)) =>
+      zones.push({ id: zones.length, kind: zone, x: at.x + own.float(-20, 20), y: at.y + own.float(-20, 20), r: own.float(...r), angle: own.float(0, Math.PI), squash: own.float(...squash), name: name(own.pick(tongues), own, "plain") });
+    const featureless = () => stars.filter((star) => !star.capital && !star.feature);
+    if (kind === "great-attractor") for (let k = 0; k < 2; k++) region("gravity-rift", [60, 110]);
+    else if (kind === "cosmic-string") zones.push({ id: zones.length, kind: "gravity-rift", x: W / 2 + own.float(-120, 120), y: H / 2 + own.float(-80, 80), r: Math.min(W, H) * 0.42, angle: own.float(0, Math.PI), squash: 0.08, name: name(own.pick(tongues), own, "plain") });
+    else if (kind === "lens") region("crystal-field", [50, 90]);
+    else if (kind === "white-hole") for (let k = 0; k < 2; k++) region("plasma-sea", [50, 100]);
+    else if (kind === "dark-flow") for (let k = 0; k < 2; k++) region("ion-storm", [60, 120], [0.3, 0.6]);
+    else if (kind === "relic") for (const star of own.shuffle(featureless()).slice(0, 3)) star.feature = own.pick<SpaceFeature>(["vault", "ruins", "vault"]);
+    else if (kind === "supermassive") {
+      const lonely = featureless().filter((star) => !star.empire && !star.settled);
+      if (!lonely.length) continue;
+      const hole = own.pick(lonely);
+      hole.spectral = "BH";
+      region("dead-zone", [40, 70], [0.7, 1], hole);
+    } else if (kind === "bubble-wall") {
+      for (const star of own.shuffle(featureless()).slice(0, 2)) star.feature = "time-rift";
+      region("dead-zone", [50, 90]);
+    }
+  }
 }
