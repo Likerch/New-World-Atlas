@@ -8,11 +8,13 @@ interface Props {
   t: T;
   value: Partial<Setting> | undefined;
   onApply: (setting: Setting) => void;
+  /** The knobs' button, when it does something other than regrow the world. */
+  applyLabel?: string;
 }
 
 const same = (a: Setting, b: Setting) => JSON.stringify({ ...a, name: undefined }) === JSON.stringify({ ...b, name: undefined });
 
-export function SettingPanel({ t, value, onApply }: Props) {
+export function SettingPanel({ t, value, onApply, applyLabel }: Props) {
   const current = settingOf(value);
   const [draft, setDraft] = useState<Setting>(current);
   const key = JSON.stringify(value ?? null);
@@ -95,7 +97,7 @@ export function SettingPanel({ t, value, onApply }: Props) {
         </label>
         <p className="muted">{t("setting.hint")}</p>
         <button type="button" className="primary wide" onClick={() => onApply(draft)}>
-          {t("setting.apply")}
+          {applyLabel ?? t("setting.apply")}
         </button>
       </details>
     </div>

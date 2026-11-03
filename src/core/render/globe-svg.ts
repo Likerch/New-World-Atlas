@@ -326,7 +326,8 @@ export function renderGlobe(planet: Planet, options: GlobeOptions = {}): string 
   for (let lat = -75; lat <= 75; lat += 15) grid.push(line(Array.from({ length: 121 }, (_, k) => toMap(-180 + k * 3, lat))));
   out.push(`<path d="${grid.join("")}" fill="none" stroke="${theme.grid}" stroke-width="0.8"/>`);
   out.push(`<path d="${line(Array.from({ length: 121 }, (_, k) => toMap(-180 + k * 3, 0)))}" fill="none" stroke="${theme.grid}" stroke-width="1.8"/>`);
-  out.push(`<path d="${line(edge)}" fill="none" stroke="${theme.ink}" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.6"/>`);
+  // The edge of the known world, unless the map is the whole world.
+  if (span0.lon < 359 || span0.lat < 179) out.push(`<path d="${line(edge)}" fill="none" stroke="${theme.ink}" stroke-width="1.2" stroke-dasharray="6 4" opacity="0.6"/>`);
   // Towns and names on the side that faces us.
   if (layers.burgs && !quick) {
     for (const burg of planet.burgs.slice(1)) {

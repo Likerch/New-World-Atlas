@@ -1,7 +1,7 @@
 // The planet pipeline: relief → water bodies → climate → rivers and lakes → biomes → peoples → settlements → states
 // and provinces → roads → points of interest. Each step draws from its own random stream of the seed.
 import { name } from "../language";
-import { buildMesh } from "../mesh";
+import { buildMesh, type Mesh } from "../mesh";
 import { createRng, randomSeed } from "../random";
 import { isClassic, peopleOf, settingOf } from "../setting";
 import { settleAge } from "./age";
@@ -52,6 +52,7 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   const mesh = buildMesh(params.width, params.height, params.cells, rng.fork("mesh"));
   const height = generateHeights(mesh, params.template, rng.fork("relief"));
   if (terrain?.length) sculpt(mesh, height, terrain);
+  if (wrapsRound(params)) sewSeam(mesh, height, params.width);
   const scale = ((params.latitudeNorth - params.latitudeSouth) * 111) / params.height;
 
   const sea = markFeatures(mesh, (cell) => height[cell] < SEA_LEVEL);
@@ -123,4 +124,22 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   const markers = placeMarkers(ground, culture, cultures, state, states, burgs, burg, routes, rng.fork("markers"));
   const worldName = params.name || name((cultures[1] ?? cultures[0]).language, names, "land");
   return { ...ground, name: worldName, population, culture, cultures, religion, religions, ...(secular ? { secular } : {}), burg, burgs, state, states, province, provinces, routes, markers };
+}
+
+/** A map of the whole planet: its longitudes go all the way round, so its left and right edges are one meridian. */
+export function wrapsRound(params: PlanetParams): boolean {
+  return params.latitudeNorth - params.latitudeSouth >= 179 && params.width >= params.height * 2 - 1;
+}
+
+/** A whole-planet map's antimeridian runs through open sea, as Earth's date line does: near either edge the ground
+ * sinks smoothly below the waves, so nothing is cut where the map's two sides meet round the back of the globe. */
+function sewSeam(mesh: Mesh, height: Float32Array, width: number) {
+  const band = width * 0.07;
+  for (let cell = 0; cell < mesh.cells; cell++) {
+    const gap = Math.min(mesh.x[cell], width - mesh.x[cell]);
+    if (gap >= band) continue;
+    const t = gap / band;
+    const w = 1 - t * t * (3 - 2 * t);
+    height[cell] = Math.min(height[cell], height[cell] * (1 - w) + (SEA_LEVEL - 6) * w);
+  }
 }

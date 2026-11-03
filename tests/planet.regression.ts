@@ -106,6 +106,17 @@ test("the globe turns to any side and a click finds the place under it", () => {
   for (const quick of [true, false]) assert.doesNotMatch(renderGlobe(planet, { lon: 33, lat: -12, quick }), /NaN|undefined|Infinity/u);
 });
 
+test("a map of the whole planet wraps the globe: no seam at the antimeridian, no uncharted lands", () => {
+  const whole = generatePlanet({ seed: "whole", template: "isthmus", width: 2000, height: 1000, latitudeNorth: 90, latitudeSouth: -90, cells: 5000 });
+  for (let y = 5; y < 1000; y += 10) {
+    assert.equal(whole.water[whole.mesh.find(3, y)], 1, `land runs off the left edge at y ${y}`);
+    assert.equal(whole.water[whole.mesh.find(1997, y)], 1, `land runs off the right edge at y ${y}`);
+  }
+  const back = renderGlobe(whole, { lon: 180, lat: 0 });
+  assert.ok(!/fill-opacity="0.55"/u.test(back), "no unknown lands on a fully charted world");
+  assert.ok(!/stroke-dasharray="6 4" opacity="0.6"/u.test(back), "no edge of the known world");
+});
+
 test("the far side of the globe shows uncharted lands, and the map's sea does not spill over it", () => {
   const back = renderGlobe(planet, { lon: 180, lat: 0 });
   const unknown = back.match(/<path d="([^"]*)" fill="[^"]*" fill-opacity="0.55"/u);

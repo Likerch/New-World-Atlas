@@ -3,6 +3,7 @@ import { useMemo, useRef, useState } from "react";
 import { createRng, defaultLayers, editPlanet, eraTheme, emptyEdits, generatePlanet, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { SettingPanel } from "../SettingPanel";
+import { WorldForm, type ZoomRange } from "../WorldForm";
 import { WorldEditor, type EditTool } from "../WorldEditor";
 import type { Level, LevelContext } from "./types";
 
@@ -70,6 +71,16 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   // The globe view: where it is turned to, or null for the flat map.
   const [globe, setGlobe] = useState<{ lon: number; lat: number } | null>(null);
   const [unknown, setUnknown] = useState(true);
+  // The new-world form, and how far the world map may be zoomed out and in (kept in this browser).
+  const [form, setForm] = useState(false);
+  const [zoom, setZoom] = useState<ZoomRange>(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("atlas.zoom") ?? "null");
+      return Array.isArray(saved) && saved.length === 2 ? (saved as ZoomRange) : [0.8, 40];
+    } catch {
+      return [0.8, 40];
+    }
+  });
   // Dragging turns the globe: moves gather into one turn per frame, drawn roughly until the mouse lets go.
   const [turning, setTurning] = useState(false);
   const spin = useRef({ dx: 0, dy: 0, frame: 0 });
@@ -158,7 +169,8 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     title: planet?.name ?? null,
     seed: params.seed,
     setSeed: (seed) => set("seed", seed),
-    generate: (seed) => load(seed ? { seed } : {}),
+    // A new seed is a new world: it takes a name from its own people, not the last world's.
+    generate: (seed) => load(seed ? { seed, name: "" } : {}),
     ensure: () => {
       // Only when nothing is on its way: a world opened from a star system must not be replaced.
       if (!planet && !pending.current) load({});
@@ -174,7 +186,8 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
           svg,
           width: globe ? GLOBE_SIZE : planet.params.width,
           height: globe ? GLOBE_SIZE : planet.params.height,
-          key: `planet-${planet.params.seed}-${time}-${globe ? "globe" : "map"}`,
+          key: `planet-${planet.params.seed}-${time}-${globe ? "globe" : "map"}-${zoom.join(":")}`,
+          zoomRange: zoom,
           onPick: (x, y) => {
             if (!globe) return tool ? sculpt(x, y) : pick(x, y);
             const point = globePick(planet, x, y, globe);
@@ -189,6 +202,31 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
           <button type="button" className="back" onClick={back}>
             ← {t("action.backToSystem")}
           </button>
+        ) : null}
+        <button type="button" className="primary wide" onClick={() => setForm(true)}>
+          🌍 {t("world.open")}
+        </button>
+        {form ? (
+          <WorldForm
+            t={t}
+            initial={{ ...params, name: params.name ?? "" }}
+            zoom={zoom}
+            onClose={() => setForm(false)}
+            onCreate={(next, range) => {
+              setForm(false);
+              setZoom(range);
+              try {
+                localStorage.setItem("atlas.zoom", JSON.stringify(range));
+              } catch {
+                // Storage may be off; the range holds for this visit.
+              }
+              const style = eraTheme(settingOf(next.setting));
+              setTheme(style);
+              setLayers(defaultLayers(style));
+              setGlobe(null);
+              load(next);
+            }}
+          />
         ) : null}
         {planet && openUnderworld ? (
           <button type="button" className="wide" onClick={() => openUnderworld(planet)}>

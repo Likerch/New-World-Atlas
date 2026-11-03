@@ -34,7 +34,7 @@ export interface Level {
   setSeed: (seed: string) => void;
   generate: (seed?: string) => void;
   /** The map; a globe also turns when dragged. */
-  map: { svg: string; width: number; height: number; key: string; onPick: (x: number, y: number) => void; onDrag?: (dx: number, dy: number) => void; onDragEnd?: () => void } | null;
+  map: { svg: string; width: number; height: number; key: string; onPick: (x: number, y: number) => void; onDrag?: (dx: number, dy: number) => void; onDragEnd?: () => void; zoomRange?: [number, number] } | null;
   controls: ReactNode;
   inspector: ReactNode;
   /** What the map's colours, lines and marks mean. */
