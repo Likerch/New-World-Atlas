@@ -2,6 +2,7 @@
 // river, a wreck on the sea floor, a bandit camp…), any spot of a planet ("a local map here"), a city's crypts,
 // cellars and undercity, a derelict or ruin in the galaxy, a cavern of the underworld with its tunnels leading off the
 // map. The local map keeps the place's seed, danger, the facts of its legend and the language of the people around it.
+import type { BuildingPlan } from "../building/plan";
 import type { City } from "../city/model";
 import type { Language } from "../language";
 import type { Planet } from "../planet/model";
@@ -177,4 +178,16 @@ export function localFromCavern(world: Underworld, cavernId: number, age?: strin
   const ways = exits.filter((exit, k) => exits.findIndex((other) => other.dir === exit.dir) === k);
   const facts: Record<string, string | number> = { ...(people ? { people: people.name } : {}), ...(cavern.population ? { population: cavern.population } : {}) };
   return { params: { seed: `${world.seed}/cavern-${cavernId}`, kind: built[cavern.kind] ? "dungeon" : "cave", theme, danger, name: cavern.name, levels: 1, ...(age ? { age } : {}), origin: { kind: cavern.kind, facts }, ...(ways.length && !built[cavern.kind] ? { exits: ways } : {}) }, language: people?.language ?? null };
+}
+
+/** The way down from a building's cellar: a crypt under a temple, a castle's or a manor's dungeon, a hatch into the
+ * sewers or the metro in a town of later ages, smugglers' tunnels under an old inn, a vault under a bunker. */
+export function localFromCellar(plan: BuildingPlan, language: Language | null = null): LocalLink | null {
+  const { params } = plan;
+  if (!params.cellar) return null;
+  const era = params.era;
+  const late = ["industrial", "modern", "cyberpunk", "far-future"].includes(era);
+  const theme: LocalTheme =
+    params.type === "bunker" ? "vault" : era === "post-apocalypse" ? "bunker" : ["temple", "keep", "manor"].includes(params.type) ? "crypt" : params.type === "station" || (late && era !== "industrial") ? "metro" : late || era === "renaissance" ? "sewer" : "lair";
+  return { params: { seed: `${params.seed}/cellar`, kind: theme === "lair" ? "cave" : "dungeon", theme, danger: 2, age: era, origin: { kind: `cellar:${params.type}`, facts: {} }, ...(params.name ? { name: params.name } : {}) }, language };
 }

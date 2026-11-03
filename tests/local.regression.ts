@@ -1,6 +1,6 @@
 // Local-map regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { blocked, doorsOf, editLocal, editUnderworld, renderUnderworldSection, tierOf, underworldGhostSvg, generateCity, generateGalaxy, localAt, localFromCavern, localFromLandmark, localFromStar, localScene, localStory, generateUnderworld, reachOf, renderLocal, renderLocalScene, renderUnderworld, SETTINGS, generateLocal, generatePlanet, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localFromMarker, TILE, walk, type LocalMap } from "../src/core/index";
+import { blocked, doorsOf, editLocal, editUnderworld, generateBuilding, localFromCellar, renderUnderworldSection, tierOf, underworldGhostSvg, generateCity, generateGalaxy, localAt, localFromCavern, localFromLandmark, localFromStar, localScene, localStory, generateUnderworld, reachOf, renderLocal, renderLocalScene, renderUnderworld, SETTINGS, generateLocal, generatePlanet, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localFromMarker, TILE, walk, type LocalMap } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -451,6 +451,21 @@ test("the game master edits the underworld: kinds and peoples, caverns removed a
   assert.equal(cut.tunnels.length, world.tunnels.length - 1);
   assert.equal(world.tunnels.length, generateUnderworld(planet).tunnels.length, "the underworld itself is untouched");
   assert.doesNotMatch(renderUnderworld(edited, planet), /NaN|undefined/u);
+});
+
+test("a building's cellar leads down by its kind and age; a deep people's hold is lived in by that people", () => {
+  const keep = generateBuilding({ seed: "cellar-keep", type: "keep", era: "medieval" });
+  if (keep.params.cellar) assert.equal(localFromCellar(keep)?.params.theme, "crypt");
+  const flat = generateBuilding({ seed: "cellar-flat", type: "house", era: "modern" });
+  const way = localFromCellar({ ...flat, params: { ...flat.params, cellar: true } });
+  assert.equal(way?.params.theme, "metro");
+  assert.equal(localFromCellar({ ...flat, params: { ...flat.params, cellar: false } }), null, "no cellar, no way down");
+  const planet = generatePlanet({ seed: "regression", template: "continents", cells: 6000 });
+  const world = generateUnderworld(planet);
+  const home = world.caverns.find((c) => c.kind === "settlement" && c.people)!;
+  const hold = generateLocal(localFromCavern(world, home.id)!.params);
+  const folk = hold.keyed.flatMap((r) => r.monsters).filter((g) => g.who === "deep-folk");
+  assert.ok(folk.length && folk.every((g) => g.name === world.peoples[home.people - 1].name));
 });
 
 console.log(`local: ${passed} regressions passed`);

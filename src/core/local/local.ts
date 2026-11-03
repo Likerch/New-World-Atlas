@@ -74,6 +74,8 @@ function edgePoint(W: number, H: number, dir: number): [number, number] {
   return [Math.max(0, Math.min(W - 1, Math.round(W / 2 + dx * t))), Math.max(0, Math.min(H - 1, Math.round(H / 2 + dy * t)))];
 }
 
+const xy = ([x, y]: [number, number]) => ({ x, y });
+
 function cave(b: Build, plan: OwnPlan) {
   const { W, H, rng, params } = b;
   const at = (x: number, y: number) => x + y * W;
@@ -279,8 +281,6 @@ function cave(b: Build, plan: OwnPlan) {
   }
   setTraps(b);
 }
-
-const xy = ([x, y]: [number, number]) => ({ x, y });
 
 /** A number in [0, 1) from a key, the same wherever it is asked for. */
 const unit = (key: string) => hashString(key) / 4294967296;
@@ -612,6 +612,8 @@ export function generateLocal(input: Partial<LocalParams> = {}, language?: Langu
   const facts = params.origin?.facts ?? {};
   const final = b.keyed.find((k) => k.final);
   if (final && params.origin?.kind === "tomb" && facts.ruler) final.name = String(facts.ruler);
+  // A deep people's hold is lived in by that people, by its own name.
+  if (facts.people) for (const room of b.keyed) for (const group of room.monsters) if (group.who === "deep-folk") group.name = String(facts.people);
   for (const room of b.keyed) {
     if (!room.purpose.startsWith("own:")) continue;
     const kind = own.rooms.find((item) => `own:${item.id}` === room.purpose);
