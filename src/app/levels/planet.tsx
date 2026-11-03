@@ -10,6 +10,7 @@ import type { T } from "../i18n";
 import { describePlanet, searchPlanet } from "../planetText";
 import { growPlanet } from "../work";
 import { Tables } from "../Tables";
+import { Section } from "../Section";
 import { useLayers } from "./layers";
 import type { Level, LevelContext } from "./types";
 import { NumberInput } from "../NumberInput";
@@ -198,6 +199,8 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     );
   };
   const set = <K extends keyof PlanetParams>(key: K, value: PlanetParams[K]) => setParams((current) => ({ ...current, [key]: value }));
+  // The knobs were turned since the world on the map was grown.
+  const changed = raw ? (Object.keys({ ...params, ...raw.params }) as (keyof PlanetParams)[]).some((key) => JSON.stringify(params[key]) !== JSON.stringify(raw.params[key])) : false;
   const highlight = selection && (selection.kind === "state" || selection.kind === "province" || selection.kind === "culture" || selection.kind === "religion") ? { kind: selection.kind, id: selection.id } : null;
   const ghost = useMemo(() => (planet && layers.underground ? underworldGhostSvg(generateUnderworld(planet)) : undefined), [planet, layers.underground]);
   const svg = useMemo(() => (!planet ? "" : globe ? renderGlobe(planet, { theme, layers, script: ctx.script, ...globe, mark: markOf(planet, selection), unknown, quick: turning }) : past !== null && planet.history ? renderPlanet(pastPlanet(planet, past), { theme, layers: { ...layers, provinces: false, routes: false, religions: false, emblems: false, military: false }, script: ctx.script, words: ctx.words }) : renderPlanet(planet, { theme, layers, script: ctx.script, highlight, words: ctx.words, ghost, ...(season !== "year" ? { season } : {}) })), [planet, theme, layers, ctx.script, highlight?.kind, highlight?.id, globe, globe && selection, unknown, turning, t, past, season, ctx.words, ghost]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -280,6 +283,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     describe: () => (planet ? describePlanet(planet, selection, t, ctx.nm) : ""),
     theme,
     layers,
+    anchor: globe ? undefined : actions?.anchor,
     map: planet
       ? {
           ...(actions && !globe ? { hover: actions.hover, measure: actions.measure, ...(tool ? {} : { open: actions.open, menu: actions.menu }) } : {}),
@@ -306,6 +310,14 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
         <button type="button" className="primary wide" onClick={() => setForm(true)}>
           🌍 {t("world.planetForm")}
         </button>
+        {raw && changed ? (
+          <p className="notice">
+            {t("params.changed")}{" "}
+            <button type="button" className="primary" onClick={() => load({})}>
+              {t("action.generate")}
+            </button>
+          </p>
+        ) : null}
         {form ? (
           <WorldForm
             t={t}
@@ -360,48 +372,48 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
             </label>
           </>
         ) : null}
-        {planet?.history ? (
-          <>
-            <h2>{t("history.title")}</h2>
-            <p className="muted">{t("history.now", { year: planet.history.years })}</p>
-            <div className="row-buttons">
-              {[25, 100].map((more) => (
-                <button key={more} type="button" onClick={() => load({ history: planet.history!.years + more })} title={t("history.laterHint")}>
-                  {t("history.later", { years: more })}
-                </button>
-              ))}
-            </div>
-            <label className="check">
-              <input type="checkbox" checked={past !== null} onChange={(event) => setPast(event.target.checked ? Math.max(1, Math.round(planet.history!.years / 2)) : null)} />
-              {t("history.pastMap")}
-            </label>
-            {past !== null ? (
-              <label>
-                {t("history.inYear", { year: past })}
-                <input type="range" min={1} max={planet.history.years} step={1} value={past} onChange={(event) => setPast(Number(event.target.value))} />
+        <Section id="planet-age" title={t("panel.age")}>
+          {planet?.history ? (
+            <>
+              <p className="muted">{t("history.now", { year: planet.history.years })}</p>
+              <div className="row-buttons">
+                {[25, 100].map((more) => (
+                  <button key={more} type="button" onClick={() => load({ history: planet.history!.years + more })} title={t("history.laterHint")}>
+                    {t("history.later", { years: more })}
+                  </button>
+                ))}
+              </div>
+              <label className="check">
+                <input type="checkbox" checked={past !== null} onChange={(event) => setPast(event.target.checked ? Math.max(1, Math.round(planet.history!.years / 2)) : null)} />
+                {t("history.pastMap")}
               </label>
-            ) : null}
-          </>
-        ) : planet && !planet.params.lifeless ? (
-          <>
-            <h2>{t("history.title")}</h2>
-            <p className="muted">{t("history.none")}</p>
-            <button type="button" className="wide" onClick={() => load({ history: 300 })}>
-              📜 {t("history.live", { years: 300 })}
-            </button>
-          </>
-        ) : null}
-        <SettingPanel
-          t={t}
-          value={params.setting}
-          onApply={(setting) => {
-            // A new age brings the style that suits it; the GM can still pick another.
-            const next = eraTheme(setting);
-            setTheme(next);
-            restyle(next);
-            load({ setting });
-          }}
-        />
+              {past !== null ? (
+                <label>
+                  {t("history.inYear", { year: past })}
+                  <input type="range" min={1} max={planet.history.years} step={1} value={past} onChange={(event) => setPast(Number(event.target.value))} />
+                </label>
+              ) : null}
+            </>
+          ) : planet && !planet.params.lifeless ? (
+            <>
+              <p className="muted">{t("history.none")}</p>
+              <button type="button" className="wide" onClick={() => load({ history: 300 })}>
+                📜 {t("history.live", { years: 300 })}
+              </button>
+            </>
+          ) : null}
+          <SettingPanel
+            t={t}
+            value={params.setting}
+            onApply={(setting) => {
+              // A new age brings the style that suits it; the GM can still pick another.
+              const next = eraTheme(setting);
+              setTheme(next);
+              restyle(next);
+              load({ setting });
+            }}
+          />
+        </Section>
         {planet && !globe ? (
           <WorldEditor
             t={t}
@@ -434,7 +446,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
             onReset={() => change(() => emptyEdits())}
           />
         ) : null}
-        <h2>{t("panel.world")}</h2>
+        <Section id="planet-generation" title={t("panel.world")}>
         <label>
           {t("field.theme")}
           <select
@@ -504,7 +516,8 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
             </button>
           </div>
         </details>
-        <h2>{t("panel.layers")}</h2>
+        </Section>
+        <Section id="planet-view" title={t("panel.layers")}>
         <div className="row-buttons">
           {Object.keys(PRESETS).map((name) => (
             <button key={name} type="button" onClick={() => setAll({ ...Object.fromEntries(LAYERS.map((id) => [id, false])), ...PRESETS[name] } as Record<LayerId, boolean>)}>
@@ -536,6 +549,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
             {t(`layer.${id}`)}
           </label>
         ))}
+        </Section>
       </>
     ),
     inspector: planet ? (

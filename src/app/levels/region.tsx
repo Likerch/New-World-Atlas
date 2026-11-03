@@ -7,6 +7,7 @@ import { describePlanet, searchPlanet } from "../planetText";
 import { useLayers } from "./layers";
 import { editAt, WorldEditor, type EditTool, type Paint } from "../WorldEditor";
 import { planetActions } from "../planetActions";
+import { Section } from "../Section";
 
 /** A close-up's own edits: its land's peoples and faiths, its villages, words and zones. Its relief and realms are the
  * planet's, edited there. */
@@ -150,6 +151,7 @@ export function useRegionLevel(
       });
       ctx.show("region");
     },
+    anchor: actions?.anchor,
     map: region
       ? {
           ...(actions ? { hover: actions.hover, measure: actions.measure, ...(tool ? {} : { open: actions.open, menu: actions.menu }) } : {}),
@@ -245,13 +247,14 @@ export function useRegionLevel(
             ))}
           </select>
         </label>
-        <h2>{t("panel.layers")}</h2>
+        <Section id="region-view" title={t("panel.layers")}>
         {LAYERS.map((id) => (
           <label key={id} className="check">
             <input type="checkbox" checked={layers[id]} onChange={(event) => toggle(id, event.target.checked)} />
             {t(`layer.${id}`)}
           </label>
         ))}
+        </Section>
       </>
     ),
     inspector: region ? (

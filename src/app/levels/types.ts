@@ -58,6 +58,8 @@ export interface Level {
   inspector: ReactNode;
   /** What the map's colours, lines and marks mean. */
   legend?: LegendSection[];
+  /** Where a map opened from this one (by its step's entity) hangs on this map, for the mark that a map is there. */
+  anchor?: (entity: string) => [number, number] | null;
   /** For the world: the map's place in it (when it differs from mapKey: a globe, a quarter close-up), the parameters
    * it was made from and the language its names came from. */
   worldKey?: string | null;

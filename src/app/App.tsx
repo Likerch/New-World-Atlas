@@ -621,7 +621,10 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   const patch = store.patch(sheetKey);
   // Pins and fog scale with the map, so they stay readable on big and small maps alike.
   const overlayScale = map ? Math.max(0.6, Math.min(3, Math.max(map.width, map.height) / 1600)) : 1;
-  const overlay = map ? overlaySvg(patch, map.width, map.height, players, overlayScale) : "";
+  // Places whose maps were opened in this world wear a small gold mark: there is a map here.
+  const opened = map && here && level.anchor && !players ? Object.values(world.maps).flatMap((child) => (child.parent === here && child.step?.entity ? [level.anchor!(child.step.entity)] : [])).filter((at): at is [number, number] => at !== null) : [];
+  const marks = opened.map(([x, y]) => `<circle cx="${Math.round(x + 7 * overlayScale)}" cy="${Math.round(y - 7 * overlayScale)}" r="${(3 * overlayScale).toFixed(1)}" fill="#f5c542" stroke="#3b2f12" stroke-width="${(0.9 * overlayScale).toFixed(1)}"/>`).join("");
+  const overlay = map ? overlaySvg(patch, map.width, map.height, players, overlayScale) + (marks ? `<g class="has-map" pointer-events="none">${marks}</g>` : "") : "";
   // An exported image carries the legend when it is open on screen.
   const legendBox =
     map && legendOpen && level.legend?.length

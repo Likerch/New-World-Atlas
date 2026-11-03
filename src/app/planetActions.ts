@@ -64,6 +64,21 @@ export function planetActions(planet: Planet, t: T, nm: (name: string) => string
       }
       return items;
     },
+    /** Where a map opened from this one hangs: its town, place, province, realm, spot or box. */
+    anchor: (entity: string): [number, number] | null => {
+      const [kind, value = ""] = entity.split(":");
+      const id = Number(value);
+      if (kind === "burg" && planet.burgs[id]) return [planet.burgs[id].x, planet.burgs[id].y];
+      if (kind === "marker" && planet.markers[id]) return [planet.markers[id].x, planet.markers[id].y];
+      if (kind === "province" && planet.provinces[id]) return planet.provinces[id].pole;
+      if (kind === "state" && planet.states[id]) return planet.states[id].pole;
+      if (kind === "cell" && id < mesh.cells) return [mesh.x[id], mesh.y[id]];
+      if (kind === "area") {
+        const [x0, y0, x1, y1] = value.split(",").map(Number);
+        return [(x0 + x1) / 2, (y0 + y1) / 2];
+      }
+      return null;
+    },
     measure: (x0: number, y0: number, x1: number, y1: number): string => {
       if (!wrapsRound(planet.params)) return km(Math.hypot(x1 - x0, y1 - y0) * planet.scale, t);
       // On a whole world: along the great circle, longitude running the map's width all the way round.

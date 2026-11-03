@@ -2523,6 +2523,8 @@ const TERMS: Record<string, [string, string]> = {
   "map.zoomIn": ["Zoom in", "Приблизить"],
   "map.zoomOut": ["Zoom out", "Отдалить"],
   "map.fit": ["Fit the whole map", "Показать карту целиком"],
+  "panel.age": ["The age and its history", "Эпоха и история"],
+  "params.changed": ["The settings no longer match the map.", "Настройки уже не совпадают с картой."],
   "help.title": ["Keys and mouse", "Клавиши и мышь"],
   "help.tour": ["Show the tour", "Показать тур"],
   "help.key.help": ["This sheet", "Эта шпаргалка"],

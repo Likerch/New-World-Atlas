@@ -1216,3 +1216,25 @@ dialog.tour-controls,
 dialog.tour-gm {
   margin-left: 24px;
 }
+
+/* Panel sections that fold away under their heading. */
+details.section > summary {
+  list-style: none;
+  cursor: pointer;
+}
+details.section > summary::-webkit-details-marker {
+  display: none;
+}
+details.section > summary h2::before {
+  content: "▾ ";
+  display: inline-block;
+  transition: transform 0.15s;
+}
+details.section:not([open]) > summary h2::before {
+  transform: rotate(-90deg);
+}
+.notice {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--accent-soft);
+}
