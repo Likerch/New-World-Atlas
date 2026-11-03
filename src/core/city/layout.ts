@@ -4,7 +4,7 @@ import { chainSegments, type Point } from "../geometry";
 import { fbm, noise2 } from "../noise";
 import { area, distanceToPolyline, pointInPolygon } from "../polygon";
 import type { Rng } from "../random";
-import { relax, voronoi, type Voronoi } from "../voronoi";
+import { voronoi, type Voronoi } from "../voronoi";
 import { organicEra, type CityParams, type Wall, type WardKind } from "./model";
 
 export interface Layout {
@@ -62,25 +62,46 @@ export function layoutCity(params: CityParams, rng: Rng): Layout {
     sea = [...shore, far(shore[shore.length - 1]), far(shore[0])];
   }
 
-  // Sites: a sunflower spiral, dense at the centre and sparse beyond the town; then relaxed into even cells.
-  const golden = Math.PI * (3 - Math.sqrt(5));
+  // Sites: darts thrown over the frame, each keeping a gap from the others. The gap is small in the town and widens
+  // over the countryside; a noise field makes patches of big quarters and of small ones, and stretches the gap one
+  // way in places, so some wards come out long and narrow (along a river, behind a wall) and no two look alike.
+  const mean = Math.sqrt((Math.PI * radius * radius) / wardCount) * 1.02;
+  const sizes = noise2(rng.fork("ward-sizes"));
+  const lean = noise2(rng.fork("ward-lean"));
+  const unequal = rng.float(0.75, 1.05);
+  const gapAt = (p: Point) => {
+    const d = Math.hypot(p[0] - center[0], p[1] - center[1]) / radius;
+    return mean * (0.85 + 0.2 * Math.min(1, d)) * (1 + Math.max(0, d - 1) * 0.9) * Math.exp(unequal * fbm(sizes, p[0] / radius, p[1] / radius, 3));
+  };
+  const stretchAt = (p: Point): [number, number] => {
+    const s = fbm(lean, p[0] / (radius * 1.3) + 7.1, p[1] / (radius * 1.3) - 3.4, 2);
+    return [s * Math.PI * 1.5, 1 + Math.max(0, Math.abs(s) - 0.1) * 3.6];
+  };
   const sites: Point[] = [];
-  const total = Math.round(wardCount * (organic ? 3.2 : 2.6));
-  for (let i = 0; i < total; i++) {
-    const r = radius * Math.sqrt((i + 0.5) / wardCount) * 0.97;
-    const angle = i * golden + rng.float(-0.25, 0.25);
-    const jitter = (radius / Math.sqrt(wardCount)) * 0.25;
-    const p: Point = [center[0] + Math.cos(angle) * r + rng.float(-jitter, jitter), center[1] + Math.sin(angle) * r + rng.float(-jitter, jitter)];
-    if (p[0] > 2 && p[0] < W - 2 && p[1] > 2 && p[1] < H - 2) sites.push(p);
-  }
-  // Coarse cells for the far countryside, so the frame is covered.
-  for (let gx = 0; gx < 6; gx++) {
-    for (let gy = 0; gy < 5; gy++) {
-      const p: Point = [((gx + rng.float(0.2, 0.8)) / 6) * W, ((gy + rng.float(0.2, 0.8)) / 5) * H];
-      if (Math.hypot(p[0] - center[0], p[1] - center[1]) > radius * 1.7) sites.push(p);
+  const gaps: number[] = [];
+  for (let attempt = 0, misses = 0; attempt < 40_000 && misses < 2500; attempt++) {
+    const p: Point = [rng.float(2, W - 2), rng.float(2, H - 2)];
+    const gap = gapAt(p);
+    const [angle, stretch] = stretchAt(p);
+    const ux = Math.cos(angle),
+      uy = Math.sin(angle);
+    const near = sites.some((q, k) => {
+      const dx = q[0] - p[0],
+        dy = q[1] - p[1];
+      // Measured in the stretched frame: closer along the lean, farther across it.
+      const along = (dx * ux + dy * uy) * stretch,
+        across = (dx * -uy + dy * ux) / stretch;
+      return along * along + across * across < Math.min(gap, gaps[k]) ** 2;
+    });
+    if (near) {
+      misses++;
+      continue;
     }
+    misses = 0;
+    sites.push(p);
+    gaps.push(gap);
   }
-  const diagram = voronoi(relax(sites, W, H, 2), W, H);
+  const diagram = voronoi(sites, W, H);
   const n = diagram.sites.length;
   const centerOf = (ward: number) => diagram.sites[ward];
   const dist = (ward: number) => Math.hypot(centerOf(ward)[0] - center[0], centerOf(ward)[1] - center[1]);

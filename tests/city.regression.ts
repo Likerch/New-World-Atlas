@@ -1,6 +1,6 @@
 // City-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { buildingFromCity, generateBuilding, SETTINGS, CITY_THEMES, cityTiers, renderTier, generateDistrict, cityFromBurg, distanceToPolyline, ERAS, generateCity, generatePlanet, pointInPolygon, renderCity } from "../src/core/index";
+import { area, buildingFromCity, generateBuilding, SETTINGS, CITY_THEMES, cityTiers, renderTier, generateDistrict, cityFromBurg, distanceToPolyline, ERAS, generateCity, generatePlanet, pointInPolygon, renderCity } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -39,6 +39,16 @@ test("a walled town has gates, towers, a citadel ring, a market and main streets
   assert.ok(port.landmarks.some((landmark) => landmark.kind === "market-well"));
   assert.ok(port.buildings.some((building) => building.kind === "pier"), "a harbour has piers");
   assert.ok(port.buildings.filter((building) => building.kind === "stall").length >= 8, "the market has rows of stalls");
+});
+
+test("quarters differ in size and shape: big and small, round and long", () => {
+  for (const city of [port, generateCity({ seed: "spread", era: "modern", population: 900 })]) {
+    const sizes = city.wards.filter((w) => w.urban).map((w) => area(w.polygon));
+    const mean = sizes.reduce((s, a) => s + a, 0) / sizes.length;
+    const spread = Math.sqrt(sizes.reduce((s, a) => s + (a - mean) ** 2, 0) / sizes.length) / mean;
+    assert.ok(spread > 0.25, `${city.params.era}: ward sizes spread only ${spread.toFixed(2)}`);
+    assert.ok(Math.max(...sizes) > Math.min(...sizes) * 2.5, `${city.params.era}: the biggest ward is not much bigger than the smallest`);
+  }
 });
 
 test("every era builds a city and every style draws it", () => {
