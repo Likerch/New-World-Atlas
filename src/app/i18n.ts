@@ -885,6 +885,8 @@ const TERMS: Record<string, [string, string]> = {
   "view.globe": ["Globe", "Глобус"],
   "globe.lon": ["Turn to longitude", "Долгота в центре"],
   "globe.lat": ["Tilt to latitude", "Широта в центре"],
+  "globe.drag": ["Drag the globe to turn it; the wheel zooms.", "Тяни глобус мышью, чтобы вращать; колесо — масштаб."],
+  "globe.unknown": ["Uncharted lands beyond the map", "Неизведанные земли за краем карты"],
   "layer.religions": ["Religions", "Религии"],
   "layer.emblems": ["Coats of arms", "Гербы"],
   "layer.military": ["Armies and fleets", "Армии и флоты"],

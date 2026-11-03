@@ -33,7 +33,8 @@ export interface Level {
   seed: string;
   setSeed: (seed: string) => void;
   generate: (seed?: string) => void;
-  map: { svg: string; width: number; height: number; key: string; onPick: (x: number, y: number) => void } | null;
+  /** The map; a globe also turns when dragged. */
+  map: { svg: string; width: number; height: number; key: string; onPick: (x: number, y: number) => void; onDrag?: (dx: number, dy: number) => void; onDragEnd?: () => void } | null;
   controls: ReactNode;
   inspector: ReactNode;
   status: string;

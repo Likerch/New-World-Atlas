@@ -1,6 +1,6 @@
 // The planet level: world settings, the world map and its inspector.
 import { useMemo, useRef, useState } from "react";
-import { createRng, defaultLayers, editPlanet, eraTheme, emptyEdits, generatePlanet, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId } from "../../core/index";
+import { createRng, defaultLayers, editPlanet, eraTheme, emptyEdits, generatePlanet, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { SettingPanel } from "../SettingPanel";
 import { WorldEditor, type EditTool } from "../WorldEditor";
@@ -69,6 +69,23 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   const [tab, setTab] = useState<Tab>("place");
   // The globe view: where it is turned to, or null for the flat map.
   const [globe, setGlobe] = useState<{ lon: number; lat: number } | null>(null);
+  const [unknown, setUnknown] = useState(true);
+  // Dragging turns the globe: moves gather into one turn per frame, drawn roughly until the mouse lets go.
+  const [turning, setTurning] = useState(false);
+  const spin = useRef({ dx: 0, dy: 0, frame: 0 });
+  const turn = (dx: number, dy: number) => {
+    const s = spin.current;
+    s.dx += dx;
+    s.dy += dy;
+    setTurning(true);
+    if (s.frame) return;
+    s.frame = requestAnimationFrame(() => {
+      const degrees = 180 / (Math.PI * GLOBE_RADIUS);
+      const { dx: x, dy: y } = s;
+      s.dx = s.dy = s.frame = 0;
+      setGlobe((g) => g && { lon: ((((g.lon - x * degrees + 180) % 360) + 360) % 360) - 180, lat: Math.max(-90, Math.min(90, g.lat + y * degrees)) });
+    });
+  };
   const pending = useRef(false);
 
   const load = (next: Partial<PlanetParams>) => {
@@ -87,7 +104,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   };
   const set = <K extends keyof PlanetParams>(key: K, value: PlanetParams[K]) => setParams((current) => ({ ...current, [key]: value }));
   const highlight = selection && (selection.kind === "state" || selection.kind === "province" || selection.kind === "culture" || selection.kind === "religion") ? { kind: selection.kind, id: selection.id } : null;
-  const svg = useMemo(() => (!planet ? "" : globe ? renderGlobe(planet, { theme, layers, script: ctx.script, ...globe, mark: markOf(planet, selection) }) : renderPlanet(planet, { theme, layers, script: ctx.script, highlight })), [planet, theme, layers, ctx.script, highlight?.kind, highlight?.id, globe, globe && selection]); // eslint-disable-line react-hooks/exhaustive-deps
+  const svg = useMemo(() => (!planet ? "" : globe ? renderGlobe(planet, { theme, layers, script: ctx.script, ...globe, mark: markOf(planet, selection), unknown, quick: turning }) : renderPlanet(planet, { theme, layers, script: ctx.script, highlight })), [planet, theme, layers, ctx.script, highlight?.kind, highlight?.id, globe, globe && selection, unknown, turning]); // eslint-disable-line react-hooks/exhaustive-deps
   const pick = (x: number, y: number) => {
     if (!planet) return;
     const cell = planet.mesh.find(x, y);
@@ -161,6 +178,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
             const point = globePick(planet, x, y, globe);
             if (point) pick(point[0], point[1]);
           },
+          ...(globe ? { onDrag: turn, onDragEnd: () => setTurning(false) } : {}),
         }
       : null,
     controls: (
@@ -187,13 +205,18 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
         ) : null}
         {globe ? (
           <>
+            <p className="muted">{t("globe.drag")}</p>
             <label>
-              {t("globe.lon")}: {globe.lon}°
-              <input type="range" min={-180} max={180} step={5} value={globe.lon} onChange={(event) => setGlobe({ ...globe, lon: Number(event.target.value) })} />
+              {t("globe.lon")}: {Math.round(globe.lon)}°
+              <input type="range" min={-180} max={180} step={1} value={Math.round(globe.lon)} onChange={(event) => setGlobe({ ...globe, lon: Number(event.target.value) })} />
             </label>
             <label>
-              {t("globe.lat")}: {globe.lat}°
-              <input type="range" min={-90} max={90} step={5} value={globe.lat} onChange={(event) => setGlobe({ ...globe, lat: Number(event.target.value) })} />
+              {t("globe.lat")}: {Math.round(globe.lat)}°
+              <input type="range" min={-90} max={90} step={1} value={Math.round(globe.lat)} onChange={(event) => setGlobe({ ...globe, lat: Number(event.target.value) })} />
+            </label>
+            <label className="check">
+              <input type="checkbox" checked={unknown} onChange={(event) => setUnknown(event.target.checked)} />
+              {t("globe.unknown")}
             </label>
           </>
         ) : null}

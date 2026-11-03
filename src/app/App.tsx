@@ -198,7 +198,7 @@ export function App() {
     } else map.onPick(x, y);
   };
   let stage: ReactNode = null;
-  if (map) stage = <MapView key={map.key} svg={map.svg} overlay={overlay} width={map.width} height={map.height} focus={focus} onPick={pick} />;
+  if (map) stage = <MapView key={map.key} svg={map.svg} overlay={overlay} width={map.width} height={map.height} focus={focus} onPick={pick} onDrag={map.onDrag} onDragEnd={map.onDragEnd} />;
 
   return (
     <div className={players ? "app players" : "app"}>

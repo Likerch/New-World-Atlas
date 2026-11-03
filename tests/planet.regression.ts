@@ -103,6 +103,17 @@ test("the globe turns to any side and a click finds the place under it", () => {
   assert.equal(globePick(planet, 2, 2), null, "a corner is off the sphere");
   assert.equal(globePick(planet, 500, 500, { lon: 180, lat: 0 }), null, "the far side of the world is uncharted");
   for (const [lon, lat] of [[0, 0], [60, 30], [180, -60], [-120, 90]]) assert.doesNotMatch(renderGlobe(planet, { lon, lat, mark: [width / 2, height / 2] }), /NaN|undefined|Infinity/u);
+  for (const quick of [true, false]) assert.doesNotMatch(renderGlobe(planet, { lon: 33, lat: -12, quick }), /NaN|undefined|Infinity/u);
+});
+
+test("the far side of the globe shows uncharted lands, and the map's sea does not spill over it", () => {
+  const back = renderGlobe(planet, { lon: 180, lat: 0 });
+  const unknown = back.match(/<path d="([^"]*)" fill="[^"]*" fill-opacity="0.55"/u);
+  assert.ok(unknown && unknown[1].length > 500, "unknown lands are sketched round the back");
+  // The charted area is behind us: its sea must not be drawn as a disc over the whole globe.
+  const chart = back.match(/<path d="([^"]*)" fill="[^"]*"\/><path d="[^"]*" fill="[^"]*" fill-rule="evenodd"\/>/u);
+  assert.ok(!chart || chart[1].length < 200, "the hidden map is not stretched over the visible side");
+  assert.ok(!/fill-opacity="0.55"/u.test(renderGlobe(planet, { lon: 180, lat: 0, unknown: false })), "unknown lands can be turned off");
 });
 
 test("every settled land keeps a faith, and churches hold their holy cities", () => {
