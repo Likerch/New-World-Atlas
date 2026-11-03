@@ -6,7 +6,7 @@ import { createLanguage } from "../language";
 import { createRng } from "../random";
 import { furnish, lookOf, notablesOf, setTraps, type Build } from "./build";
 import { tablesFor } from "./local";
-import { placeSeed, TILE, type Keyed, type LocalGroup, type LocalLoot, type LocalMap } from "./model";
+import { TILE, type Keyed, type LocalGroup, type LocalLoot, type LocalMap } from "./model";
 import { NO_OWN, ownThemeOf, type LocalOwn } from "./own";
 import { PURPOSES, stock } from "./stock";
 
@@ -37,9 +37,13 @@ export function editLocal(map: LocalMap, changes: LocalChanges | undefined, lang
   if (!edits || !Object.keys(edits).length) return map;
   const tables = tablesFor(map.params, own);
   const tongue = language ? { ...language } : createLanguage(createRng(map.params.seed).fork("local").fork("language"));
-  const b: Build = { params: map.params, W: map.params.width, H: map.params.height, tiles: map.tiles.slice(), keyed: map.keyed.map((room) => ({ ...room })), features: map.features.map((f) => ({ ...f })), rng: createRng(`${map.params.seed}/edits`), tables, lord: null, language: tongue, key: `local:${placeSeed(map.params.seed)}`, depth: map.params.depth ?? 1 };
+  // Keyed by the level's own seed, as the map was made, so each level's people are its own.
+  const b: Build = { params: map.params, W: map.params.width, H: map.params.height, tiles: map.tiles.slice(), keyed: map.keyed.map((room) => ({ ...room })), features: map.features.map((f) => ({ ...f })), rng: createRng(`${map.params.seed}/edits`), tables, lord: null, language: tongue, key: `local:${map.params.seed}`, depth: map.params.depth ?? 1 };
+  // The GM's own theme rolls among its rooms, leaving out kinds of room since deleted (as the map was made).
   const theme = ownThemeOf(map.params, own);
-  const pool: Keyed["purpose"][] = map.params.kind === "wilderness" ? [...WILD_SITES] : theme?.rooms.length ? (theme.rooms as Keyed["purpose"][]) : PURPOSES[map.params.theme].filter((p) => p !== "flooded");
+  const known = new Set(own.rooms.map((room) => room.id));
+  const mine = (theme?.rooms ?? []).filter((id) => !id.startsWith("own:") || known.has(id.slice(4))) as Keyed["purpose"][];
+  const pool: Keyed["purpose"][] = map.params.kind === "wilderness" ? [...WILD_SITES] : mine.length ? mine : PURPOSES[map.params.theme].filter((p) => p !== "flooded");
   for (const room of b.keyed) {
     const edit = edits[String(room.id)];
     if (!edit) continue;
@@ -67,7 +71,8 @@ export function editLocal(map: LocalMap, changes: LocalChanges | undefined, lang
       room.trap = edit.trap;
       refurnish = true;
     }
-    if (edit.text !== undefined) room.text = edit.text || undefined;
+    // Words cleared away are no words of the GM's: the room keeps its own (a GM's kind of room has some).
+    if (edit.text) room.text = edit.text;
     if (refurnish) {
       b.features = b.features.filter((f) => f.room !== room.id || !FURNISHING.has(f.kind));
       // A garden's beds go with it.

@@ -1,6 +1,7 @@
 // Local-map regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { blocked, doorsOf, editLocal, editUnderworld, generateBuilding, localFromCellar, localParams, renderUnderworldSection, tierOf, underworldGhostSvg, generateCity, generateGalaxy, localAt, localFromCavern, localFromLandmark, localFromStar, localScene, localStory, generateUnderworld, reachOf, renderLocal, renderLocalScene, renderUnderworld, SETTINGS, generateLocal, generatePlanet, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localFromMarker, TILE, walk, type LocalMap, type LocalTheme } from "../src/core/index";
+import { blocked, doorsOf, editLocal, editUnderworld, generateBuilding, localFromCellar, localParams, renderUnderworldSection, tierOf, underworldGhostSvg, generateCity, generateGalaxy, localAt, localFromCavern, localFromLandmark, localFromStar, localScene, localStory, generateUnderworld, reachOf, renderLocal, renderLocalScene, renderUnderworld, SETTINGS, generateLocal, generatePlanet, LOCAL_KINDS, LOCAL_STYLES, LOCAL_THEMES, localFromMarker, TILE, walk, whoKey, type LocalMap, type LocalTheme } from "../src/core/index";
+import { translator } from "../src/app/i18n";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -545,6 +546,30 @@ test("review fixes: stairs meet and stay dry, cisterns hold water, pieces stand 
       assert.ok(purposes.includes("engine-room") && purposes.includes("ship-bridge") && purposes.includes("entrance"), `${theme} ${width}: ${purposes.join(",")}`);
       assert.ok(map.features.some((f) => f.kind === "airlock" && f.to === ""), `${theme} ${width}: no way aboard`);
     }
+});
+
+test("review fixes: legend dwellers in the story read as words; rerolls and cleared words of the GM", () => {
+  const t = translator("en");
+  for (const who of ["bats", "the-spirits", "a-lost-tribe", "bears", "outlaws", "a-hermit", "a-secret-lab", "a-rogue-AI", "a-gang", "feral-drones", "an-alien-nest", "a-sealed-vault", "dragon", "cave-bears", "troll"]) {
+    const key = whoKey(who).slice(1);
+    assert.notEqual(t(key), key, `${who} has no words`);
+  }
+  // The GM's own theme naming a kind of room since deleted never rolls it.
+  const own = { rooms: [{ id: "well", name: "Well", text: "A deep well.", secret: false, opens: "", themes: [] }], themes: [{ id: "mine", name: "Mine", kind: "dungeon" as const, base: "crypt" as const, rooms: ["own:gone", "own:well", "storage"] }], tables: [] };
+  const map = generateLocal({ seed: "own-reroll", kind: "dungeon", theme: "crypt", own: "mine" }, undefined, own);
+  const plain = map.keyed.find((r) => !r.final && r.purpose !== "entrance" && !r.secret && !r.purpose.startsWith("own:"))!;
+  for (let n = 1; n <= 12; n++) assert.notEqual(editLocal(map, { rooms: { [plain.id]: { reroll: n } } }, null, own).keyed.find((r) => r.id === plain.id)!.purpose, "own:gone");
+  // Words cleared away leave the room's own words.
+  const well = map.keyed.find((r) => r.purpose === "own:well");
+  if (well) assert.equal(editLocal(map, { rooms: { [well.id]: { text: "" } } }, null, own).keyed.find((r) => r.id === well.id)!.text, "A deep well.");
+  // A room rolled anew on a deeper level has people of that level.
+  const deep = generateLocal({ seed: "people/depth-2", kind: "dungeon", theme: "crypt", depth: 2, levels: 2, age: "medieval", danger: 3 });
+  const ids = deep.keyed.flatMap((room) => [1, 2, 3, 4, 5, 6].flatMap((n) => {
+    const rolled = editLocal(deep, { rooms: { [room.id]: { reroll: n } } }).keyed.find((r) => r.id === room.id)!;
+    // (The place's ruler is the same on every level, and keeps the name it has.)
+    return [...(rolled.people ?? []), ...rolled.monsters.flatMap((g) => (g.leader && !g.boss ? [g.leader] : []))].map((npc) => npc.id);
+  }));
+  assert.ok(ids.length > 0 && ids.every((id) => id.startsWith("local:people/depth-2/")), "a rerolled room's people belong to the first level");
 });
 
 console.log(`local: ${passed} regressions passed`);
