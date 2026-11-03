@@ -13,6 +13,7 @@ import { PriorityQueue } from "../queue";
 import { createRng, type Rng } from "../random";
 import { spacedPicks, suitability } from "./cultures";
 import type { Burg, Culture, Ground, Marker, Planet, Relation, State } from "./model";
+import { buildRoutes } from "./routes";
 import { poleOf } from "./states";
 
 export type FallCause = "conquest" | "sack" | "abandoned" | "plague" | "eruption";
@@ -696,5 +697,7 @@ export function pastPlanet(planet: Planet, year: number): Planet {
   });
   burgs[0] = planet.burgs[0];
   const natural = planet.markers.filter((marker, k) => k === 0 || ["volcano", "hot-spring", "crater", "giant-tree", "megalith"].includes(marker.kind)).map((marker, k) => ({ ...marker, id: k }));
-  return { ...planet, state, states, burg, burgs, province: new Uint16Array(mesh.cells), provinces: [planet.provinces[0]], routes: [], markers: natural, religion: new Uint16Array(mesh.cells), religions: [planet.religions[0]] };
+  // The roads of the day, between the towns that stood (a razed slot is no stop on any road).
+  const routes = buildRoutes(planet, burgs.map((town) => (town.removed ? { ...town, state: -1, port: false } : town)), states);
+  return { ...planet, state, states, burg, burgs, province: new Uint16Array(mesh.cells), provinces: [planet.provinces[0]], routes, markers: natural, religion: new Uint16Array(mesh.cells), religions: [planet.religions[0]] };
 }

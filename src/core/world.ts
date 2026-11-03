@@ -19,6 +19,10 @@ import { settingOf, type Setting } from "./setting";
 import { galaxyParams } from "./space/galaxy";
 import { universeParams } from "./space/universe";
 
+/** The generator's version, written into each map a world records. A map made by an older version is still opened
+ * from its seed and settings, but the newer generator may draw it otherwise; the app says so. */
+export const GENERATOR = "2026.11";
+
 /** Every kind of map a world can hold. */
 export type MapLevel = "universe" | "galaxy" | "system" | "planet" | "region" | "underworld" | "city" | "building" | "local";
 /** The kinds a world can start from. */
@@ -72,6 +76,8 @@ export interface WorldMap {
   /** The language its names come from, when one was handed down. */
   language?: Language | null;
   opened: number;
+  /** The generator that made it: a map made by an older one may come out differently now. */
+  made?: string;
 }
 
 export interface WorldDoc {
@@ -201,7 +207,7 @@ export function visit(world: WorldDoc, key: string, entry: { level: MapLevel; pa
   const old = world.maps[key];
   // A map met again keeps its place in the tree unless it is reached from a new parent.
   const parent = entry.parent ?? (entry.level === world.top ? null : old?.parent ?? null);
-  const map: WorldMap = { level: entry.level, parent, step: entry.step ?? old?.step ?? null, title: entry.title, base: entry.base ?? old?.base ?? null, params: entry.params, language: entry.language === undefined ? old?.language : entry.language, opened: now };
+  const map: WorldMap = { level: entry.level, parent, step: entry.step ?? old?.step ?? null, title: entry.title, base: entry.base ?? old?.base ?? null, params: entry.params, language: entry.language === undefined ? old?.language : entry.language, opened: now, made: old?.made ?? GENERATOR };
   let maps = { ...world.maps, [key]: map };
   // A new top map makes a new world under it: maps hanging from the old top are dropped (their notes stay, unused).
   if (parent === null && entry.level === world.top) {

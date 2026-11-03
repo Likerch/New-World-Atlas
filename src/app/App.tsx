@@ -3,6 +3,7 @@
 // inspector; the shell holds the world and its outline, the tabs, the seed, export, the names' script and the language.
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
+  GENERATOR,
   ageOf,
   buildingFromCity,
   localFromCavern,
@@ -608,6 +609,11 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
         </button>
       </header>
       <nav className="crumbs" aria-label={t("worlds.path")}>
+        {here && world.maps[here]?.made && world.maps[here].made !== GENERATOR ? (
+          <span className="warning" title={t("worlds.olderHint")}>
+            ⓘ {t("worlds.older", { made: world.maps[here].made! })}
+          </span>
+        ) : null}
         <button type="button" className="ghost" onClick={() => setLibrary(true)}>
           📚 {world.name || t("worlds.unnamed")}
         </button>

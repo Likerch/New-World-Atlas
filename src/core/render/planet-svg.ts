@@ -72,6 +72,18 @@ function symbols(theme: Theme): string {
   ].join("");
 }
 
+/** How history's marks are drawn: a sign and a colour for each kind of event shown on the map. */
+export const EVENT_GLYPH: Partial<Record<string, [string, string]>> = {
+  battle: ["⚔", "#a32020"],
+  siege: ["♜", "#7a3d10"],
+  conquest: ["⚑", "#7a3d10"],
+  sack: ["🔥", "#d2481b"],
+  plague: ["☠", "#4d5a1f"],
+  rebellion: ["✊", "#8a1c5a"],
+  eruption: ["▲", "#c0392b"],
+  founding: ["★", "#1f5aa6"],
+};
+
 export const MARKER_GLYPH: Record<MarkerKind, string> = {
   volcano: "▲",
   "hot-spring": "♨",
@@ -385,6 +397,19 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
   }
 
   // Points of interest.
+  // History's marks: what happened where in the last century — battles, sieges and sackings, plague, risings.
+  if (layers.events && planet.history) {
+    const recent = planet.history.events.filter((event) => planet.history!.years - event.year <= 100 && event.cell !== undefined && EVENT_GLYPH[event.kind]);
+    out.push(`<g text-anchor="middle" font-family="'Segoe UI Symbol', 'Noto Sans Symbols', sans-serif">`);
+    for (const event of recent) {
+      const x = mesh.x[event.cell!] + ((event.id * 7) % 5) - 2;
+      const y = mesh.y[event.cell!] + ((event.id * 3) % 5) - 2;
+      const age = (planet.history.years - event.year) / 100;
+      out.push(`<text x="${r1(x)}" y="${r1(y + s * 0.15)}" font-size="${r1(s * 0.42)}" fill="${EVENT_GLYPH[event.kind]![1]}" opacity="${r1(1 - age * 0.6)}" stroke="${theme.halo}" stroke-width="1.2" paint-order="stroke">${EVENT_GLYPH[event.kind]![0]}</text>`);
+    }
+    out.push(`</g>`);
+  }
+
   if (layers.markers) {
     const r = s * 0.24;
     out.push(`<g text-anchor="middle" font-family="'Segoe UI Symbol', 'Noto Sans Symbols', sans-serif">`);
@@ -670,6 +695,8 @@ export function planetLegend(planet: Planet, options: RenderOptions = {}): Legen
     places.push({ key: "legend.capital", swatch: { svg: `<circle cx="12" cy="8" r="5" fill="${theme.burg}" stroke="${theme.burgStroke}" stroke-width="1"/><circle cx="12" cy="8" r="2.1" fill="${theme.burgStroke}"/>` } });
     places.push({ key: "legend.town", swatch: { svg: `<circle cx="12" cy="8" r="3" fill="${theme.burg}" stroke="${theme.burgStroke}" stroke-width="0.8"/>` } });
   }
+  // History's marks of the last century, by kind.
+  const told: LegendEntry[] = layers.events && planet.history ? present(planet.history.events.filter((event) => planet.history!.years - event.year <= 100 && event.cell !== undefined && EVENT_GLYPH[event.kind]).map((event) => event.kind)).map((kind) => ({ key: `history.mark.${kind}`, swatch: { glyph: EVENT_GLYPH[kind]![0], color: EVENT_GLYPH[kind]![1] } })) : [];
   const marks: LegendEntry[] = layers.markers ? present(planet.markers.slice(1).map((m) => m.kind)).map((kind) => ({ key: `marker.${kind}@${age}`, swatch: { glyph: MARKER_GLYPH[kind], color: ink, ring: ink, bg: theme.halo } })) : [];
   return [
     { key: "legend.land", entries: land },
@@ -678,5 +705,6 @@ export function planetLegend(planet: Planet, options: RenderOptions = {}): Legen
     { key: "legend.ways", entries: ways },
     { key: "legend.places", entries: places },
     { key: "legend.marks", entries: marks },
+    { key: "legend.history", entries: told },
   ].filter((section) => section.entries.length);
 }

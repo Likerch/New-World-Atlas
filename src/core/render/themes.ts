@@ -304,6 +304,7 @@ export type LayerId =
   | "emblems"
   | "labels"
   | "landmasses"
+  | "events"
   | "markers"
   | "military"
   | "grid"
@@ -314,7 +315,7 @@ export type LayerId =
   | "winds"
   | "frame";
 
-export const LAYERS: LayerId[] = ["depth", "biomes", "heights", "icons", "rivers", "states", "religions", "provinces", "borders", "routes", "burgs", "emblems", "labels", "landmasses", "markers", "military", "grid", "temperature", "precipitation", "population", "currents", "winds", "frame"];
+export const LAYERS: LayerId[] = ["depth", "biomes", "heights", "icons", "rivers", "states", "religions", "provinces", "borders", "routes", "burgs", "emblems", "labels", "landmasses", "markers", "events", "military", "grid", "temperature", "precipitation", "population", "currents", "winds", "frame"];
 
 export function defaultLayers(theme: ThemeId): Record<LayerId, boolean> {
   return {
@@ -334,6 +335,8 @@ export function defaultLayers(theme: ThemeId): Record<LayerId, boolean> {
     // Continents' names crowd the realms' own: shown by default only where no realms are drawn.
     landmasses: theme === "relief" || theme === "nautical",
     markers: theme !== "political",
+    // What history did lately, where: off unless the GM asks.
+    events: false,
     military: false,
     grid: theme !== "political" && theme !== "modern",
     temperature: false,

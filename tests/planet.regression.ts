@@ -274,7 +274,10 @@ test("a lived history makes the realms and towns of the map, and living on keeps
   }
   for (const marker of world.markers.filter((item) => item.kind === "ruins" && typeof item.facts.town === "number")) assert.ok(history.towns[marker.facts.town as number].fell !== undefined, "ruins are of fallen towns");
   assert.doesNotMatch(renderPlanet(world), /NaN|undefined|Infinity/u);
-  assert.doesNotMatch(renderPlanet(pastPlanet(world, 120)), /NaN|undefined|Infinity/u);
+  const then = pastPlanet(world, 120);
+  assert.doesNotMatch(renderPlanet(then), /NaN|undefined|Infinity/u);
+  assert.ok(then.routes.length > 1, "the past had its own roads");
+  assert.doesNotMatch(renderPlanet(world, { layers: { events: true } }), /NaN|undefined|Infinity/u);
   // The same seed lives the same history; fifty years more begin with the same three hundred.
   const again = generatePlanet({ seed: "lived", template: "continents", cells: 5000, history: 300 });
   assert.deepEqual(again.history!.events.map((event) => `${event.year}:${event.kind}`), history.events.map((event) => `${event.year}:${event.kind}`));
