@@ -18,8 +18,9 @@ export interface Hydrology {
 /**
  * @param ocean cells of water bodies that reach the map's edge
  * @param scale km per map unit
+ * @param brought water arriving from beyond the map (m³/s), by the cell it enters at
  */
-export function hydrology(mesh: Mesh, height: Float32Array, ocean: (cell: number) => boolean, rain: Float32Array, scale: number): Hydrology {
+export function hydrology(mesh: Mesh, height: Float32Array, ocean: (cell: number) => boolean, rain: Float32Array, scale: number, brought?: Float32Array): Hydrology {
   const n = mesh.cells;
   // Priority flood from the sea and the map's edge: every depression fills up to its spill point.
   const filled = new Float32Array(n);
@@ -88,6 +89,7 @@ export function hydrology(mesh: Mesh, height: Float32Array, ocean: (cell: number
     landRunoff += flux[cell];
     landCells++;
   }
+  if (brought) for (let cell = 0; cell < n; cell++) if (!ocean(cell)) flux[cell] += brought[cell];
   // Highest first, so a cell has all its inflow before passing it on.
   for (let k = order.length - 1; k >= 0; k--) {
     const cell = order[k];

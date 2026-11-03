@@ -9,7 +9,7 @@ import { oceanCurrents, windAt } from "../planet/currents";
 import { raiseArmies } from "../planet/military";
 import { wrapsRound } from "../planet/geo";
 import { KOPPEN, koppenOf, seasonalTemperature, zonesOf, type TroubleKind } from "../planet/nature";
-import type { MarkerKind, Planet } from "../planet/model";
+import type { LandformKind, MarkerKind, Planet } from "../planet/model";
 import { ageOf, settingOf } from "../setting";
 import { renderEmblem } from "./heraldry-svg";
 import { defaultLayers, THEME, type LayerId, type Theme, type ThemeId } from "./themes";
@@ -23,12 +23,18 @@ export interface RenderOptions {
   highlight?: { kind: "state" | "province" | "culture" | "religion"; id: number } | null;
   /** The map's own words in the reader's language: the unit of the scale bar (and how many of it make a km) and where a
    * world map's scale holds. */
-  words?: { km?: string; atEquator?: string; perKm?: number };
+  words?: { km?: string; atEquator?: string; perKm?: number; landform?: Partial<Record<LandformKind, string>> };
   /** The warmth map in a season rather than over the year. */
   season?: "summer" | "winter";
 }
 
 const SEA = 20;
+
+/** A close-up's land use: fields in strips, pasture, managed woods, orchards in rows (see LAND_USE). */
+const LAND_USE_FILL = ["", "url(#lu-1)", "#c4dc98", "url(#lu-3)", "url(#lu-4)"];
+const LAND_USE_SWATCH = ["", "#e6d48e", "#c4dc98", "#7fa765", "#d2c070"];
+const LANDFORM_INK: Record<LandformKind, string> = { forest: "#2f5a2a", marsh: "#2d6767", hills: "#6b4e2e", mountains: "#5a3f28", peak: "#4a3420", desert: "#8a6a2e", heath: "#5b5b4a" };
+const landUsePatterns = `<pattern id="lu-1" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(32)"><rect width="5" height="5" fill="#e6d48e"/><path d="M0,0V5M2.5,0V5" stroke="#c8ad5c" stroke-width="0.5"/></pattern><pattern id="lu-3" width="6" height="6" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="#9cc07c"/><circle cx="1.5" cy="1.5" r="1.1" fill="#6f9a55"/><circle cx="4.5" cy="4.5" r="1.1" fill="#6f9a55"/></pattern><pattern id="lu-4" width="4" height="4" patternUnits="userSpaceOnUse"><rect width="4" height="4" fill="#ddcf8a"/><circle cx="2" cy="2" r="0.8" fill="#8a9a46"/></pattern>`;
 
 /** Heat maps: band floors (the first covers everything) and their colours, from cold, dry and empty upwards. */
 const CLIMATE = {
@@ -160,7 +166,7 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
 
   out.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="${esc(theme.font)}">`);
   const landPath = rings(outline(mesh, land), 2);
-  out.push(`<defs><clipPath id="map-clip"><rect width="${W}" height="${H}"/></clipPath><clipPath id="land-clip"><path d="${landPath}"/></clipPath>${symbols(theme)}`);
+  out.push(`<defs><clipPath id="map-clip"><rect width="${W}" height="${H}"/></clipPath><clipPath id="land-clip"><path d="${landPath}"/></clipPath>${symbols(theme)}${planet.landUse ? landUsePatterns : ""}`);
   if (theme.paper) out.push(`<filter id="paper" x="0" y="0" width="100%" height="100%"><feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="3" seed="7"/><feColorMatrix values="0 0 0 0 0.35  0 0 0 0 0.27  0 0 0 0 0.17  0 0 0 0.16 0"/><feComposite in2="SourceGraphic" operator="in"/></filter>`);
   out.push(`</defs><g clip-path="url(#map-clip)">`);
 
@@ -210,6 +216,13 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
     for (const biome of BIOMES.slice(1)) {
       const shape = rings(outline(mesh, (cell) => land(cell) && planet.biome[cell] === biome.id), 1);
       if (shape) out.push(`<path d="${shape}" fill="${theme.biomes[biome.id]}" stroke="${theme.biomes[biome.id]}" stroke-width="0.6" fill-rule="evenodd"/>`);
+    }
+  }
+  // A close-up's fields, pastures, woods and orchards over the wild land.
+  if (layers.landuse && planet.landUse) {
+    for (let use = 1; use < LAND_USE_FILL.length; use++) {
+      const shape = rings(outline(mesh, (cell) => land(cell) && planet.landUse![cell] === use), 1);
+      if (shape) out.push(`<path d="${shape}" fill="${LAND_USE_FILL[use]}" fill-opacity="0.62" fill-rule="evenodd"/>`);
     }
   }
   // Köppen climates, in the colours atlases give them.
@@ -317,7 +330,11 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
     out.push(`</g>`);
   }
 
-  // Borders: provinces dotted, states dashed over them.
+  // Borders: a close-up's lordships faint, provinces dotted, states dashed over them.
+  if (layers.fiefs && planet.fief) {
+    const lines = borders(mesh, (cell) => (water[cell] ? -1 : planet.fief![cell]));
+    out.push(`<path d="${lines.map((line) => pathData(smooth(line, false, 1), false)).join("")}" fill="none" stroke="${theme.provinceBorder}" stroke-width="0.45" stroke-dasharray="0.4 1.4" stroke-linecap="round" opacity="0.75"/>`);
+  }
   if (layers.provinces) {
     const lines = borders(mesh, (cell) => (water[cell] ? -1 : planet.province[cell]));
     out.push(`<path d="${lines.map((line) => pathData(smooth(line, false, 1), false)).join("")}" fill="none" stroke="${theme.provinceBorder}" stroke-width="0.6" stroke-dasharray="1 1.6" opacity="0.8"/>`);
@@ -472,7 +489,7 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
         const r = s * 0.3;
         out.push(`<circle cx="${r1(burg.x)}" cy="${r1(burg.y)}" r="${r1(r)}" fill="${theme.burg}" stroke-width="0.9"/><circle cx="${r1(burg.x)}" cy="${r1(burg.y)}" r="${r1(r * 0.42)}" fill="${theme.burgStroke}" stroke="none"/>`);
       } else {
-        const r = s * (0.11 + Math.min(0.11, burg.population / 300));
+        const r = burg.tier === "hamlet" ? s * 0.07 : s * (0.11 + Math.min(0.11, burg.population / 300));
         out.push(`<circle cx="${r1(burg.x)}" cy="${r1(burg.y)}" r="${r1(r)}" fill="${theme.burg}" stroke-width="0.6"/>`);
       }
       placed.push({ x0: burg.x - s * 0.3, y0: burg.y - s * 0.3, x1: burg.x + s * 0.3, y1: burg.y + s * 0.3 });
@@ -531,6 +548,17 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
       out.push(`<g font-size="6" font-style="italic" fill="${theme.label}" opacity="0.8" ${halo}>`);
       for (const marker of planet.markers.slice(1)) if (marker.name) out.push(`<text x="${r1(marker.x + s * 0.32)}" y="${r1(marker.y - s * 0.22)}">${text(marker.name)}</text>`);
       out.push(`</g>`);
+    }
+    // A close-up's named land: woods, marshes, hills and ranges over their heart, summits beside their peak.
+    for (const item of planet.landforms?.slice(1) ?? []) {
+      const ink = LANDFORM_INK[item.kind];
+      const called = (options.words?.landform?.[item.kind] ?? "{name}").replace("{name}", item.name);
+      if (item.kind === "peak") {
+        out.push(`<g fill="${ink}" ${halo}><text x="${r1(item.x)}" y="${r1(item.y + 2)}" font-size="6" text-anchor="middle">▲</text><text x="${r1(item.x + 4)}" y="${r1(item.y - 2)}" font-size="6.5" font-style="italic">${text(called)}</text></g>`);
+        continue;
+      }
+      const size = Math.min(15, 7 + Math.sqrt(item.cells) / 5);
+      out.push(`<text x="${r1(item.x)}" y="${r1(item.y)}" text-anchor="middle" font-size="${r1(size)}" font-style="italic" letter-spacing="${r1(size * 0.25)}" fill="${ink}" opacity="0.85" ${halo}>${text(called)}</text>`);
     }
     for (const [x, y, words, size] of planet.gmLabels ?? []) out.push(`<text x="${r1(x)}" y="${r1(y)}" text-anchor="middle" font-size="${r1(size)}" font-weight="600" letter-spacing="${r1(size * 0.12)}" fill="${theme.label}" ${halo}>${esc(words)}</text>`);
     // Rivers: the largest ones, along their course.
@@ -748,6 +776,8 @@ export function planetLegend(planet: Planet, options: RenderOptions = {}): Legen
     for (const kind of present(planet.routes.slice(1).map((route) => route.kind))) ways.push({ key: `route.${kind}@${age}`, swatch: strokeSwatch(style[kind], over[kind]) });
   }
   const places: LegendEntry[] = [];
+  if (layers.landuse && planet.landUse) for (const use of present([...planet.landUse].filter((use) => use > 0))) land.push({ key: `landuse.${use}`, swatch: { fill: LAND_USE_SWATCH[use], opacity: 0.8 } });
+  if (layers.fiefs && planet.fief) realms.push({ key: "legend.fief", swatch: { line: theme.provinceBorder, width: 1, dash: "0.6 1.8" } });
   if (layers.burgs) {
     places.push({ key: "legend.capital", swatch: { svg: `<circle cx="12" cy="8" r="5" fill="${theme.burg}" stroke="${theme.burgStroke}" stroke-width="1"/><circle cx="12" cy="8" r="2.1" fill="${theme.burgStroke}"/>` } });
     places.push({ key: "legend.town", swatch: { svg: `<circle cx="12" cy="8" r="3" fill="${theme.burg}" stroke="${theme.burgStroke}" stroke-width="0.8"/>` } });

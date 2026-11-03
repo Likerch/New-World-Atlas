@@ -109,6 +109,7 @@ export function renamePlanet(planet: Planet, names: Record<string, string>): Pla
     rivers: rename(planet.rivers, "river", names),
     markers: rename(planet.markers, "marker", names),
     features: rename(planet.features, "feature", names),
+    landforms: planet.landforms && rename(planet.landforms, "landform", names),
   };
 }
 

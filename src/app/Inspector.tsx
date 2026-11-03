@@ -25,6 +25,8 @@ interface Props {
   onOpenRegion?: (province: number) => void;
   onOpenLocal?: (marker: number) => void;
   onOpenCountry?: (state: number) => void;
+  /** A sheet of the map round a cell, opened as a close-up. */
+  onOpenSheet?: (cell: number) => void;
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -60,7 +62,7 @@ export function legendOf(marker: Marker, t: T, nm: (name: string) => string, age
   return t(`legend.${marker.kind}${age ? `@${age}` : ""}`, facts);
 }
 
-export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onOpenCity, onOpenRegion, onOpenLocal, onOpenCountry }: Props) {
+export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onOpenCity, onOpenRegion, onOpenLocal, onOpenCountry, onOpenSheet }: Props) {
   const [query, setQuery] = useState("");
   // Long lists of towns come a page at a time.
   const [shown, setShown] = useState(300);
@@ -92,7 +94,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
   const match = (name: string) => !query.trim() || nm(name).toLowerCase().includes(query.trim().toLowerCase());
 
   const card = useMemo(() => {
-    if (!selection) return <WorldCard planet={planet} t={t} nm={nm} />;
+    if (!selection) return planet.frame ? <RegionCard planet={planet} t={t} nm={nm} /> : <WorldCard planet={planet} t={t} nm={nm} />;
     const { kind, id } = selection;
     if (kind === "cell") {
       const cell = id;
@@ -118,6 +120,8 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
               <Row label={t("place.culture")} value={planet.culture[cell] ? <Link label={nm(planet.cultures[planet.culture[cell]].name)} onClick={() => pick("culture", planet.culture[cell])} /> : "—"} />
               <Row label={t("place.population")} value={people(planet.population[cell], t)} />
               <Row label={t("place.religion")} value={planet.religion[cell] ? faithAt(planet.religion[cell]) : "—"} />
+              {planet.fief?.[cell] ? <Row label={at("place.fief")} value={<Link label={nm(planet.burgs[planet.fiefs![planet.fief[cell]].seat].name)} onClick={() => { const seat = planet.burgs[planet.fiefs![planet.fief![cell]].seat]; pick("burg", seat.id, [seat.x, seat.y]); }} />} /> : null}
+              {planet.landUse ? <Row label={t("place.landuse")} value={t(`landuse.${planet.landUse[cell]}`)} /> : null}
             </>
           ) : null}
           {planet.feature[cell] ? <Row label={t(isWater ? "place.waters" : "place.landmass")} value={<Link label={featureName(planet.feature[cell])} onClick={() => pick("feature", planet.feature[cell], heartOf(planet.feature[cell]))} />} /> : null}
@@ -126,6 +130,11 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
           {!isWater && planet.province[cell] && onOpenRegion ? (
             <button type="button" className="primary wide" onClick={() => onOpenRegion(planet.province[cell])}>
               🗺 {t("action.openRegion")}
+            </button>
+          ) : null}
+          {!isWater && onOpenSheet ? (
+            <button type="button" className="wide" onClick={() => onOpenSheet(cell)}>
+              📄 {t("action.sheetHere")}
             </button>
           ) : null}
         </div>
@@ -272,6 +281,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
         <div className="card">
           <Arms emblem={emblemOf(planet, "burg", id)} />
           <h3>{nm(burg.name)}</h3>
+          {burg.tier ? <Row label={t("place.kind")} value={at(`tier.${burg.tier}`)} /> : null}
           <Row label={t("stat.population")} value={people(burg.population, t)} />
           <Row label={t("place.religion")} value={planet.religion[burg.cell] ? faithAt(planet.religion[burg.cell]) : "—"} />
           <Row label={t("place.state")} value={<Link label={stateName(burg.state)} onClick={() => pick("state", burg.state)} />} />
@@ -457,6 +467,43 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
 }
 
 /** The world as a whole when nothing is picked: its age and setting, its roads and how many keep a faith. */
+/** A close-up at a glance: its towns, villages and hamlets, lordships, how its land is used and its named land. */
+function RegionCard({ planet, t, nm }: { planet: Planet; t: T; nm: (name: string) => string }) {
+  const age = ageOf(settingOf(planet.params.setting));
+  const living = planet.burgs.slice(1).filter((burg) => !burg.removed);
+  const uses = [0, 0, 0, 0, 0];
+  let land = 0;
+  for (let cell = 0; cell < planet.mesh.cells; cell++) {
+    if (planet.water[cell]) continue;
+    land++;
+    uses[planet.landUse?.[cell] ?? 0]++;
+  }
+  return (
+    <div className="card">
+      <h3>{nm(planet.name)}</h3>
+      <Row label={t("region.card.towns")} value={living.filter((burg) => !burg.tier).length} />
+      <Row label={t("region.card.villages")} value={living.filter((burg) => burg.tier === "village").length} />
+      <Row label={t("region.card.hamlets")} value={living.filter((burg) => burg.tier === "hamlet").length} />
+      <Row label={t("stat.population")} value={people(living.reduce((sum, burg) => sum + burg.population, 0), t)} />
+      {planet.fiefs ? <Row label={t(`region.card.fiefs@${age}`)} value={planet.fiefs.length - 1} /> : null}
+      <Row label={t("region.card.rivers")} value={planet.rivers.length - 1} />
+      {planet.landUse && land ? (
+        <>
+          <h4>{t("place.landuse")}</h4>
+          {uses.map((count, use) => (count ? <Row key={use} label={t(`landuse.${use}`)} value={`${Math.round((count / land) * 100)}%`} /> : null))}
+        </>
+      ) : null}
+      {planet.landforms && planet.landforms.length > 1 ? (
+        <>
+          <h4>{t("region.card.landforms")}</h4>
+          <p>{planet.landforms.slice(1).map((item) => t(`landform.${item.kind}`, { name: nm(item.name) })).join(" · ")}</p>
+        </>
+      ) : null}
+      <p className="muted">{t("place.hint")}</p>
+    </div>
+  );
+}
+
 function WorldCard({ planet, t, nm }: { planet: Planet; t: T; nm: (name: string) => string }) {
   const setting = settingOf(planet.params.setting);
   const roadAge = ageOf(setting, setting.transport);

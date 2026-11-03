@@ -90,7 +90,8 @@ function network(points: number[][], extraRatio: number): [number, number][] {
   return chosen;
 }
 
-export function buildRoutes(g: Ground, burgs: Burg[], states: State[]): Route[] {
+/** @param given roads already there (a close-up's share of its planet's), which the new ones join and follow */
+export function buildRoutes(g: Ground, burgs: Burg[], states: State[], given: [RouteKind, number[]][] = []): Route[] {
   const routes: Route[] = [{ id: 0, kind: "road", cells: [], length: 0 }];
   const roads = new Uint8Array(g.mesh.cells);
   const add = (kind: RouteKind, cells: number[] | null) => {
@@ -104,9 +105,10 @@ export function buildRoutes(g: Ground, burgs: Burg[], states: State[]): Route[] 
   // Before the wheel every way is a footpath, and before boats there are no sea lanes.
   const walking = setting.transport < 1;
 
-  // Highways between the capitals of neighbouring states on the same landmass.
+  for (const [kind, cells] of given) add(kind, cells);
+  // Highways between the capitals of neighbouring states on the same landmass (a close-up has its planet's).
   const capitals = states.slice(1).filter((state) => state.capital);
-  for (const state of capitals) {
+  for (const state of given.length ? [] : capitals) {
     for (const other of state.neighbors) {
       if (other < state.id || !states[other].capital) continue;
       const a = burgs[state.capital].cell,

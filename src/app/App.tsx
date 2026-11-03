@@ -10,6 +10,9 @@ import {
   localFromCavern,
   cityFromBurg,
   editPlanet,
+  generateArea,
+  generateCountry,
+  generateRegion,
   ERA_BUILDINGS,
   galaxyParams,
   legendSvg,
@@ -238,7 +241,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
         });
     },
     show: setView,
-    words: { km: t(world.units === "imperial" ? "unit.mi" : "unit.km"), atEquator: t("scale.equator"), perKm: world.units === "imperial" ? 0.621371 : 1 },
+    words: { km: t(world.units === "imperial" ? "unit.mi" : "unit.km"), atEquator: t("scale.equator"), perKm: world.units === "imperial" ? 0.621371 : 1, landform: Object.fromEntries((["forest", "marsh", "hills", "mountains", "peak", "desert", "heath"] as const).map((kind) => [kind, t(`landform.${kind}`, { name: "{name}" })])) },
     names: (key) => store.patch(key).names,
     patch: store.patch,
     update: store.update,
@@ -250,6 +253,10 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   const pending = useRef<Partial<Record<MapLevel, { parent: string | null; step: WorldStep; base: Record<string, unknown> | null }>>>({});
   const linkTo = (to: MapLevel, from: Level, entity: string, base: Record<string, unknown> | null) => {
     pending.current[to] = { parent: from.worldKey ?? from.mapKey ?? null, step: { entity }, base };
+  };
+  const linkBeside = (to: MapLevel, sibling: Level, entity: string) => {
+    const key = sibling.worldKey ?? sibling.mapKey;
+    pending.current[to] = { parent: (key && world.maps[key]?.parent) || null, step: { entity }, base: null };
   };
   const back = (level: LevelId) => {
     const key = world.last.byLevel[level];
@@ -301,6 +308,19 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   const region = useRegionLevel(ctx, {
     openCity: (made, burg) => openCity(region, made, burg),
     openLocal: (made, marker) => openLocal(region, localFromMarker(made, marker), `marker:${marker}`),
+    openUnderworld: (made) => {
+      linkTo("underworld", region, "underworld", null);
+      underworld.open(made);
+    },
+    // A neighbour hangs where this region hangs, though its planet may not have been opened since the world was loaded.
+    openProvince: (made, province) => {
+      linkBeside("region", region, `province:${province}`);
+      region.open(made, province, planet.theme, planet.layers);
+    },
+    openCountry: (made, state) => {
+      linkBeside("region", region, `state:${state}`);
+      region.openCountry(made, state, planet.theme, planet.layers);
+    },
     back: back("region"),
   });
   const planet = usePlanetLevel(ctx, undefined, undefined, {
@@ -308,7 +328,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     openLocal: (made, marker) => openLocal(planet, localFromMarker(made, marker), `marker:${marker}`),
     openRegion: (made, province) => {
       linkTo("region", planet, `province:${province}`, null);
-      region.open(made, province, planet.theme);
+      region.open(made, province, planet.theme, planet.layers);
     },
     openUnderworld: (made) => {
       linkTo("underworld", planet, "underworld", null);
@@ -316,11 +336,11 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     },
     openCountry: (made, state) => {
       linkTo("region", planet, `state:${state}`, null);
-      region.openCountry(made, state, planet.theme);
+      region.openCountry(made, state, planet.theme, planet.layers);
     },
-    openArea: (made, box) => {
+    openArea: (made, box, title) => {
       linkTo("region", planet, `area:${box.map(Math.round).join(",")}`, null);
-      region.openArea(made, box, planet.theme);
+      region.openArea(made, box, planet.theme, planet.layers, title);
     },
     back: back("planet"),
   });
@@ -368,25 +388,36 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     if (map.level === "region" || map.level === "underworld") return reopenFromPlanet(key);
     byId[map.level].restore?.(map.params, map.language);
   }
-  /** A region or the underworld is cut from its planet: remake the planet (with the GM's edits and names) first. */
+  /** A region or the underworld is cut from its planet (an underworld maybe from a region): remake those first. */
   function reopenFromPlanet(key: string) {
     const map = world.maps[key];
     const parentKey = map?.parent;
-    const parent = parentKey ? world.maps[parentKey] : null;
-    if (!map || !parentKey || !parent || parent.level !== "planet") return;
-    const patch = world.patches[parentKey];
-    ctx.task(
-      (report) => growPlanet(parent.params as Partial<PlanetParams>, patch?.edits?.terrain, report, patch?.edits?.image),
-      (grown) => {
-      const made = renamePlanet(editPlanet(grown, patch?.edits ?? null), patch?.names ?? {});
+    if (!map || !parentKey || !world.maps[parentKey]) return;
+    madeOf(parentKey, (made) => {
       pending.current[map.level] = { parent: parentKey, step: map.step!, base: null };
-      const of = map.params as { of?: string; id?: number; box?: [number, number, number, number] };
+      const of = map.params as { of?: string; id?: number; box?: [number, number, number, number]; title?: string };
       if (map.level === "underworld") underworld.open(made);
       else if (of.of === "state") region.openCountry(made, of.id ?? 0);
-      else if (of.of === "area" && of.box) region.openArea(made, of.box);
+      else if (of.of === "area" && of.box) region.openArea(made, of.box, undefined, undefined, of.title);
       else region.open(made, of.id ?? 0);
-      },
-    );
+    });
+  }
+  /** A planet as the GM left it (regrown under the relief strokes, edited, renamed), or a region cut from one. */
+  function madeOf(key: string, done: (made: Planet) => void) {
+    const map = world.maps[key];
+    const patch = world.patches[key];
+    if (map?.level === "planet") {
+      ctx.task(
+        (report) => growPlanet(map.params as Partial<PlanetParams>, patch?.edits?.terrain, report, patch?.edits?.image),
+        (grown) => done(renamePlanet(editPlanet(grown, patch?.edits ?? null), patch?.names ?? {})),
+      );
+    } else if (map?.level === "region" && map.parent) {
+      madeOf(map.parent, (planet) => {
+        const of = map.params as { of?: string; id?: number; box?: [number, number, number, number]; title?: string };
+        const cut = of.of === "state" ? generateCountry(planet, of.id ?? 0) : of.of === "area" && of.box ? generateArea(planet, of.box, of.title ?? t("region.area")) : generateRegion(planet, of.id ?? 0);
+        done(renamePlanet(cut, patch?.names ?? {}));
+      });
+    }
   }
 
   // The world remembers every map shown in it: where it hangs, what it was derived from, what it was made from.

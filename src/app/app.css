@@ -908,3 +908,12 @@ table.figures .bar {
 table.figures td span:not(.bar) {
   position: relative;
 }
+
+/* Where a close-up lies on its planet. */
+.locator {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}

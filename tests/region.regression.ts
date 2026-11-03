@@ -1,6 +1,6 @@
 // Region regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { SETTINGS, armsOf, cityFromBurg, generateCity, generateCountry, generatePlanet, generateRegion, generateUnderworld, renderPlanet, renderUnderworld } from "../src/core/index";
+import { SETTINGS, armsOf, cityFromBurg, generateArea, generateCity, generateCountry, generatePlanet, generateRegion, generateUnderworld, renderPlanet, renderUnderworld, sheetBox } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -111,6 +111,53 @@ test("cities of their own speak tongues of their own", () => {
   const streets = (city: typeof a) => city.streets.map((street) => street.name).filter(Boolean).join(" ");
   assert.notEqual(streets(a).slice(0, 40), streets(b).slice(0, 40));
   assert.equal(generateCity({ seed: "tongue-a", era: "medieval" }).name, a.name, "and the same seed speaks the same");
+});
+
+test("the planet's rivers run in the region where they run on the planet", () => {
+  const [x0, y0, x1, y1] = region.frame!;
+  const k = (x1 - x0) / region.params.width;
+  let near = 0,
+    total = 0;
+  for (const river of planet.rivers.slice(1)) {
+    for (const cell of river.cells) {
+      const x = (planet.mesh.x[cell] - x0) / k,
+        y = (planet.mesh.y[cell] - y0) / k;
+      if (x < 20 || y < 20 || x > region.params.width - 20 || y > region.params.height - 20) continue;
+      total++;
+      const c = region.mesh.find(x, y);
+      const round = [c, ...region.mesh.neighbors[c]];
+      if ([...round, ...round.flatMap((m) => region.mesh.neighbors[m])].some((m) => region.river[m] || region.water[m])) near++;
+    }
+  }
+  assert.ok(total > 5, "the frame holds some of the planet's rivers");
+  assert.ok(near / total > 0.9, `only ${near} of ${total} river cells have a river beside them`);
+});
+
+test("the countryside: ranked villages, land in use, lordships within their realm, named land, the planet's places", () => {
+  const villages = region.burgs.filter((burg) => burg.tier === "village");
+  const hamlets = region.burgs.filter((burg) => burg.tier === "hamlet");
+  assert.ok(villages.length && hamlets.length, "both villages and hamlets");
+  assert.ok(Math.min(...villages.map((burg) => burg.population)) >= Math.max(...hamlets.map((burg) => burg.population)), "a hamlet outgrew a village");
+  const land = [...region.landUse!].filter((use, cell) => !region.water[cell]);
+  assert.ok(land.filter((use) => use === 1).length > 0 && land.filter((use) => use === 0).length > 0, "fields and wild land");
+  for (let cell = 0; cell < region.mesh.cells; cell++) {
+    const fief = region.fief![cell];
+    if (fief) assert.equal(region.state[region.burgs[region.fiefs![fief].seat].cell], region.state[cell], "a lordship crosses a realm's border");
+  }
+  assert.ok(region.landforms!.length > 1 && region.landforms!.slice(1).every((item) => item.name), "named land");
+  const kept = region.markers.filter((marker) => marker.origin !== undefined);
+  assert.ok(kept.length > 0, "the planet's places are kept");
+  for (const marker of kept) assert.equal(marker.kind, planet.markers[marker.origin!].kind);
+  assert.ok(renderPlanet(region, { layers: { landuse: true, fiefs: true } }).includes("url(#lu-1)"), "fields are drawn");
+});
+
+test("a 200 km sheet is a close-up of that size", () => {
+  const town = planet.burgs.find((burg) => burg.id && !burg.removed)!;
+  const box = sheetBox(planet, town.x, town.y);
+  assert.ok(Math.abs((box[2] - box[0]) * planet.scale - 200) < 1e-6);
+  const sheet = generateArea(planet, box, "Sheet", 3000);
+  assert.ok(Math.abs(sheet.params.width * sheet.scale - 200) < 1, `the sheet is ${sheet.params.width * sheet.scale} km wide`);
+  assert.ok(sheet.burgs.some((burg) => burg.origin === town.id), "the town stands on its sheet");
 });
 
 console.log(`region: ${passed} regressions passed`);

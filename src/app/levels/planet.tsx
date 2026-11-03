@@ -1,6 +1,6 @@
 // The planet level: world settings, the world map and its inspector.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createRng, editPlanet, mapKeyOf, pastPlanet, planetGeoJSON, eraTheme, emptyEdits, foundedSize, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
+import { sheetBox, createRng, editPlanet, mapKeyOf, pastPlanet, planetGeoJSON, eraTheme, emptyEdits, foundedSize, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { SettingPanel } from "../SettingPanel";
 import { WorldForm, type ZoomRange } from "../WorldForm";
@@ -97,11 +97,11 @@ export interface PlanetLinks {
   openCountry?: (planet: Planet, state: number) => void;
   openUnderworld?: (planet: Planet) => void;
   /** A close-up of a box the GM marked out on the map. */
-  openArea?: (planet: Planet, box: [number, number, number, number]) => void;
+  openArea?: (planet: Planet, box: [number, number, number, number], title?: string) => void;
   back: (() => void) | null;
 }
 
-export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, initialSetting: Partial<Setting> | undefined, { openCity, openRegion, openLocal, openCountry, openUnderworld, openArea, back }: PlanetLinks): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void; theme: ThemeId } {
+export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, initialSetting: Partial<Setting> | undefined, { openCity, openRegion, openLocal, openCountry, openUnderworld, openArea, back }: PlanetLinks): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void; theme: ThemeId; layers: Record<LayerId, boolean> } {
   const { t } = ctx;
   const [params, setParams] = useState<PlanetParams>(() => planetParams({ seed: initialSeed, setting: initialSetting }));
   const [raw, setPlanet] = useState<Planet | null>(null);
@@ -299,6 +299,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
         : [],
     describe: () => (planet ? describePlanet(planet, selection, t, ctx.nm) : ""),
     theme,
+    layers,
     map: planet
       ? {
           svg,
@@ -522,7 +523,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
             </select>
           </label>
         ) : null}
-        {LAYERS.map((id) => (
+        {LAYERS.filter((id) => id !== "landuse" && id !== "fiefs").map((id) => (
           <label key={id} className="check">
             <input type="checkbox" checked={layers[id]} onChange={(event) => toggle(id, event.target.checked)} />
             {t(`layer.${id}`)}
@@ -542,6 +543,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
         onOpenRegion={openRegion ? (province) => openRegion(planet, province) : undefined}
         onOpenLocal={openLocal ? (marker) => openLocal(planet, marker) : undefined}
         onOpenCountry={openCountry ? (state) => openCountry(planet, state) : undefined}
+        onOpenSheet={openArea ? (cell) => openArea(planet, sheetBox(planet, planet.mesh.x[cell], planet.mesh.y[cell]), t("region.sheet")) : undefined}
         onSelect={(next, at) => {
           setSelection(next);
           if (at) ctx.focus(at[0], at[1]);

@@ -1,26 +1,64 @@
 // The region level: one province of the planet up close, with its villages, roads and local places.
 import { useMemo, useState } from "react";
-import { eraTheme, generateArea, generateCountry, generateRegion, settingOf, LAYERS, planetToJson, renamePlanet, renderPlanet, THEMES, type Planet, type ThemeId, planetLegend } from "../../core/index";
+import { defaultLayers, eraTheme, generateArea, generateCountry, generateRegion, settingOf, LAYERS, planetToJson, renamePlanet, renderPlanet, THEMES, type LayerId, type Planet, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { selectedOf } from "./planet";
 import { describePlanet, searchPlanet } from "../planetText";
 import { useLayers } from "./layers";
 import type { Level, LevelContext } from "./types";
 
-export function useRegionLevel(ctx: LevelContext, links: { openCity: (region: Planet, burg: number) => void; openLocal: (region: Planet, marker: number) => void; back: (() => void) | null }): Level & { open: (planet: Planet, province: number, style?: ThemeId) => void; openCountry: (planet: Planet, state: number, style?: ThemeId) => void; openArea: (planet: Planet, box: [number, number, number, number], style?: ThemeId) => void } {
+/** Where a close-up lies on its planet: the planet's land in small squares and the close-up's frame over it. */
+function Locator({ planet, frame }: { planet: Planet; frame: [number, number, number, number] }) {
+  const squares = useMemo(() => {
+    const { width, height } = planet.params;
+    const step = width / 72;
+    const out: string[] = [];
+    for (let y = step / 2; y < height; y += step) for (let x = step / 2; x < width; x += step) if (!planet.water[planet.mesh.find(x, y)]) out.push(`M${Math.round(x - step / 2)},${Math.round(y - step / 2)}h${Math.ceil(step)}v${Math.ceil(step)}h-${Math.ceil(step)}z`);
+    return out.join("");
+  }, [planet]);
+  const [x0, y0, x1, y1] = frame;
+  return (
+    <svg className="locator" viewBox={`0 0 ${planet.params.width} ${planet.params.height}`} role="img">
+      <rect width={planet.params.width} height={planet.params.height} fill="var(--sea, #bcd3e0)" />
+      <path d={squares} fill="var(--land, #e8dfc4)" />
+      <rect x={x0} y={y0} width={x1 - x0} height={y1 - y0} fill="none" stroke="#c0392b" strokeWidth={Math.max(4, planet.params.width / 180)} />
+    </svg>
+  );
+}
+
+/** The provinces (or realms) that share a border with one: the planet's land cells next to its own. */
+function neighboursOf(planet: Planet, of: "province" | "state", id: number): number[] {
+  const owner = of === "province" ? planet.province : planet.state;
+  const found = new Set<number>();
+  for (let cell = 0; cell < planet.mesh.cells; cell++) {
+    if (owner[cell] !== id || planet.water[cell]) continue;
+    for (const next of planet.mesh.neighbors[cell]) if (!planet.water[next] && owner[next] && owner[next] !== id) found.add(owner[next]);
+  }
+  return [...found];
+}
+
+export function useRegionLevel(
+  ctx: LevelContext,
+  links: { openCity: (region: Planet, burg: number) => void; openLocal: (region: Planet, marker: number) => void; openUnderworld: (region: Planet) => void; openProvince: (planet: Planet, province: number) => void; openCountry: (planet: Planet, state: number) => void; back: (() => void) | null },
+): Level & { open: (planet: Planet, province: number, style?: ThemeId, layers?: Record<LayerId, boolean>) => void; openCountry: (planet: Planet, state: number, style?: ThemeId, layers?: Record<LayerId, boolean>) => void; openArea: (planet: Planet, box: [number, number, number, number], style?: ThemeId, layers?: Record<LayerId, boolean>, title?: string) => void } {
   const { t } = ctx;
   const [raw, setRegion] = useState<Planet | null>(null);
-  const [of, setOf] = useState<{ of: "province" | "state" | "area"; id: number; box?: [number, number, number, number] } | null>(null);
+  // The planet it was cut from: for the locator and the neighbours next door.
+  const [parent, setParent] = useState<Planet | null>(null);
+  const [of, setOf] = useState<{ of: "province" | "state" | "area"; id: number; box?: [number, number, number, number]; title?: string } | null>(null);
   const mapKey = raw ? `region:${raw.params.seed}` : null;
   const names = ctx.names(mapKey);
   const region = useMemo(() => (raw ? renamePlanet(raw, names) : null), [raw, names]);
   const [theme, setTheme] = useState<ThemeId>("atlas");
-  const { layers, restyle, toggle } = useLayers("atlas", { provinces: true });
-  // A close-up is drawn in its planet's style: the one the GM has on the planet, else the one its age suggests.
-  const styleOf = (planet: Planet, style?: ThemeId) => {
+  const { layers, restyle, toggle, setAll } = useLayers("atlas", { provinces: true });
+  // A close-up is drawn in its planet's style and layers: the ones the GM has on the planet, else the ones its age
+  // suggests; the countryside's own layers come on as the style has them.
+  const styleOf = (planet: Planet, style?: ThemeId, shown?: Record<LayerId, boolean>) => {
     const next = style ?? eraTheme(settingOf(planet.params.setting));
     setTheme(next);
-    restyle(next);
+    setParent(planet);
+    if (shown) setAll({ ...shown, landuse: defaultLayers(next).landuse, fiefs: shown.provinces || defaultLayers(next).fiefs, provinces: true });
+    else restyle(next);
   };
   const [selection, setSelection] = useState<Selection | null>(null);
   const [tab, setTab] = useState<Tab>("place");
@@ -51,18 +89,18 @@ export function useRegionLevel(ctx: LevelContext, links: { openCity: (region: Pl
         : [],
     describe: () => (region ? describePlanet(region, selection, t, ctx.nm) : ""),
     fixed: true,
-    openArea: (planet, box, style) => {
-      styleOf(planet, style);
+    openArea: (planet, box, style, shown, title) => {
+      styleOf(planet, style, shown);
       ctx.run(() => {
-        setRegion(generateArea(planet, box, ctx.t("region.area")));
-        setOf({ of: "area", id: 0, box });
+        setRegion(generateArea(planet, box, title ?? ctx.t("region.area")));
+        setOf({ of: "area", id: 0, box, title });
         setTime((now) => now + 1);
         setSelection(null);
       });
       ctx.show("region");
     },
-    openCountry: (planet, state, style) => {
-      styleOf(planet, style);
+    openCountry: (planet, state, style, shown) => {
+      styleOf(planet, style, shown);
       ctx.run(() => {
         const started = performance.now();
         setRegion(generateCountry(planet, state));
@@ -72,8 +110,8 @@ export function useRegionLevel(ctx: LevelContext, links: { openCity: (region: Pl
       });
       ctx.show("region");
     },
-    open: (planet, province, style) => {
-      styleOf(planet, style);
+    open: (planet, province, style, shown) => {
+      styleOf(planet, style, shown);
       ctx.run(() => {
         const started = performance.now();
         setRegion(generateRegion(planet, province));
@@ -106,6 +144,29 @@ export function useRegionLevel(ctx: LevelContext, links: { openCity: (region: Pl
           </button>
         ) : null}
         {!region ? <p className="muted">{t("region.hint")}</p> : null}
+        {region && parent && region.frame ? (
+          <>
+            <h2>{t("region.locator")}</h2>
+            <Locator planet={parent} frame={region.frame} />
+          </>
+        ) : null}
+        {region && parent && of && of.of !== "area" ? (
+          <>
+            <h2>{t("region.neighbours")}</h2>
+            <div className="row-buttons">
+              {neighboursOf(parent, of.of, of.id).map((id) => (
+                <button key={id} type="button" onClick={() => (of.of === "province" ? links.openProvince(parent, id) : links.openCountry(parent, id))}>
+                  {ctx.nm(of.of === "province" ? parent.provinces[id].name : parent.states[id].name)}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : null}
+        {region ? (
+          <button type="button" className="wide" onClick={() => links.openUnderworld(region)}>
+            ⛏ {t("action.openUnderworld")}
+          </button>
+        ) : null}
         <label>
           {t("field.theme")}
           <select

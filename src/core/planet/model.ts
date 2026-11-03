@@ -105,6 +105,8 @@ export interface Burg {
   origin?: number;
   /** Razed by the GM: kept only so other towns keep their ids. */
   removed?: boolean;
+  /** In a close-up: a village or a hamlet rather than one of the planet's towns. */
+  tier?: "village" | "hamlet";
   /** Thousands of people. */
   population: number;
   walls: boolean;
@@ -263,6 +265,32 @@ export interface Marker {
   name: string;
   /** Facts a legend is written from: who, what, when. */
   facts: Record<string, string | number>;
+  /** In a close-up: the id of the planet's place this one is. */
+  origin?: number;
+}
+
+/** A lordship (a district in later ages): the land round a seat, a town or a market village. */
+export interface Fief {
+  id: number;
+  /** The town or village that holds it. */
+  seat: number;
+  state: number;
+  cells: number;
+}
+
+export type LandformKind = "forest" | "marsh" | "hills" | "mountains" | "peak" | "desert" | "heath";
+
+/** A named stretch of land in a close-up: a wood, a marsh, a range of hills, a summit. */
+export interface Landform {
+  id: number;
+  kind: LandformKind;
+  name: string;
+  /** Where its name stands. */
+  x: number;
+  y: number;
+  cells: number;
+  /** A summit's own cell. */
+  cell?: number;
 }
 
 export interface Planet {
@@ -312,6 +340,13 @@ export interface Planet {
   markers: Marker[];
   /** Km per map unit. */
   scale: number;
+  /** A close-up's frame on the map it was cut from: x0, y0, x1, y1 in that map's units. */
+  frame?: [number, number, number, number];
+  /** A close-up's countryside: what each cell's land is used for (see LAND_USE), its lordships and named land. */
+  landUse?: Uint8Array;
+  fief?: Uint16Array;
+  fiefs?: Fief[];
+  landforms?: Landform[];
 }
 
 /** The physical world peoples settle on. */

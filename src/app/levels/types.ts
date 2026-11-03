@@ -26,7 +26,7 @@ export interface LevelContext {
   /** The players' view is on: hide what only the GM should see. */
   players: boolean;
   /** The scale bar's words in the world's units. */
-  words: { km: string; atEquator: string; perKm: number };
+  words: { km: string; atEquator: string; perKm: number; landform: Record<string, string> };
 }
 
 export interface Level {

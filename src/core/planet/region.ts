@@ -1,7 +1,9 @@
 // A region: one province of a planet seen up close. A finer mesh over the province (and a margin round it) inherits
-// relief, climate, peoples and borders from the planet, adds fine detail, recomputes rivers (big ones keep their
-// names), fills the land between the planet's towns with villages and hamlets, lays a new road net and adds local
-// points of interest. It is a Planet in shape, so everything that shows or opens a planet works on it.
+// relief, climate, peoples and borders from the planet and adds fine detail. The planet's rivers cut their beds first,
+// so the water runs where it runs on the planet (and keeps its names), and the planet's roads and places stay where
+// they were. Villages and hamlets fill the land between the planet's towns, ranked from market villages down to
+// hamlets; their fields, pastures and woods, the lordships between them and the named woods, marshes and hills make
+// the countryside. It is a Planet in shape, so everything that shows or opens a planet works on it.
 import { name } from "../language";
 import { buildMesh } from "../mesh";
 import { fbm, noise2 } from "../noise";
@@ -15,33 +17,41 @@ import { placeMarkers } from "./markers";
 import { SEA_LEVEL, type Burg, type Ground, type Planet } from "./model";
 import { hydrology } from "./rivers";
 import { buildRoutes } from "./routes";
+import { carveRivers, fiefsOf, landformsOf, landUseOf, planetRoads, rankVillages } from "./countryside";
+import { cellKm2 } from "./geo";
 
-export function generateRegion(planet: Planet, provinceId: number, cells = 9000): Planet {
+export function generateRegion(planet: Planet, provinceId: number, cells?: number): Planet {
   return closeUp(planet, (cell) => planet.province[cell] === provinceId, planet.provinces[provinceId].name, `province-${provinceId}`, cells);
 }
 
 /** A whole state up close: the same as a province, over all of its land. */
 /** A close-up of any stretch of the map the GM marked out: the land in a box, with whatever stands on it. */
-export function generateArea(planet: Planet, box: [number, number, number, number], title: string, cells = 9000): Planet {
+export function generateArea(planet: Planet, box: [number, number, number, number], title: string, cells?: number): Planet {
   const [x0, y0, x1, y1] = [Math.min(box[0], box[2]), Math.min(box[1], box[3]), Math.max(box[0], box[2]), Math.max(box[1], box[3])];
-  return closeUp(planet, (cell) => planet.mesh.x[cell] >= x0 && planet.mesh.x[cell] <= x1 && planet.mesh.y[cell] >= y0 && planet.mesh.y[cell] <= y1 && !planet.water[cell], title, `area-${Math.round(x0)}-${Math.round(y0)}-${Math.round(x1)}-${Math.round(y1)}`, cells);
+  return closeUp(planet, (cell) => planet.mesh.x[cell] >= x0 && planet.mesh.x[cell] <= x1 && planet.mesh.y[cell] >= y0 && planet.mesh.y[cell] <= y1 && !planet.water[cell], title, `area-${Math.round(x0)}-${Math.round(y0)}-${Math.round(x1)}-${Math.round(y1)}`, cells, [x0, y0, x1, y1]);
 }
 
-export function generateCountry(planet: Planet, stateId: number, cells = 12000): Planet {
+/** The box of a sheet so many kilometres wide (and 10/16 as tall) centred on a point of the map. */
+export function sheetBox(planet: Planet, x: number, y: number, km = 200): [number, number, number, number] {
+  const half = km / planet.scale / 2;
+  return [x - half, y - half * 0.625, x + half, y + half * 0.625];
+}
+
+export function generateCountry(planet: Planet, stateId: number, cells?: number): Planet {
   return closeUp(planet, (cell) => planet.state[cell] === stateId && !planet.water[cell], planet.states[stateId].name, `state-${stateId}`, cells);
 }
 
-function closeUp(planet: Planet, inside: (cell: number) => boolean, title: string, key: string, cells: number): Planet {
+function closeUp(planet: Planet, inside: (cell: number) => boolean, title: string, key: string, wanted?: number, box?: [number, number, number, number]): Planet {
   const parent = planet.mesh;
   const own = Array.from({ length: parent.cells }, (_, cell) => cell).filter(inside);
   const xs = own.map((cell) => parent.x[cell]);
   const ys = own.map((cell) => parent.y[cell]);
-  // The province's box with a margin, stretched to the map's 16:10 frame.
-  let x0 = Math.min(...xs),
-    x1 = Math.max(...xs),
-    y0 = Math.min(...ys),
-    y1 = Math.max(...ys);
-  const margin = Math.max(x1 - x0, y1 - y0) * 0.18 + parent.spacing * 2;
+  // The province's box with a margin (a box the GM marked out is the frame itself), stretched to the map's 16:10 frame.
+  let x0 = box ? box[0] : Math.min(...xs),
+    x1 = box ? box[2] : Math.max(...xs),
+    y0 = box ? box[1] : Math.min(...ys),
+    y1 = box ? box[3] : Math.max(...ys);
+  const margin = box ? 0 : Math.max(x1 - x0, y1 - y0) * 0.18 + parent.spacing * 2;
   x0 -= margin;
   x1 += margin;
   y0 -= margin;
@@ -58,6 +68,10 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
     x1 += grow / 2;
   }
   const k = (x1 - x0) / W;
+  // Detail by the frame's real size: about 30 km² a cell, so a small province is not stretched thin nor a vast one
+  // blurred, within what a browser draws briskly.
+  const frameKm2 = (x1 - x0) * (y1 - y0) * planet.scale * planet.scale * (own.length ? own.reduce((sum, cell) => sum + cellKm2(planet, cell), 0) / own.reduce((sum, cell) => sum + parent.area[cell] * planet.scale * planet.scale, 0) : 1);
+  const cells = wanted ?? Math.round(Math.max(5000, Math.min(12000, frameKm2 / 30)));
   const toParent = (x: number, y: number) => [x0 + x * k, y0 + y * k] as const;
   const toRegion = (x: number, y: number) => [(x - x0) / k, (y - y0) / k] as const;
 
@@ -95,9 +109,15 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
     rain[cell] = Math.max(0, (r / sum) * (1 + wobble * 0.25));
   }
 
+  const sources = carveRivers(planet, mesh, height, toRegion);
   const sea = markFeatures(mesh, (cell) => height[cell] < SEA_LEVEL);
   const ocean = (cell: number) => height[cell] < SEA_LEVEL && sea.features[sea.feature[cell]].kind === "ocean";
-  const hydro = hydrology(mesh, height, ocean, rain, scale);
+  // The water a river gathers beyond the frame is brought in where it enters (or rises): what the planet has it carry
+  // there, less what the close-up's own land gives it.
+  const gathered = hydrology(mesh, height, ocean, rain, scale).flux;
+  const brought = new Float32Array(n);
+  for (const [cell, flux] of sources) brought[cell] += Math.max(0, flux - gathered[cell]);
+  const hydro = hydrology(mesh, height, ocean, rain, scale, brought);
   const water = new Uint8Array(n);
   for (let cell = 0; cell < n; cell++) water[cell] = ocean(cell) || hydro.lake[cell] ? 1 : 0;
   const { feature, features, coast } = markFeatures(mesh, (cell) => water[cell] === 1);
@@ -198,9 +218,11 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
     burg[cell] = id;
   }
 
-  // Villages grow and are guarded by the world's age, like its towns.
+  // Villages grow and are guarded by the world's age, like its towns; the best placed are the largest.
   const setting = settingOf(planet.params.setting);
-  settleAge(burgs.filter((village) => village.origin === undefined), setting, rng.fork("age"));
+  const villageList = burgs.filter((village) => village.id && village.origin === undefined);
+  rankVillages(villageList, rng.fork("ranks"));
+  settleAge(villageList, setting, rng.fork("age"));
   const rural = isClassic(setting) ? 1 : peopleOf(setting).rural;
 
   // Roads: planet's road builder over a copy of the states whose "capital" is their biggest town here.
@@ -209,11 +231,24 @@ function closeUp(planet: Planet, inside: (cell: number) => boolean, title: strin
   for (let cell = 0; cell < n; cell++) if (!water[cell] && inside(nearest[cell])) here.set(state[cell], (here.get(state[cell]) ?? 0) + 1);
   const states = planet.states.map((s) => ({ ...s, cells: s.id ? here.get(s.id) ?? 0 : s.cells, pole: toRegion(s.pole[0], s.pole[1]) as [number, number], capital: burgs.find((b) => b.capital && b.state === s.id)?.id ?? 0 }));
   const roadStates = states.map((s) => ({ ...s, capital: s.capital || (burgs.filter((b) => b.state === s.id && b.id).sort((a, b) => b.population - a.population)[0]?.id ?? 0) }));
-  const routes = buildRoutes(ground, burgs, roadStates);
-  const markers = placeMarkers(ground, culture, cultures, state, states, burgs, burg, routes, rng.fork("markers"));
+  const routes = buildRoutes(ground, burgs, roadStates, planetRoads(planet, mesh, water, toRegion));
+  // The planet's own places keep their spot; the close-up's new ones keep clear of them.
+  const local = placeMarkers(ground, culture, cultures, state, states, burgs, burg, routes, rng.fork("markers"));
+  const markers = [local[0]];
+  for (const place of planet.markers.slice(1)) {
+    if (place.x < x0 || place.x > x1 || place.y < y0 || place.y > y1) continue;
+    const [x, y] = toRegion(place.x, place.y);
+    const cell = mesh.find(x, y);
+    if (burg[cell]) continue;
+    markers.push({ ...place, id: markers.length, cell, x, y, origin: place.id });
+  }
+  for (const place of local.slice(1)) if (!markers.some((other) => Math.hypot(other.x - place.x, other.y - place.y) < mesh.spacing * 2.5)) markers.push({ ...place, id: markers.length });
   const population = new Float32Array(n);
   // Country folk per cell, scaled to the cell's real size.
   for (let cell = 0; cell < n; cell++) if (!water[cell]) population[cell] = (suitability(ground, cell) * 0.3 * mesh.area[cell] * k * k * rural) / (parent.spacing * parent.spacing);
   const provinces = planet.provinces.map((p) => ({ ...p, pole: toRegion(p.pole[0], p.pole[1]) as [number, number], burg: burgs.find((b) => b.origin === p.burg)?.id ?? 0 }));
-  return { ...ground, name: title, population, culture, cultures: planet.cultures, religion, religions: planet.religions, burg, burgs, state, states, province: provinceOf, provinces, routes, markers };
+  const landUse = landUseOf(ground, burgs);
+  const { fief, fiefs } = fiefsOf(ground, state, burgs);
+  const landforms = landformsOf(ground, culture, cultures, rng.fork("landforms"));
+  return { ...ground, name: title, population, culture, cultures: planet.cultures, religion, religions: planet.religions, burg, burgs, state, states, province: provinceOf, provinces, routes, markers, frame: [x0, y0, x1, y1], landUse, fief, fiefs, landforms };
 }
