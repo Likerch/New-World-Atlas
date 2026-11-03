@@ -27,6 +27,10 @@ interface Props {
   onOpenCountry?: (state: number) => void;
   /** A sheet of the map round a cell, opened as a close-up. */
   onOpenSheet?: (cell: number) => void;
+  /** The local map of a spot of open land. */
+  onOpenHere?: (cell: number) => void;
+  /** Down from a way into the deep (a cave, a mine, a volcano, a portal) into the underworld. */
+  onDescend?: (marker: number) => void;
 }
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -62,7 +66,7 @@ export function legendOf(marker: Marker, t: T, nm: (name: string) => string, age
   return t(`legend.${marker.kind}${age ? `@${age}` : ""}`, facts);
 }
 
-export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onOpenCity, onOpenRegion, onOpenLocal, onOpenCountry, onOpenSheet }: Props) {
+export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onOpenCity, onOpenRegion, onOpenLocal, onOpenCountry, onOpenSheet, onOpenHere, onDescend }: Props) {
   const [query, setQuery] = useState("");
   // Long lists of towns come a page at a time.
   const [shown, setShown] = useState(300);
@@ -130,6 +134,11 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
           {!isWater && planet.province[cell] && onOpenRegion ? (
             <button type="button" className="primary wide" onClick={() => onOpenRegion(planet.province[cell])}>
               🗺 {t("action.openRegion")}
+            </button>
+          ) : null}
+          {!isWater && !burg && onOpenHere ? (
+            <button type="button" className="wide" onClick={() => onOpenHere(cell)}>
+              🗺️ {t("action.localHere")}
             </button>
           ) : null}
           {!isWater && onOpenSheet ? (
@@ -343,6 +352,11 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
           {onOpenLocal && localFromMarker(planet, marker.id) ? (
             <button type="button" className="primary wide" onClick={() => onOpenLocal(marker.id)}>
               🗺️ {t("action.openLocal")}
+            </button>
+          ) : null}
+          {onDescend && (marker.kind === "cave" || marker.kind === "mine" || marker.kind === "volcano" || (marker.kind === "portal" && marker.facts.leadsTo === "underworld")) ? (
+            <button type="button" className="wide" onClick={() => onDescend(marker.id)}>
+              🕳 {t("action.descend")}
             </button>
           ) : null}
         </div>

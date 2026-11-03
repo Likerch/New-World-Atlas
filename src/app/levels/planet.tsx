@@ -1,6 +1,6 @@
 // The planet level: world settings, the world map and its inspector.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { sheetBox, createRng, editPlanet, mapKeyOf, pastPlanet, planetGeoJSON, eraTheme, emptyEdits, foundedSize, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
+import { generateUnderworld, underworldGhostSvg, sheetBox, createRng, editPlanet, mapKeyOf, pastPlanet, planetGeoJSON, eraTheme, emptyEdits, foundedSize, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { SettingPanel } from "../SettingPanel";
 import { WorldForm, type ZoomRange } from "../WorldForm";
@@ -94,6 +94,9 @@ export interface PlanetLinks {
   openCity: (planet: Planet, burg: number) => void;
   openRegion?: (planet: Planet, province: number) => void;
   openLocal?: (planet: Planet, marker: number) => void;
+  /** The local map of a spot of open land, and the underworld below a way down. */
+  openHere?: (planet: Planet, cell: number) => void;
+  descend?: (planet: Planet, marker: number) => void;
   openCountry?: (planet: Planet, state: number) => void;
   openUnderworld?: (planet: Planet) => void;
   /** A close-up of a box the GM marked out on the map. */
@@ -101,7 +104,7 @@ export interface PlanetLinks {
   back: (() => void) | null;
 }
 
-export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, initialSetting: Partial<Setting> | undefined, { openCity, openRegion, openLocal, openCountry, openUnderworld, openArea, back }: PlanetLinks): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void; theme: ThemeId; layers: Record<LayerId, boolean> } {
+export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, initialSetting: Partial<Setting> | undefined, { openCity, openRegion, openLocal, openCountry, openUnderworld, openArea, openHere, descend, back }: PlanetLinks): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void; theme: ThemeId; layers: Record<LayerId, boolean> } {
   const { t } = ctx;
   const [params, setParams] = useState<PlanetParams>(() => planetParams({ seed: initialSeed, setting: initialSetting }));
   const [raw, setPlanet] = useState<Planet | null>(null);
@@ -195,7 +198,8 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   };
   const set = <K extends keyof PlanetParams>(key: K, value: PlanetParams[K]) => setParams((current) => ({ ...current, [key]: value }));
   const highlight = selection && (selection.kind === "state" || selection.kind === "province" || selection.kind === "culture" || selection.kind === "religion") ? { kind: selection.kind, id: selection.id } : null;
-  const svg = useMemo(() => (!planet ? "" : globe ? renderGlobe(planet, { theme, layers, script: ctx.script, ...globe, mark: markOf(planet, selection), unknown, quick: turning }) : past !== null && planet.history ? renderPlanet(pastPlanet(planet, past), { theme, layers: { ...layers, provinces: false, routes: false, religions: false, emblems: false, military: false }, script: ctx.script, words: ctx.words }) : renderPlanet(planet, { theme, layers, script: ctx.script, highlight, words: ctx.words, ...(season !== "year" ? { season } : {}) })), [planet, theme, layers, ctx.script, highlight?.kind, highlight?.id, globe, globe && selection, unknown, turning, t, past, season, ctx.words]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ghost = useMemo(() => (planet && layers.underground ? underworldGhostSvg(generateUnderworld(planet)) : undefined), [planet, layers.underground]);
+  const svg = useMemo(() => (!planet ? "" : globe ? renderGlobe(planet, { theme, layers, script: ctx.script, ...globe, mark: markOf(planet, selection), unknown, quick: turning }) : past !== null && planet.history ? renderPlanet(pastPlanet(planet, past), { theme, layers: { ...layers, provinces: false, routes: false, religions: false, emblems: false, military: false }, script: ctx.script, words: ctx.words }) : renderPlanet(planet, { theme, layers, script: ctx.script, highlight, words: ctx.words, ghost, ...(season !== "year" ? { season } : {}) })), [planet, theme, layers, ctx.script, highlight?.kind, highlight?.id, globe, globe && selection, unknown, turning, t, past, season, ctx.words, ghost]); // eslint-disable-line react-hooks/exhaustive-deps
   const legend = useMemo(() => (planet ? planetLegend(planet, { theme, layers }) : undefined), [planet, theme, layers]);
   const pick = (x: number, y: number) => {
     if (!planet) return;
@@ -542,6 +546,8 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
         onOpenCity={(burg) => openCity(planet, burg)}
         onOpenRegion={openRegion ? (province) => openRegion(planet, province) : undefined}
         onOpenLocal={openLocal ? (marker) => openLocal(planet, marker) : undefined}
+        onOpenHere={openHere ? (cell) => openHere(planet, cell) : undefined}
+        onDescend={descend ? (marker) => descend(planet, marker) : undefined}
         onOpenCountry={openCountry ? (state) => openCountry(planet, state) : undefined}
         onOpenSheet={openArea ? (cell) => openArea(planet, sheetBox(planet, planet.mesh.x[cell], planet.mesh.y[cell]), t("region.sheet")) : undefined}
         onSelect={(next, at) => {

@@ -293,6 +293,7 @@ export type LayerId =
   | "depth"
   | "landuse"
   | "fiefs"
+  | "underground"
   | "biomes"
   | "heights"
   | "icons"
@@ -321,7 +322,7 @@ export type LayerId =
   | "winds"
   | "frame";
 
-export const LAYERS: LayerId[] = ["depth", "biomes", "landuse", "climate", "ice", "heights", "icons", "rivers", "states", "cultures", "religions", "zones", "fiefs", "provinces", "borders", "routes", "burgs", "emblems", "labels", "landmasses", "markers", "events", "military", "grid", "temperature", "precipitation", "population", "currents", "winds", "frame"];
+export const LAYERS: LayerId[] = ["depth", "biomes", "landuse", "climate", "ice", "heights", "icons", "rivers", "states", "cultures", "religions", "zones", "fiefs", "provinces", "borders", "routes", "burgs", "emblems", "labels", "landmasses", "markers", "events", "underground", "military", "grid", "temperature", "precipitation", "population", "currents", "winds", "frame"];
 
 export function defaultLayers(theme: ThemeId): Record<LayerId, boolean> {
   return {
@@ -329,6 +330,8 @@ export function defaultLayers(theme: ThemeId): Record<LayerId, boolean> {
     // A close-up's countryside: fields and pastures, and the lordships between its towns.
     landuse: theme !== "political" && theme !== "nautical" && theme !== "hud",
     fiefs: theme === "political",
+    // The caverns and tunnels below, faint over the land: off unless the GM asks.
+    underground: false,
     biomes: theme !== "political" && theme !== "relief" && theme !== "nautical" && theme !== "hud",
     heights: theme === "relief" || theme === "hud",
     icons: theme !== "political" && theme !== "nautical" && theme !== "modern" && theme !== "hud",

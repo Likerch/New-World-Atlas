@@ -10,6 +10,7 @@ import {
   localFromCavern,
   cityFromBurg,
   editPlanet,
+  localAt,
   generateArea,
   generateCountry,
   generateRegion,
@@ -325,9 +326,10 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   const region = useRegionLevel(ctx, {
     openCity: (made, burg) => openCity(region, made, burg),
     openLocal: (made, marker) => openLocal(region, localFromMarker(made, marker), `marker:${marker}`),
-    openUnderworld: (made) => {
+    openHere: (made, cell) => openLocal(region, localAt(made, cell), `cell:${cell}`),
+    openUnderworld: (made, marker) => {
       linkTo("underworld", region, "underworld", null);
-      underworld.open(made);
+      underworld.open(made, marker ? { marker } : undefined);
     },
     // A neighbour hangs where this region hangs, though its planet may not have been opened since the world was loaded.
     openProvince: (made, province) => {
@@ -350,6 +352,11 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     openUnderworld: (made) => {
       linkTo("underworld", planet, "underworld", null);
       underworld.open(made);
+    },
+    openHere: (made, cell) => openLocal(planet, localAt(made, cell), `cell:${cell}`),
+    descend: (made, marker) => {
+      linkTo("underworld", planet, "underworld", null);
+      underworld.open(made, { marker });
     },
     openCountry: (made, state) => {
       linkTo("region", planet, `state:${state}`, null);

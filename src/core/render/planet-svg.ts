@@ -26,6 +26,8 @@ export interface RenderOptions {
   words?: { km?: string; atEquator?: string; perKm?: number; landform?: Partial<Record<LandformKind, string>> };
   /** The warmth map in a season rather than over the year. */
   season?: "summer" | "winter";
+  /** Drawn over the land below the roads: the underworld's ghost (see underworldGhostSvg). */
+  ghost?: string;
 }
 
 const SEA = 20;
@@ -344,6 +346,8 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
     const d = lines.map((line) => pathData(smooth(line, false, 1), false)).join("");
     out.push(`<path d="${d}" fill="none" stroke="${theme.halo}" stroke-width="2.4" opacity="0.35"/><path d="${d}" fill="none" stroke="${theme.border}" stroke-width="1.2" stroke-dasharray="4 2.2" stroke-linecap="round"/>`);
   }
+
+  if (options.ghost) out.push(options.ghost);
 
   // Roads and sea lanes, in the manner of the world's age: railways, motorways and maglev lines for the main ways of
   // the machine ages, broken roads after the fall, and air routes as light arcs between great cities.

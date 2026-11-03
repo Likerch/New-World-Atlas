@@ -1,6 +1,6 @@
 // The region level: one province of the planet up close, with its villages, roads and local places.
 import { useMemo, useState } from "react";
-import { defaultLayers, eraTheme, generateArea, generateCountry, generateRegion, settingOf, LAYERS, planetToJson, renamePlanet, renderPlanet, THEMES, type LayerId, type Planet, type ThemeId, planetLegend } from "../../core/index";
+import { generateUnderworld, underworldGhostSvg, defaultLayers, eraTheme, generateArea, generateCountry, generateRegion, settingOf, LAYERS, planetToJson, renamePlanet, renderPlanet, THEMES, type LayerId, type Planet, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { selectedOf } from "./planet";
 import { describePlanet, searchPlanet } from "../planetText";
@@ -39,7 +39,7 @@ function neighboursOf(planet: Planet, of: "province" | "state", id: number): num
 
 export function useRegionLevel(
   ctx: LevelContext,
-  links: { openCity: (region: Planet, burg: number) => void; openLocal: (region: Planet, marker: number) => void; openUnderworld: (region: Planet) => void; openProvince: (planet: Planet, province: number) => void; openCountry: (planet: Planet, state: number) => void; back: (() => void) | null },
+  links: { openCity: (region: Planet, burg: number) => void; openLocal: (region: Planet, marker: number) => void; openHere: (region: Planet, cell: number) => void; openUnderworld: (region: Planet, marker?: number) => void; openProvince: (planet: Planet, province: number) => void; openCountry: (planet: Planet, state: number) => void; back: (() => void) | null },
 ): Level & { open: (planet: Planet, province: number, style?: ThemeId, layers?: Record<LayerId, boolean>) => void; openCountry: (planet: Planet, state: number, style?: ThemeId, layers?: Record<LayerId, boolean>) => void; openArea: (planet: Planet, box: [number, number, number, number], style?: ThemeId, layers?: Record<LayerId, boolean>, title?: string) => void } {
   const { t } = ctx;
   const [raw, setRegion] = useState<Planet | null>(null);
@@ -64,7 +64,8 @@ export function useRegionLevel(
   const [tab, setTab] = useState<Tab>("place");
   const [time, setTime] = useState(0);
   const highlight = selection && (selection.kind === "state" || selection.kind === "province" || selection.kind === "culture") ? { kind: selection.kind, id: selection.id } : null;
-  const svg = useMemo(() => (region ? renderPlanet(region, { theme, layers, script: ctx.script, highlight, words: ctx.words }) : ""), [region, theme, layers, ctx.script, highlight?.kind, highlight?.id, t]); // eslint-disable-line react-hooks/exhaustive-deps
+  const ghost = useMemo(() => (region && layers.underground ? underworldGhostSvg(generateUnderworld(region)) : undefined), [region, layers.underground]);
+  const svg = useMemo(() => (region ? renderPlanet(region, { theme, layers, script: ctx.script, highlight, words: ctx.words, ghost }) : ""), [region, theme, layers, ctx.script, highlight?.kind, highlight?.id, t, ghost]); // eslint-disable-line react-hooks/exhaustive-deps
   const legend = useMemo(() => (region ? planetLegend(region, { theme, layers }) : undefined), [region, theme, layers]);
 
   return {
@@ -203,6 +204,8 @@ export function useRegionLevel(
         setTab={setTab}
         onOpenCity={(burg) => links.openCity(region, burg)}
         onOpenLocal={(marker) => links.openLocal(region, marker)}
+        onOpenHere={(cell) => links.openHere(region, cell)}
+        onDescend={(marker) => links.openUnderworld(region, marker)}
         onSelect={(next, at) => {
           setSelection(next);
           if (at) ctx.focus(at[0], at[1]);
