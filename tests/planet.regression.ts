@@ -1,6 +1,6 @@
 // Planet-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { cellKm2, pastPlanet, shiftLanguage, createLanguage, createRng, armsOf, emblemOf, MIXES, SETTINGS, settingFromText, settingToText, coatOfArms, editPlanet, emptyEdits, foundedSize, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
+import { generateArea, koppenOf, KOPPEN, planetGeoJSON, sculpt, zonesOf, cellKm2, pastPlanet, shiftLanguage, createLanguage, createRng, armsOf, emblemOf, MIXES, SETTINGS, settingFromText, settingToText, coatOfArms, editPlanet, emptyEdits, foundedSize, generatePlanet, globePick, METALS, name, raiseArmies, renderCoatOfArms, renderGlobe, planetToJson, renderPlanet, TEMPLATES, THEMES, toCyrillic, SEA_LEVEL } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -296,6 +296,45 @@ test("a whole world measures the area of a globe, not of a flat sheet", () => {
   for (let cell = 0; cell < whole.mesh.cells; cell++) total += cellKm2(whole, cell);
   const sphere = 4 * Math.PI * ((180 * 111) / Math.PI) ** 2;
   assert.ok(Math.abs(total / sphere - 1) < 0.08, `${Math.round(total / 1e6)} million km² for a globe of ${Math.round(sphere / 1e6)}`);
+});
+
+test("the land makes its own places, the year has seasons and climates, the world has its zones of trouble", () => {
+  const kinds = new Set(planet.markers.map((marker) => marker.kind));
+  assert.ok(["waterfall", "rapids", "ford", "pass", "reef"].some((kind) => kinds.has(kind as never)), "rivers, roads and shores make places");
+  const climates = koppenOf(planet);
+  assert.ok(new Set([...climates].filter((k) => k >= 0)).size >= 4, "more than one climate");
+  for (let cell = 0; cell < planet.mesh.cells; cell++) assert.equal(climates[cell] >= 0, !planet.water[cell]);
+  assert.ok(KOPPEN.length === 18);
+  const at = generatePlanet({ ...planet.params, setting: { ...SETTINGS.medieval, magic: 3 } });
+  assert.ok(zonesOf(at).some((zone) => zone.kind === "storm"), "strong magic brings magic storms");
+  assert.doesNotMatch(renderPlanet(planet, { layers: { climate: true, zones: true, cultures: true, ice: true }, season: "winter" }), /NaN|undefined|Infinity/u);
+  const geo = planetGeoJSON(planet);
+  assert.ok(geo.features.length > planet.burgs.length / 2);
+  const area = generateArea(planet, [300, 200, 700, 500], "Box");
+  assert.ok(area.burgs.length > 1 && area.mesh.cells > 1000, "a marked-out area opens up close");
+});
+
+test("the world editor smooths, levels and raises ridges; raises, merges and reshapes realms; sets towns and marks", () => {
+  const height = planet.height.slice();
+  const [x, y] = [planet.params.width / 2, planet.params.height / 2];
+  sculpt(planet.mesh, height, [[x, y, 80, 30, 2]]);
+  const near = Array.from({ length: planet.mesh.cells }, (_, cell) => cell).filter((cell) => Math.hypot(planet.mesh.x[cell] - x, planet.mesh.y[cell] - y) < 10);
+  for (const cell of near) assert.ok(Math.abs(height[cell] - 30) < 3, "levelled to the height asked");
+  const ridge = planet.height.slice();
+  sculpt(planet.mesh, ridge, [[100, 100, 30, 20, 3, 400, 100]]);
+  const onLine = planet.mesh.find(250, 100);
+  assert.ok(ridge[onLine] > planet.height[onLine] + 10, "a ridge rises along its line");
+  const town = planet.burgs.find((burg) => burg.id && !burg.removed && !burg.capital && burg.province)!;
+  const [a, b] = planet.states.slice(1).filter((state) => state.cells && state.id !== town.state);
+  const edited = editPlanet(planet, { ...emptyEdits(), raised: [{ town: town.id, name: "Freeland", color: "#336699" }], merged: [[b.id, a.id]], realms: { [a.id]: { formKey: "empire", color: "#aa2200" } }, towns: { [town.id]: { population: 77, walls: true } }, relations: [[a.id, town.state, "enemy"]], labels: [[50, 50, "Here be dragons", 14]], zones: [[200, 200, 50, "custom", "Haunted"]] });
+  const free = edited.states[edited.states.length - 1];
+  assert.equal(free.name, "Freeland");
+  assert.ok(free.cells > 0 && edited.burgs[town.id].capital && edited.burgs[town.id].state === free.id, "a realm raised round a town");
+  assert.equal(edited.states[b.id].cells, 0, "a merged realm is gone into the other");
+  assert.equal(edited.states[a.id].formKey, "empire");
+  assert.equal(edited.burgs[town.id].population, 77);
+  assert.match(renderPlanet(edited), /Here be dragons/u);
+  assert.ok(zonesOf(edited).some((zone) => zone.label === "Haunted"));
 });
 
 test("the world's age reshapes towns, realms, roads, places, armies and banners, and the medieval age is the classic world", () => {

@@ -2,6 +2,11 @@
 import type { T } from "./i18n";
 
 const formats = new Map<string, Intl.NumberFormat>();
+// Miles or kilometres, as the open world counts them.
+let imperial = false;
+export function setUnits(units: "metric" | "imperial" | undefined): void {
+  imperial = units === "imperial";
+}
 function number(value: number, t: T, digits = 0): string {
   const key = `${t.locale}/${digits}`;
   let format = formats.get(key);
@@ -17,9 +22,9 @@ export function people(thousands: number, t: T): string {
 }
 
 export function area(km2: number, t: T): string {
-  return `${number(Math.round(km2), t)} ${t("unit.km2")}`;
+  return imperial ? `${number(Math.round(km2 * 0.386102), t)} ${t("unit.mi2")}` : `${number(Math.round(km2), t)} ${t("unit.km2")}`;
 }
 
 export function km(value: number, t: T): string {
-  return `${number(Math.round(value), t)} ${t("unit.km")}`;
+  return imperial ? `${number(Math.round(value * 0.621371), t)} ${t("unit.mi")}` : `${number(Math.round(value), t)} ${t("unit.km")}`;
 }

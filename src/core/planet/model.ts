@@ -43,6 +43,8 @@ export interface PlanetParams {
   lifeless?: boolean;
   /** Years of history lived before the map: realms, towns, wars and rulers come out of it. None: the map is drawn at once. */
   history?: number;
+  /** How far realms reach (1 the usual; more for great empires, less for many small lands). */
+  growth?: number;
 }
 
 export type FeatureKind = "ocean" | "lake" | "continent" | "island" | "isle";
@@ -207,6 +209,11 @@ export interface Route {
 }
 
 export type MarkerKind =
+  | "waterfall"
+  | "rapids"
+  | "ford"
+  | "pass"
+  | "reef"
   | "volcano"
   | "hot-spring"
   | "mine"
@@ -262,6 +269,9 @@ export interface Planet {
   params: PlanetParams;
   /** How the world came to be as it is, when its history was lived. */
   history?: History;
+  /** The GM's own words and zones on the map (from the world editor). */
+  gmLabels?: [number, number, string, number][];
+  gmZones?: [number, number, number, string, string?][];
   /** A print of the GM's relief strokes when the world was regrown under them. */
   relief?: string;
   /** The world's own name, in the tongue of its first people. */

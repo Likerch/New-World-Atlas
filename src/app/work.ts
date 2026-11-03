@@ -30,14 +30,14 @@ function hire(): Worker {
 }
 
 /** A world grown in the worker. Calling it off ends the worker (a new one is hired for the next job). */
-export function growPlanet(params: Partial<PlanetParams>, terrain: PlanetEdits["terrain"] | undefined, progress: Progress): Job<Planet> {
+export function growPlanet(params: Partial<PlanetParams>, terrain: PlanetEdits["terrain"] | undefined, progress: Progress, image?: PlanetEdits["image"]): Job<Planet> {
   if (typeof Worker === "undefined") {
-    return { promise: new Promise((resolve) => resolve(generatePlanet(params, terrain, { progress }))), cancel: () => undefined };
+    return { promise: new Promise((resolve) => resolve(generatePlanet(params, terrain, { progress, image }))), cancel: () => undefined };
   }
   const id = ++counter;
   const promise = new Promise<Planet>((resolve, reject) => {
     waiting.set(id, { resolve, reject, progress });
-    hire().postMessage({ id, params, terrain });
+    hire().postMessage({ id, params, terrain, image });
   });
   return {
     promise,

@@ -102,6 +102,8 @@ export interface WorldDoc {
   last: { key: string | null; byLevel: Partial<Record<MapLevel, string>> };
   /** The handbook: a page for each place written about, by `pageKey`. */
   pages?: Record<string, Page>;
+  /** Kilometres or miles. */
+  units?: "metric" | "imperial";
 }
 
 /** A short summary for the list of worlds. */

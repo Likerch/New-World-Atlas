@@ -59,6 +59,7 @@ import { MapView, type Focus } from "./MapView";
 import { LEVEL_ICON, WorldLibrary } from "./WorldLibrary";
 import { useWorlds, type Worlds } from "./worlds";
 import { useListKeys } from "./keys";
+import { setUnits } from "./format";
 import { printAtlas } from "./book";
 import { Handbook } from "./Handbook";
 import { Search } from "./Search";
@@ -159,6 +160,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   const [focus, setFocus] = useState<Focus | null>(null);
   const [library, setLibrary] = useState(false);
   const store = worldStore(world, worlds.update);
+  setUnits(world.units);
   const [mode, setMode] = useState<GmMode>("inspect");
   const [brush, setBrush] = useState(60);
   const [players, setPlayers] = useState(false);
@@ -236,6 +238,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
         });
     },
     show: setView,
+    words: { km: t(world.units === "imperial" ? "unit.mi" : "unit.km"), atEquator: t("scale.equator"), perKm: world.units === "imperial" ? 0.621371 : 1 },
     names: (key) => store.patch(key).names,
     patch: store.patch,
     update: store.update,
@@ -315,6 +318,10 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
       linkTo("region", planet, `state:${state}`, null);
       region.openCountry(made, state, planet.theme);
     },
+    openArea: (made, box) => {
+      linkTo("region", planet, `area:${box.map(Math.round).join(",")}`, null);
+      region.openArea(made, box, planet.theme);
+    },
     back: back("planet"),
   });
   const system = useSystemLevel(
@@ -369,13 +376,14 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     if (!map || !parentKey || !parent || parent.level !== "planet") return;
     const patch = world.patches[parentKey];
     ctx.task(
-      (report) => growPlanet(parent.params as Partial<PlanetParams>, patch?.edits?.terrain, report),
+      (report) => growPlanet(parent.params as Partial<PlanetParams>, patch?.edits?.terrain, report, patch?.edits?.image),
       (grown) => {
       const made = renamePlanet(editPlanet(grown, patch?.edits ?? null), patch?.names ?? {});
       pending.current[map.level] = { parent: parentKey, step: map.step!, base: null };
-      const of = map.params as { of?: string; id?: number };
+      const of = map.params as { of?: string; id?: number; box?: [number, number, number, number] };
       if (map.level === "underworld") underworld.open(made);
       else if (of.of === "state") region.openCountry(made, of.id ?? 0);
+      else if (of.of === "area" && of.box) region.openArea(made, of.box);
       else region.open(made, of.id ?? 0);
       },
     );
@@ -572,6 +580,10 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
         ) : (
           <span className="muted save-state">{t(worlds.saving === "saving" ? "worlds.saving" : "worlds.saved")}</span>
         )}
+        <select value={world.units ?? "metric"} aria-label={t("field.units")} onChange={(event) => worlds.update((current) => ({ ...current, units: event.target.value as "metric" | "imperial", updated: Date.now() }))}>
+          <option value="metric">{t("units.metric")}</option>
+          <option value="imperial">{t("units.imperial")}</option>
+        </select>
         <select value={script} aria-label={t("field.script")} onChange={(event) => worlds.update((current) => ({ ...current, script: event.target.value as "latin" | "cyrillic", updated: Date.now() }))}>
           <option value="latin">{t("script.latin")}</option>
           <option value="cyrillic">{t("script.cyrillic")}</option>
@@ -616,6 +628,19 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
             >
               {t("action.exportJson")}
             </button>
+            {(level.exports ?? []).map((item) => (
+              <button
+                key={item.file}
+                type="button"
+                disabled={!map}
+                onClick={() => {
+                  closeExport();
+                  download(`${fileName}.${item.file}`, item.make());
+                }}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
         </details>
         <button type="button" className="ghost" onClick={() => setLocale(locale === "ru" ? "en" : "ru")}>

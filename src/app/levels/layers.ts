@@ -8,6 +8,11 @@ export function useLayers(style: ThemeId, extra: Partial<Record<LayerId, boolean
   return {
     layers,
     restyle: (next: ThemeId) => setLayers({ ...defaultLayers(next), ...extra, ...own }),
+    /** A whole set of layers at once, kept as the GM's own choice. */
+    setAll: (next: Record<LayerId, boolean>) => {
+      setLayers(next);
+      setOwn(next);
+    },
     toggle: (id: LayerId, on: boolean) => {
       setLayers((current) => ({ ...current, [id]: on }));
       setOwn((current) => ({ ...current, [id]: on }));

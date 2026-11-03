@@ -25,6 +25,8 @@ export interface LevelContext {
   update: (mapKey: string | null, change: (patch: MapPatch) => MapPatch) => void;
   /** The players' view is on: hide what only the GM should see. */
   players: boolean;
+  /** The scale bar's words in the world's units. */
+  words: { km: string; atEquator: string; perKm: number };
 }
 
 export interface Level {
@@ -66,6 +68,8 @@ export interface Level {
   search?: (query: string) => Hit[];
   /** The selected thing (or the map) in Markdown, to copy. */
   describe?: () => string;
+  /** Other files the map can be saved as (GeoJSON…). */
+  exports?: { label: string; file: string; make: () => Blob }[];
 }
 
 /** A thing of the map on screen that the search found: how to show it, and how to pick it. */

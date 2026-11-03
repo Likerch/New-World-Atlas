@@ -140,6 +140,7 @@ export function WorldForm({ t, initial, zoom, onCreate, onClose }: { t: T; initi
             <Field label={t("field.states")}>{number("states", 1, 60)}</Field>
             <Field label={t("field.towns")}>{number("towns", 0, 2000, 10)}</Field>
             <Field label={t("field.provinceShare")}>{number("provinceShare", 0, 1, 0.05)}</Field>
+            <Field label={t("field.growth")}>{number("growth", 0.3, 3, 0.1)}</Field>
             <Field label={t("history.depth")}>
               <select value={params.history ?? 0} onChange={(event) => set("history", Number(event.target.value) || undefined)}>
                 {[0, 200, 400, 700, 1000].map((years) => (

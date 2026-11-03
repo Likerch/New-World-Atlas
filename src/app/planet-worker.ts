@@ -6,13 +6,15 @@ export interface PlanetJob {
   id: number;
   params: Partial<PlanetParams>;
   terrain?: PlanetEdits["terrain"];
+  image?: PlanetEdits["image"];
 }
 
 self.onmessage = (event: MessageEvent<PlanetJob>) => {
-  const { id, params, terrain } = event.data;
+  const { id, params, terrain, image } = event.data;
   try {
     let last = 0;
     const planet = generatePlanet(params, terrain, {
+      image,
       progress: (share, stage) => {
         // A few reports a second are enough.
         const now = performance.now();

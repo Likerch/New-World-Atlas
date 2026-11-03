@@ -268,7 +268,7 @@ export function formStates(g: Ground, culture: Uint16Array, cultures: Culture[],
     for (const next of g.mesh.neighbors[cell]) {
       // A capital is never taken by another state.
       if (best[next] === 0) continue;
-      const total = priority + growthCost(g, next, owner, culture, cultures) / owner.expansionism;
+      const total = priority + growthCost(g, next, owner, culture, cultures) / (owner.expansionism * (g.params.growth ?? 1));
       if (total > limit || total >= best[next]) continue;
       best[next] = total;
       state[next] = g.water[next] ? 0 : id;

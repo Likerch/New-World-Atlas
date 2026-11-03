@@ -8,7 +8,7 @@ import { settleAge } from "./age";
 import { biomeOf } from "./biomes";
 import { precipitation, temperatures } from "./climate";
 import { placeBurgs } from "./burgs";
-import { sculpt, type PlanetEdits } from "./edit";
+import { heightsFromImage, sculpt, type PlanetEdits } from "./edit";
 import { settleCultures, suitability } from "./cultures";
 import { markFeatures } from "./features";
 import { generateHeights, TEMPLATES } from "./heightmap";
@@ -20,6 +20,7 @@ import { buildRoutes } from "./routes";
 import { formStates } from "./states";
 import { marksOfHistory, realmsOfHistory, renumberTowns, simulateHistory, standingOf, townsOfHistory } from "./history";
 import { wrapsRound } from "./geo";
+import { naturalPlaces } from "./nature";
 
 /** Parameters for a seed: every unset value is rolled from the seed itself. */
 export function planetParams(input: Partial<PlanetParams> = {}): PlanetParams {
@@ -58,8 +59,8 @@ export function planetParams(input: Partial<PlanetParams> = {}): PlanetParams {
 export type Progress = (share: number, stage: string) => void;
 
 /** A world from its settings; `terrain` replays the GM's relief brush before anything grows on it. */
-export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: PlanetEdits["terrain"], options: { plain?: Planet; progress?: Progress } = {}): Planet {
-  const { plain, progress } = options;
+export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: PlanetEdits["terrain"], options: { plain?: Planet; progress?: Progress; image?: PlanetEdits["image"] } = {}): Planet {
+  const { plain, progress, image } = options;
   const params = planetParams(input);
   // Relief strokes regrow the world, but its towns and peoples are anchored where they stood on the untouched world,
   // so their numbers, names and the GM's notes stay with them.
@@ -67,6 +68,7 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   const rng = createRng(params.seed);
   const mesh = buildMesh(params.width, params.height, params.cells, rng.fork("mesh"));
   const height = generateHeights(mesh, params.template, rng.fork("relief"));
+  if (image) heightsFromImage(mesh, height, image);
   if (terrain?.length) sculpt(mesh, height, terrain);
   if (wrapsRound(params)) sewSeam(mesh, height, params.width);
   const scale = ((params.latitudeNorth - params.latitudeSouth) * 111) / params.height;
@@ -147,6 +149,8 @@ export function generatePlanet(input: Partial<PlanetParams> = {}, terrain?: Plan
   const routes = buildRoutes(ground, burgs, states);
   let markers = placeMarkers(ground, culture, cultures, state, states, burgs, burg, routes, rng.fork("markers"));
   if (history) marksOfHistory(ground, history, markers);
+  const placed = { ...ground, routes, rivers: hydro.rivers } as Planet;
+  naturalPlaces(placed, markers);
   if (lifeless) {
     // Nobody lives there: no peoples on the map and no faiths; of the places, only what the ground itself makes.
     markers = markers.filter((m, k) => k === 0 || m.kind === "volcano" || m.kind === "crater").map((m, k) => ({ ...m, id: k }));

@@ -21,6 +21,12 @@ export function generateRegion(planet: Planet, provinceId: number, cells = 9000)
 }
 
 /** A whole state up close: the same as a province, over all of its land. */
+/** A close-up of any stretch of the map the GM marked out: the land in a box, with whatever stands on it. */
+export function generateArea(planet: Planet, box: [number, number, number, number], title: string, cells = 9000): Planet {
+  const [x0, y0, x1, y1] = [Math.min(box[0], box[2]), Math.min(box[1], box[3]), Math.max(box[0], box[2]), Math.max(box[1], box[3])];
+  return closeUp(planet, (cell) => planet.mesh.x[cell] >= x0 && planet.mesh.x[cell] <= x1 && planet.mesh.y[cell] >= y0 && planet.mesh.y[cell] <= y1 && !planet.water[cell], title, `area-${Math.round(x0)}-${Math.round(y0)}-${Math.round(x1)}-${Math.round(y1)}`, cells);
+}
+
 export function generateCountry(planet: Planet, stateId: number, cells = 12000): Planet {
   return closeUp(planet, (cell) => planet.state[cell] === stateId && !planet.water[cell], planet.states[stateId].name, `state-${stateId}`, cells);
 }

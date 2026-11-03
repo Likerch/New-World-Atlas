@@ -8,6 +8,7 @@ import { BIOMES } from "../planet/biomes";
 import { oceanCurrents, windAt } from "../planet/currents";
 import { raiseArmies } from "../planet/military";
 import { wrapsRound } from "../planet/geo";
+import { KOPPEN, koppenOf, seasonalTemperature, zonesOf, type TroubleKind } from "../planet/nature";
 import type { MarkerKind, Planet } from "../planet/model";
 import { ageOf, settingOf } from "../setting";
 import { renderEmblem } from "./heraldry-svg";
@@ -20,8 +21,11 @@ export interface RenderOptions {
   script?: "latin" | "cyrillic";
   /** A region drawn with an emphasis outline. */
   highlight?: { kind: "state" | "province" | "culture" | "religion"; id: number } | null;
-  /** The map's own words in the reader's language: the unit of the scale bar and where a world map's scale holds. */
-  words?: { km?: string; atEquator?: string };
+  /** The map's own words in the reader's language: the unit of the scale bar (and how many of it make a km) and where a
+   * world map's scale holds. */
+  words?: { km?: string; atEquator?: string; perKm?: number };
+  /** The warmth map in a season rather than over the year. */
+  season?: "summer" | "winter";
 }
 
 const SEA = 20;
@@ -72,6 +76,9 @@ function symbols(theme: Theme): string {
   ].join("");
 }
 
+/** The colours of the zones of trouble. */
+export const TROUBLE: Record<TroubleKind, string> = { front: "#b0201b", plague: "#5d6b1b", famine: "#a3762a", bandits: "#6b3b9e", storm: "#2a7dd0", radiation: "#9bb31c", custom: "#d64545" };
+
 /** How history's marks are drawn: a sign and a colour for each kind of event shown on the map. */
 export const EVENT_GLYPH: Partial<Record<string, [string, string]>> = {
   battle: ["⚔", "#a32020"],
@@ -85,6 +92,11 @@ export const EVENT_GLYPH: Partial<Record<string, [string, string]>> = {
 };
 
 export const MARKER_GLYPH: Record<MarkerKind, string> = {
+  waterfall: "≋",
+  rapids: "≈",
+  ford: "⫶",
+  pass: "⩘",
+  reef: "✻",
   volcano: "▲",
   "hot-spring": "♨",
   mine: "⚒",
@@ -200,6 +212,14 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
       if (shape) out.push(`<path d="${shape}" fill="${theme.biomes[biome.id]}" stroke="${theme.biomes[biome.id]}" stroke-width="0.6" fill-rule="evenodd"/>`);
     }
   }
+  // Köppen climates, in the colours atlases give them.
+  if (layers.climate) {
+    const climate = koppenOf(planet);
+    KOPPEN.forEach(([, color], k) => {
+      const shape = rings(outline(mesh, (cell) => climate[cell] === k), 1);
+      if (shape) out.push(`<path d="${shape}" fill="${color}" fill-opacity="0.75" stroke="${color}" stroke-width="0.5" fill-rule="evenodd"/>`);
+    });
+  }
   if (layers.heights && theme.heights) {
     theme.heights.forEach((color, k) => {
       const level = 20 + k * 8;
@@ -211,6 +231,12 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
     for (const state of planet.states.slice(1)) {
       const shape = rings(outline(mesh, (cell) => land(cell) && planet.state[cell] === state.id), 1);
       if (shape) out.push(`<path d="${shape}" fill="${state.color}" fill-opacity="${theme.stateFill}" fill-rule="evenodd"/>`);
+    }
+  }
+  if (layers.cultures) {
+    for (const people of planet.cultures.slice(1)) {
+      const shape = rings(outline(mesh, (cell) => land(cell) && planet.culture[cell] === people.id), 1);
+      if (shape) out.push(`<path d="${shape}" fill="${people.color}" fill-opacity="0.55" fill-rule="evenodd"/>`);
     }
   }
   if (layers.religions) {
@@ -226,7 +252,7 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
   const density = new Float32Array(mesh.cells);
   for (let cell = 0; cell < mesh.cells; cell++) density[cell] = (planet.population[cell] * 1000) / (mesh.area[cell] * km2);
   for (const burg of planet.burgs.slice(1)) if (!burg.removed) density[burg.cell] += (burg.population * 1000) / (mesh.area[burg.cell] * km2);
-  const heat = { temperature: (cell: number) => planet.temperature[cell], precipitation: (cell: number) => planet.precipitation[cell], population: (cell: number) => density[cell] };
+  const heat = { temperature: (cell: number) => (options.season ? seasonalTemperature(planet, cell, options.season) : planet.temperature[cell]), precipitation: (cell: number) => planet.precipitation[cell], population: (cell: number) => density[cell] };
   const shown = (["temperature", "precipitation", "population"] as const).filter((id) => layers[id]);
   for (const id of shown) {
     const { levels, colors } = CLIMATE[id];
@@ -397,6 +423,24 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
   }
 
   // Points of interest.
+  // Sea ice where the water stays below freezing; zones of trouble, hatched.
+  if (layers.ice) {
+    const shape = rings(outline(mesh, (cell) => water[cell] === 1 && planet.temperature[cell] < -3), 2);
+    if (shape) out.push(`<path d="${shape}" fill="#eef6fb" fill-opacity="0.8" stroke="#c9dde8" stroke-width="0.6" fill-rule="evenodd"/>`);
+  }
+  if (layers.zones) {
+    out.push(`<defs>${Object.entries(TROUBLE).map(([kind, color]) => `<pattern id="zone-${kind}" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="8" height="8" fill="${color}" fill-opacity="0.12"/><path d="M0,0V8" stroke="${color}" stroke-width="2.4" opacity="0.55"/></pattern>`).join("")}</defs>`);
+    for (const zone of zonesOf(planet)) {
+      const set = new Set(zone.cells);
+      const shape = rings(outline(mesh, (cell) => set.has(cell)), 2);
+      if (shape) out.push(`<path d="${shape}" fill="url(#zone-${zone.kind})" stroke="${TROUBLE[zone.kind]}" stroke-width="1" stroke-dasharray="4 3" fill-rule="evenodd"/>`);
+      if (zone.label) {
+        const middle = zone.cells[Math.floor(zone.cells.length / 2)];
+        out.push(`<text x="${r1(mesh.x[middle])}" y="${r1(mesh.y[middle])}" text-anchor="middle" font-size="10" font-style="italic" fill="${TROUBLE[zone.kind]}">${text(zone.label)}</text>`);
+      }
+    }
+  }
+
   // History's marks: what happened where in the last century — battles, sieges and sackings, plague, risings.
   if (layers.events && planet.history) {
     const recent = planet.history.events.filter((event) => planet.history!.years - event.year <= 100 && event.cell !== undefined && EVENT_GLYPH[event.kind]);
@@ -477,6 +521,18 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
       }
       out.push(`</g>`);
     }
+    // Provinces (when shown) and named places, small; the GM's own words, where the GM put them.
+    if (layers.provinces) {
+      out.push(`<g text-anchor="middle" font-size="7" font-style="italic" fill="${theme.label}" opacity="0.7" ${halo}>`);
+      for (const province of planet.provinces.slice(1)) if (province.cells > 6 && province.name) out.push(`<text x="${r1(province.pole[0])}" y="${r1(province.pole[1] + 10)}">${text(province.name)}</text>`);
+      out.push(`</g>`);
+    }
+    if (layers.markers) {
+      out.push(`<g font-size="6" font-style="italic" fill="${theme.label}" opacity="0.8" ${halo}>`);
+      for (const marker of planet.markers.slice(1)) if (marker.name) out.push(`<text x="${r1(marker.x + s * 0.32)}" y="${r1(marker.y - s * 0.22)}">${text(marker.name)}</text>`);
+      out.push(`</g>`);
+    }
+    for (const [x, y, words, size] of planet.gmLabels ?? []) out.push(`<text x="${r1(x)}" y="${r1(y)}" text-anchor="middle" font-size="${r1(size)}" font-weight="600" letter-spacing="${r1(size * 0.12)}" fill="${theme.label}" ${halo}>${esc(words)}</text>`);
     // Rivers: the largest ones, along their course.
     const big = planet.rivers.slice(1).filter((river) => river.cells.length > 8).sort((a, b) => b.discharge - a.discharge).slice(0, 14);
     if (layers.rivers && big.length) {
@@ -644,10 +700,11 @@ function frame(planet: Planet, theme: Theme, text: (value: string) => string, wo
   }
   parts.push(`<g opacity="0.9"><circle cx="${cx}" cy="${cy}" r="34" fill="none" stroke="${theme.ink}" stroke-width="0.6"/>${rays.reverse().join("")}<text x="${cx}" y="${cy - 52}" text-anchor="middle" font-size="12" font-weight="700" fill="${theme.ink}">N</text></g>`);
   // Scale bar: a round distance about a tenth of the map wide.
-  const target = (W / 10) * planet.scale;
+  const unit = planet.scale * (words.perKm ?? 1);
+  const target = (W / 10) * unit;
   const magnitude = 10 ** Math.floor(Math.log10(target));
   const km = [1, 2, 5, 10].map((m) => m * magnitude).reduce((best, value) => (Math.abs(value - target) < Math.abs(best - target) ? value : best));
-  const length = km / planet.scale;
+  const length = km / unit;
   const x0 = W - length - 30;
   const y0 = H - 30;
   parts.push(`<g fill="${theme.ink}" font-size="10" text-anchor="middle"><rect x="${r1(x0)}" y="${y0}" width="${r1(length / 2)}" height="5" fill="${theme.ink}"/><rect x="${r1(x0 + length / 2)}" y="${y0}" width="${r1(length / 2)}" height="5" fill="${theme.halo}" stroke="${theme.ink}" stroke-width="0.8"/><text x="${r1(x0)}" y="${y0 - 5}">0</text><text x="${r1(x0 + length)}" y="${y0 - 5}" text-anchor="end">${km} ${esc(words.km ?? "km")}${wrapsRound(planet.params) ? ` · ${esc(words.atEquator ?? "at the equator")}` : ""}</text></g>`);
@@ -695,6 +752,9 @@ export function planetLegend(planet: Planet, options: RenderOptions = {}): Legen
     places.push({ key: "legend.capital", swatch: { svg: `<circle cx="12" cy="8" r="5" fill="${theme.burg}" stroke="${theme.burgStroke}" stroke-width="1"/><circle cx="12" cy="8" r="2.1" fill="${theme.burgStroke}"/>` } });
     places.push({ key: "legend.town", swatch: { svg: `<circle cx="12" cy="8" r="3" fill="${theme.burg}" stroke="${theme.burgStroke}" stroke-width="0.8"/>` } });
   }
+  const climates: LegendEntry[] = layers.climate ? present([...koppenOf(planet)].filter((k) => k >= 0)).map((k) => ({ label: KOPPEN[k][0], swatch: { fill: KOPPEN[k][1] } })) : [];
+  const troubles: LegendEntry[] = layers.zones ? present(zonesOf(planet).map((zone) => zone.kind)).map((kind) => ({ key: `zone2.${kind}`, swatch: { fill: TROUBLE[kind], opacity: 0.35, stroke: TROUBLE[kind], dash: "4 3" } })) : [];
+  const peoples: LegendEntry[] = layers.cultures ? planet.cultures.slice(1).filter((people) => people.cells).map((people) => ({ label: people.name, swatch: { fill: people.color, opacity: 0.6 } })) : [];
   // History's marks of the last century, by kind.
   const told: LegendEntry[] = layers.events && planet.history ? present(planet.history.events.filter((event) => planet.history!.years - event.year <= 100 && event.cell !== undefined && EVENT_GLYPH[event.kind]).map((event) => event.kind)).map((kind) => ({ key: `history.mark.${kind}`, swatch: { glyph: EVENT_GLYPH[kind]![0], color: EVENT_GLYPH[kind]![1] } })) : [];
   const marks: LegendEntry[] = layers.markers ? present(planet.markers.slice(1).map((m) => m.kind)).map((kind) => ({ key: `marker.${kind}@${age}`, swatch: { glyph: MARKER_GLYPH[kind], color: ink, ring: ink, bg: theme.halo } })) : [];
@@ -706,5 +766,8 @@ export function planetLegend(planet: Planet, options: RenderOptions = {}): Legen
     { key: "legend.places", entries: places },
     { key: "legend.marks", entries: marks },
     { key: "legend.history", entries: told },
+    { key: "layer.climate", entries: climates },
+    { key: "layer.zones", entries: troubles },
+    { key: "layer.cultures", entries: peoples },
   ].filter((section) => section.entries.length);
 }

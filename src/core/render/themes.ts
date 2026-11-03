@@ -297,6 +297,10 @@ export type LayerId =
   | "rivers"
   | "states"
   | "religions"
+  | "cultures"
+  | "climate"
+  | "ice"
+  | "zones"
   | "provinces"
   | "borders"
   | "routes"
@@ -315,7 +319,7 @@ export type LayerId =
   | "winds"
   | "frame";
 
-export const LAYERS: LayerId[] = ["depth", "biomes", "heights", "icons", "rivers", "states", "religions", "provinces", "borders", "routes", "burgs", "emblems", "labels", "landmasses", "markers", "events", "military", "grid", "temperature", "precipitation", "population", "currents", "winds", "frame"];
+export const LAYERS: LayerId[] = ["depth", "biomes", "climate", "ice", "heights", "icons", "rivers", "states", "cultures", "religions", "zones", "provinces", "borders", "routes", "burgs", "emblems", "labels", "landmasses", "markers", "events", "military", "grid", "temperature", "precipitation", "population", "currents", "winds", "frame"];
 
 export function defaultLayers(theme: ThemeId): Record<LayerId, boolean> {
   return {
@@ -326,6 +330,11 @@ export function defaultLayers(theme: ThemeId): Record<LayerId, boolean> {
     rivers: true,
     states: theme !== "relief" && theme !== "nautical",
     religions: false,
+    cultures: false,
+    climate: false,
+    // Sea ice where the water is cold all year; zones of trouble (fronts, plague, bandits) for the GM to switch on.
+    ice: theme !== "political" && theme !== "hud",
+    zones: false,
     provinces: theme === "political",
     borders: true,
     routes: true,

@@ -1,13 +1,14 @@
 // The planet level: world settings, the world map and its inspector.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createRng, editPlanet, mapKeyOf, pastPlanet, eraTheme, emptyEdits, foundedSize, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
+import { createRng, editPlanet, mapKeyOf, pastPlanet, planetGeoJSON, eraTheme, emptyEdits, foundedSize, GLOBE_RADIUS, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type Setting, settingOf, type ThemeId, planetLegend } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { SettingPanel } from "../SettingPanel";
 import { WorldForm, type ZoomRange } from "../WorldForm";
-import { WorldEditor, type EditTool } from "../WorldEditor";
+import { WorldEditor, type EditTool, type Paint } from "../WorldEditor";
 import type { T } from "../i18n";
 import { describePlanet, searchPlanet } from "../planetText";
 import { growPlanet } from "../work";
+import { Tables } from "../Tables";
 import { useLayers } from "./layers";
 import type { Level, LevelContext } from "./types";
 import { NumberInput } from "../NumberInput";
@@ -23,6 +24,7 @@ const NUMBER_FIELDS: { key: keyof PlanetParams; min: number; max: number; step: 
   { key: "states", min: 1, max: 60, step: 1 },
   { key: "towns", min: 0, max: 2000, step: 10 },
   { key: "provinceShare", min: 0, max: 1, step: 0.05 },
+  { key: "growth", min: 0.3, max: 3, step: 0.1 },
 ];
 
 /** Where a selection sits on the map, to ring it on the globe. */
@@ -58,16 +60,48 @@ export function selectedOf(planet: Planet | null, selection: Selection | null, t
   return { key: `${kind}:${id}`, label };
 }
 
+/** Ready sets of layers: what a political map, a physical map, a map for the players or a climate map shows. */
+const PRESETS: Record<string, Partial<Record<LayerId, boolean>>> = {
+  political: { depth: true, states: true, provinces: true, borders: true, routes: true, burgs: true, emblems: true, labels: true, frame: true },
+  physical: { depth: true, biomes: true, heights: true, icons: true, rivers: true, ice: true, labels: true, landmasses: true, grid: true, frame: true },
+  players: { depth: true, biomes: true, icons: true, rivers: true, ice: true, states: true, borders: true, routes: true, burgs: true, labels: true, markers: true, frame: true },
+  climate: { depth: true, climate: true, rivers: true, ice: true, labels: true, frame: true },
+  clean: { depth: true, biomes: true, rivers: true, borders: true, burgs: true, labels: true },
+};
+
+/** A picture as a heightmap: 200 × 125 brightness values, black the sea floor and white the highest peaks. */
+async function heightsOf(file: File): Promise<NonNullable<PlanetEdits["image"]>> {
+  const url = URL.createObjectURL(file);
+  try {
+    const picture = new Image();
+    picture.src = url;
+    await picture.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = 200;
+    canvas.height = 125;
+    const pen = canvas.getContext("2d")!;
+    pen.drawImage(picture, 0, 0, canvas.width, canvas.height);
+    const pixels = pen.getImageData(0, 0, canvas.width, canvas.height).data;
+    const heights: number[] = [];
+    for (let k = 0; k < pixels.length; k += 4) heights.push(Math.round(((pixels[k] * 0.3 + pixels[k + 1] * 0.59 + pixels[k + 2] * 0.11) / 255) * 100));
+    return { width: canvas.width, height: canvas.height, heights };
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export interface PlanetLinks {
   openCity: (planet: Planet, burg: number) => void;
   openRegion?: (planet: Planet, province: number) => void;
   openLocal?: (planet: Planet, marker: number) => void;
   openCountry?: (planet: Planet, state: number) => void;
   openUnderworld?: (planet: Planet) => void;
+  /** A close-up of a box the GM marked out on the map. */
+  openArea?: (planet: Planet, box: [number, number, number, number]) => void;
   back: (() => void) | null;
 }
 
-export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, initialSetting: Partial<Setting> | undefined, { openCity, openRegion, openLocal, openCountry, openUnderworld, back }: PlanetLinks): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void; theme: ThemeId } {
+export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefined, initialSetting: Partial<Setting> | undefined, { openCity, openRegion, openLocal, openCountry, openUnderworld, openArea, back }: PlanetLinks): Level & { planet: Planet | null; load: (params: Partial<PlanetParams>) => void; theme: ThemeId } {
   const { t } = ctx;
   const [params, setParams] = useState<PlanetParams>(() => planetParams({ seed: initialSeed, setting: initialSetting }));
   const [raw, setPlanet] = useState<Planet | null>(null);
@@ -75,27 +109,32 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   const names = ctx.names(mapKey);
   // The GM's edits: relief strokes regrow the whole world from the new ground; realms and towns are laid over it.
   const edits = ctx.patch(mapKey).edits ?? null;
-  const terrainKey = JSON.stringify(edits?.terrain ?? []);
+  const terrainKey = JSON.stringify([edits?.terrain ?? [], edits?.image?.heights.length ?? 0, edits?.image?.heights[Math.floor((edits?.image?.heights.length ?? 0) / 2)] ?? 0]);
   // Relief strokes regrow the whole world: that runs like any generation, with the busy sign up and the old shape on
   // screen meanwhile; when strokes come faster than the world grows, only the last is grown.
   const [regrown, setRegrown] = useState<{ raw: Planet; key: string; planet: Planet } | null>(null);
   const latest = useRef("");
   useEffect(() => {
     latest.current = terrainKey;
-    if (!raw || !edits?.terrain.length || (regrown?.raw === raw && regrown.key === terrainKey)) return;
+    if (!raw || (!edits?.terrain.length && !edits?.image) || (regrown?.raw === raw && regrown.key === terrainKey)) return;
     const terrain = edits.terrain;
+    const image = edits.image;
     ctx.task(
-      (report) => growPlanet(raw.params, terrain, report),
+      (report) => growPlanet(raw.params, terrain, report, image),
       (made) => {
         if (latest.current === terrainKey) setRegrown({ raw, key: terrainKey, planet: made });
       },
     );
   }, [raw, terrainKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const shaped = !raw ? null : !edits?.terrain.length ? raw : regrown?.raw === raw ? regrown.planet : null;
+  const shaped = !raw ? null : !edits?.terrain.length && !edits?.image ? raw : regrown?.raw === raw ? regrown.planet : null;
   const planet = useMemo(() => (shaped ? renamePlanet(editPlanet(shaped, edits), names) : null), [shaped, edits, names]);
   const [tool, setTool] = useState<EditTool | null>(null);
   const [brush, setBrush] = useState({ radius: 60, strength: 12 });
-  const [realm, setRealm] = useState(1);
+  const [paint, setPaint] = useState<Paint>({ realm: 1, people: 1, faith: 1, province: 1, zone: "custom" });
+  // The first point of a ridge, a trench or a close-up's box.
+  const [start, setStart] = useState<[number, number] | null>(null);
+  const [season, setSeason] = useState<"year" | "summer" | "winter">("year");
+  const [tables, setTables] = useState(false);
   const [moving, setMoving] = useState<number | null>(null);
   const [history, setHistory] = useState<PlanetEdits[]>([]);
   // Bumped with each new world, so the map view starts afresh.
@@ -103,7 +142,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   // The map of a past year of the world's history, when the GM looks back.
   const [past, setPast] = useState<number | null>(null);
   const [theme, setTheme] = useState<ThemeId>(() => (initialSetting ? eraTheme(settingOf(initialSetting)) : "atlas"));
-  const { layers, restyle, toggle } = useLayers(initialSetting ? eraTheme(settingOf(initialSetting)) : "atlas");
+  const { layers, restyle, toggle, setAll } = useLayers(initialSetting ? eraTheme(settingOf(initialSetting)) : "atlas");
   const [selection, setSelection] = useState<Selection | null>(null);
   const [tab, setTab] = useState<Tab>("place");
   // The globe view: where it is turned to, or null for the flat map.
@@ -156,7 +195,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
   };
   const set = <K extends keyof PlanetParams>(key: K, value: PlanetParams[K]) => setParams((current) => ({ ...current, [key]: value }));
   const highlight = selection && (selection.kind === "state" || selection.kind === "province" || selection.kind === "culture" || selection.kind === "religion") ? { kind: selection.kind, id: selection.id } : null;
-  const svg = useMemo(() => (!planet ? "" : globe ? renderGlobe(planet, { theme, layers, script: ctx.script, ...globe, mark: markOf(planet, selection), unknown, quick: turning }) : past !== null && planet.history ? renderPlanet(pastPlanet(planet, past), { theme, layers: { ...layers, provinces: false, routes: false, religions: false, emblems: false, military: false }, script: ctx.script, words: { km: t("unit.km"), atEquator: t("scale.equator") } }) : renderPlanet(planet, { theme, layers, script: ctx.script, highlight, words: { km: t("unit.km"), atEquator: t("scale.equator") } })), [planet, theme, layers, ctx.script, highlight?.kind, highlight?.id, globe, globe && selection, unknown, turning, t, past]); // eslint-disable-line react-hooks/exhaustive-deps
+  const svg = useMemo(() => (!planet ? "" : globe ? renderGlobe(planet, { theme, layers, script: ctx.script, ...globe, mark: markOf(planet, selection), unknown, quick: turning }) : past !== null && planet.history ? renderPlanet(pastPlanet(planet, past), { theme, layers: { ...layers, provinces: false, routes: false, religions: false, emblems: false, military: false }, script: ctx.script, words: ctx.words }) : renderPlanet(planet, { theme, layers, script: ctx.script, highlight, words: ctx.words, ...(season !== "year" ? { season } : {}) })), [planet, theme, layers, ctx.script, highlight?.kind, highlight?.id, globe, globe && selection, unknown, turning, t, past, season, ctx.words]); // eslint-disable-line react-hooks/exhaustive-deps
   const legend = useMemo(() => (planet ? planetLegend(planet, { theme, layers }) : undefined), [planet, theme, layers]);
   const pick = (x: number, y: number) => {
     if (!planet) return;
@@ -180,11 +219,35 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
       return best;
     };
     const at: [number, number] = [Math.round(x), Math.round(y)];
+    const under = () => {
+      const cells: number[] = [];
+      for (let cell = 0; cell < mesh.cells; cell++) if (!planet.water[cell] && Math.hypot(mesh.x[cell] - x, mesh.y[cell] - y) < brush.radius) cells.push(cell);
+      return cells;
+    };
+    const handOver = (field: "owners" | "cultures" | "faiths" | "provinces", id: number) => {
+      const given = Object.fromEntries(under().map((cell) => [cell, id]));
+      change((current) => ({ ...current, [field]: { ...current[field], ...given } }));
+    };
     if (tool === "raise" || tool === "lower") change((current) => ({ ...current, terrain: [...current.terrain, [...at, brush.radius, tool === "raise" ? brush.strength : -brush.strength]] }));
-    else if (tool === "paint") {
-      const owners: Record<number, number> = {};
-      for (let cell = 0; cell < mesh.cells; cell++) if (!planet.water[cell] && Math.hypot(mesh.x[cell] - x, mesh.y[cell] - y) < brush.radius) owners[cell] = realm;
-      change((current) => ({ ...current, owners: { ...current.owners, ...owners } }));
+    else if (tool === "smooth") change((current) => ({ ...current, terrain: [...current.terrain, [...at, brush.radius, 0, 1]] }));
+    else if (tool === "flatten") change((current) => ({ ...current, terrain: [...current.terrain, [...at, brush.radius, Math.round(planet.height[mesh.find(x, y)]), 2]] }));
+    else if (tool === "sink") change((current) => ({ ...current, terrain: [...current.terrain, [...at, brush.radius, 12, 2]] }));
+    else if (tool === "ridge" || tool === "trench" || tool === "area") {
+      if (!start) return setStart(at);
+      const [x0, y0] = start;
+      setStart(null);
+      if (tool === "area") return openArea?.(planet, [x0, y0, ...at]);
+      change((current) => ({ ...current, terrain: [...current.terrain, [x0, y0, brush.radius, tool === "ridge" ? brush.strength : -brush.strength, 3, ...at]] }));
+    } else if (tool === "paint") handOver("owners", paint.realm);
+    else if (tool === "people") handOver("cultures", paint.people);
+    else if (tool === "faith") handOver("faiths", paint.faith);
+    else if (tool === "province") handOver("provinces", paint.province);
+    else if (tool === "label") {
+      const words = prompt(t("editor.labelText"));
+      if (words) change((current) => ({ ...current, labels: [...(current.labels ?? []), [...at, words, 14]] }));
+    } else if (tool === "zone") {
+      const label = paint.zone === "custom" ? prompt(t("editor.zoneLabel")) ?? "" : "";
+      change((current) => ({ ...current, zones: [...(current.zones ?? []), [...at, brush.radius, paint.zone, label]] }));
     } else if (tool === "move") {
       if (moving === null) setMoving(town() || null);
       else {
@@ -370,9 +433,16 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
             }}
             brush={brush}
             setBrush={setBrush}
-            realm={realm}
-            setRealm={setRealm}
+            paint={paint}
+            setPaint={setPaint}
             moving={moving}
+            started={start !== null}
+            selection={selection}
+            change={change}
+            onImage={async (file) => {
+              const image = await heightsOf(file);
+              change((current) => ({ ...current, image }));
+            }}
             canUndo={history.length > 0}
             onUndo={() => {
               const last = history[history.length - 1];
@@ -427,6 +497,31 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
           </label>
         ))}
         <h2>{t("panel.layers")}</h2>
+        <div className="row-buttons">
+          {Object.keys(PRESETS).map((name) => (
+            <button key={name} type="button" onClick={() => setAll({ ...Object.fromEntries(LAYERS.map((id) => [id, false])), ...PRESETS[name] } as Record<LayerId, boolean>)}>
+              {t(`preset.${name}`)}
+            </button>
+          ))}
+          {planet ? (
+            <button type="button" onClick={() => setTables(true)}>
+              📊 {t("table.title")}
+            </button>
+          ) : null}
+        </div>
+        {tables && planet ? <Tables t={t} nm={ctx.nm} planet={planet} onClose={() => setTables(false)} /> : null}
+        {layers.temperature ? (
+          <label>
+            {t("season.title")}
+            <select value={season} onChange={(event) => setSeason(event.target.value as typeof season)}>
+              {(["year", "summer", "winter"] as const).map((name) => (
+                <option key={name} value={name}>
+                  {t(`season.${name}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         {LAYERS.map((id) => (
           <label key={id} className="check">
             <input type="checkbox" checked={layers[id]} onChange={(event) => toggle(id, event.target.checked)} />
@@ -455,5 +550,6 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
     ) : null,
     status: planet ? (past !== null ? t("history.pastStatus", { year: past }) : t("stats.summary", { states: planet.states.length - 1, burgs: planet.burgs.filter((burg) => burg.id && !burg.removed).length, rivers: planet.rivers.length - 1 })) : "",
     data: () => (planet ? planetToJson(planet) : null),
+    exports: planet ? [{ label: t("action.exportGeoJson"), file: "geojson", make: () => new Blob([JSON.stringify(planetGeoJSON(planet))], { type: "application/geo+json" }) }] : [],
   };
 }

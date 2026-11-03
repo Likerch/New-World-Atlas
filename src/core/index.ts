@@ -53,3 +53,5 @@ export * from "./people";
 export * from "./planet/history";
 export { cellKm2 } from "./planet/geo";
 export * from "./handbook";
+export * from "./planet/nature";
+export * from "./planet/geojson";
