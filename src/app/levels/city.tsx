@@ -17,6 +17,7 @@ import {
   generateCity,
   generateDistrict,
   influenceTints,
+  nextPlaceId,
   localFromHall,
   localOutskirts,
   pointInPolygon,
@@ -192,7 +193,7 @@ export function useCityLevel(
             if (waiting?.action === "add") {
               const own = waiting.kind.startsWith("custom:") ? placeKinds.find((kind) => kind.id === waiting.kind.slice(7)) : undefined;
               setEdits((e) => {
-                const id = Math.max(city.landmarks.reduce((most, l) => Math.max(most, l.id), 0), ...(e.places?.added ?? []).map((a) => a.id)) + 1;
+                const id = nextPlaceId(city, e);
                 return { ...e, places: { ...e.places, added: [...(e.places?.added ?? []), { id, kind: own ? "custom" : (waiting.kind as LandmarkKind), ...(own ? { custom: own.id, own } : {}), x, y }] } };
               });
               setWaiting(null);

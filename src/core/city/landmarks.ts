@@ -7,7 +7,7 @@ import { name } from "../language";
 import { area, centroid, distanceToPolyline } from "../polygon";
 import type { Rng } from "../random";
 import type { Layout } from "./layout";
-import type { Building, City, CityParams, Landmark, LandmarkKind, WardKind } from "./model";
+import { PROPS, type Building, type City, type CityParams, type Landmark, type LandmarkKind, type WardKind } from "./model";
 
 export function placeLandmarks(params: CityParams, layout: Layout, buildings: Building[], language: City["language"], rng: Rng): Landmark[] {
   const out: Landmark[] = [];
@@ -16,10 +16,11 @@ export function placeLandmarks(params: CityParams, layout: Layout, buildings: Bu
   const add = (kind: LandmarkKind, at: Point, ward: number, named = false) => {
     out.push({ id: out.length + 1, kind, x: at[0], y: at[1], ward, name: named ? name(language, rng, "plain") : "" });
   };
-  /** A building in one of the wards, the biggest or a random one, not used by another landmark. */
-  const building = (kinds: WardKind[], biggest: boolean, test: (b: Building) => boolean = () => true) => {
+  /** A building in one of the wards, the biggest or a random one, not used by another landmark: one a body walks into,
+   * not a tree, a field, a pier or a stall (a camp's pen only when the place asks for one). */
+  const building = (kinds: WardKind[], biggest: boolean, test?: (b: Building) => boolean) => {
     const wards = new Set(wardsOf(kinds));
-    const options = buildings.filter((b) => wards.has(b.ward) && !used.has(b) && b.kind !== "tree" && b.kind !== "field" && b.kind !== "grave" && test(b));
+    const options = buildings.filter((b) => wards.has(b.ward) && !used.has(b) && (!PROPS.includes(b.kind) || (b.kind === "pen" && !!test)) && (!test || test(b)));
     if (!options.length) return null;
     const pick = biggest ? options.reduce((best, b) => (area(b.polygon) > area(best.polygon) ? b : best)) : rng.pick(options);
     used.add(pick);

@@ -17,6 +17,12 @@ export function paletteColor(index: number, offset: number, saturation = 0.5, li
   return hslToHex((offset * 360 + index * 137.508) % 360, saturation, lightness);
 }
 
+/** A colour as a file or a form gives it, if it is one (#rgb or #rrggbb); anything else, which might carry markup into a
+ * drawing, gives way to the fallback. */
+export function hexColor(value: unknown, fallback: string): string {
+  return typeof value === "string" && /^#(?:[0-9a-f]{3}){1,2}$/iu.test(value) ? value : fallback;
+}
+
 /** A variation of a hex colour, lighter (amount > 0) or darker. */
 export function shade(hex: string, amount: number): string {
   const value = parseInt(hex.slice(1), 16);

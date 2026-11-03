@@ -7,7 +7,7 @@ import type { Point } from "../geometry";
 import { centroid, distanceToPolyline, pointInPolygon } from "../polygon";
 import { createRng } from "../random";
 import { buildBuildings } from "./buildings";
-import { cityStages, gateRoads } from "./generate";
+import { cityStages, cleanCustom, gateRoads } from "./generate";
 import { PROPS, type Building, type City, type CustomPlace, type CustomWard, type Landmark, type LandmarkKind, type WardKind } from "./model";
 import { edgeKey } from "./streets";
 
@@ -22,14 +22,18 @@ export interface CityEdits {
     moved?: Record<string, [number, number]>;
     /** A place turned into another kind ("custom:<id>" for the GM's own). */
     kinds?: Record<string, string>;
+    /** The GM's own kinds those places were turned into, carried along by place id like an added place's. */
+    own?: Record<string, CustomPlace>;
   };
   /** Gates opened in the town wall and gates bricked up, by where they stand. */
   gates?: { added?: Point[]; removed?: Point[] };
 }
 
-/** The next free id for a place the GM adds. */
-export function nextPlaceId(city: City): number {
-  return city.landmarks.reduce((top, landmark) => Math.max(top, landmark.id), 0) + 1;
+/** The next free id for a place the GM adds: past every id the city's places, the places taken away and the places
+ * added ever had, so a new place never wears an old one's id (and is not taken away, nor given its notes, with it). */
+export function nextPlaceId(city: City, edits?: CityEdits | null): number {
+  const ids = [...city.landmarks.map((landmark) => landmark.id), ...(edits?.places?.removed ?? []), ...(edits?.places?.added ?? []).map((add) => add.id)];
+  return ids.reduce((top, id) => Math.max(top, id), 0) + 1;
 }
 
 const wardAt = (city: City, at: Point) => city.wards.find((ward) => pointInPolygon(at, ward.polygon))?.id ?? city.wards[0]?.id ?? 0;
@@ -45,9 +49,10 @@ export function editCity(city: City, edits: CityEdits | null | undefined): City 
   const ownWards = [...(city.params.custom?.wards ?? [])];
   for (const [, change] of wardEdits) if (change.own && !ownWards.some((kind) => kind.id === change.own!.id)) ownWards.push(change.own);
   const ownPlaces = [...(city.params.custom?.places ?? [])];
-  for (const add of placeEdits.added ?? []) if (add.own && !ownPlaces.some((kind) => kind.id === add.own!.id)) ownPlaces.push(add.own);
-  const params = ownWards.length || ownPlaces.length ? { ...city.params, custom: { wards: ownWards, places: ownPlaces } } : city.params;
-  const custom = new Map(ownWards.map((kind) => [kind.id, kind]));
+  for (const own of [...(placeEdits.added ?? []).map((add) => add.own), ...Object.values(placeEdits.own ?? {})]) if (own && !ownPlaces.some((kind) => kind.id === own.id)) ownPlaces.push(own);
+  // Kinds an edit carries come from a world file too: cleaned like the city's own.
+  const params = ownWards.length || ownPlaces.length ? { ...city.params, custom: cleanCustom({ wards: ownWards, places: ownPlaces }) } : city.params;
+  const custom = new Map((params.custom?.wards ?? []).map((kind) => [kind.id, kind]));
   let wards = city.wards;
   let buildings = city.buildings;
   let landmarks = city.landmarks;
@@ -88,14 +93,24 @@ export function editCity(city: City, edits: CityEdits | null | undefined): City 
       delete next.custom;
       return own ? { ...next, custom: own.id } : next;
     });
-    // A place in a rebuilt quarter moves onto the nearest new house of it.
+    // A place in a rebuilt quarter moves onto the nearest new house of it that no other place has taken. One whose house
+    // came down in a quarter rebuilt without houses (a park, a square) moves to the nearest free house of the town; a
+    // place in the open (a well on its square) stays.
+    const house = (b: Building) => b.polygon.length > 2 && !PROPS.includes(b.kind) && b.kind !== "shed";
+    const taken = new Set<Building>();
+    const away = (b: Building, landmark: Landmark) => Math.hypot(centroid(b.polygon)[0] - landmark.x, centroid(b.polygon)[1] - landmark.y);
+    const nearest = (options: Building[], landmark: Landmark) => options.reduce<Building | null>((near, b) => (!near || away(b, landmark) < away(near, landmark) ? b : near), null);
     landmarks = landmarks.map((landmark) => {
       if (!only.has(landmark.ward)) return landmark;
-      const homes = added.filter((b) => b.ward === landmark.ward && !PROPS.includes(b.kind) && b.kind !== "shed");
-      if (!homes.length) return landmark;
-      const best = homes.reduce((near, b) => (Math.hypot(centroid(b.polygon)[0] - landmark.x, centroid(b.polygon)[1] - landmark.y) < Math.hypot(centroid(near.polygon)[0] - landmark.x, centroid(near.polygon)[1] - landmark.y) ? b : near));
+      let best = nearest(added.filter((b) => b.ward === landmark.ward && house(b) && !taken.has(b)), landmark);
+      if (!best && city.buildings.some((b) => b.ward === landmark.ward && house(b) && pointInPolygon([landmark.x, landmark.y], b.polygon))) {
+        const others = city.landmarks.filter((other) => other.id !== landmark.id && !only.has(other.ward));
+        best = nearest(buildings.filter((b) => !only.has(b.ward) && house(b) && !taken.has(b) && !others.some((other) => other.ward === b.ward && pointInPolygon([other.x, other.y], b.polygon))), landmark);
+      }
+      if (!best) return landmark;
+      taken.add(best);
       const [x, y] = centroid(best.polygon);
-      return { ...landmark, x, y };
+      return { ...landmark, x, y, ward: best.ward };
     });
   }
 

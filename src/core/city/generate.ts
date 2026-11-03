@@ -4,13 +4,14 @@
 import { createLanguage, name, type Language } from "../language";
 import { armsOf } from "../planet/arms";
 import { BIOMES } from "../planet/biomes";
+import { hexColor } from "../color";
 import { createRng, randomSeed } from "../random";
 import { ageOf, isClassic, peopleOf, settingOf, SETTINGS } from "../setting";
 import type { Planet } from "../planet/model";
 import { buildBuildings } from "./buildings";
 import { placeLandmarks } from "./landmarks";
 import { layoutCity, type Layout } from "./layout";
-import { ERAS, type City, type CityParams, type CityRoad, type Era, type Street } from "./model";
+import { ERAS, type City, type CityCustom, type CityParams, type CityRoad, type Era, type Street } from "./model";
 import { morePlaces } from "./places";
 import { buildStreets, edgeKey, type StreetNet } from "./streets";
 import { generateVillage } from "./village";
@@ -21,7 +22,7 @@ export function cityParams(input: Partial<CityParams> = {}): CityParams {
   const era: Era = input.era ?? rng.pick(ERAS);
   const big = era === "modern" || era === "cyberpunk" || era === "far-future";
   const population = big ? Math.round(rng.float(200, 2500)) : Math.round(rng.float(3, 60) * 10) / 10;
-  return {
+  const params: CityParams = {
     seed,
     name: "",
     width: 1200,
@@ -37,6 +38,17 @@ export function cityParams(input: Partial<CityParams> = {}): CityParams {
     market: true,
     shanty: rng.chance(0.4),
     ...Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined)),
+  };
+  if (params.custom) params.custom = cleanCustom(params.custom);
+  return params;
+}
+
+/** The GM's own kinds of quarter and place as this browser, a pack or a world file gives them: lists, and colours that
+ * are colours, so nothing they say can run as markup in the map. */
+export function cleanCustom(custom: Partial<CityCustom>): CityCustom {
+  return {
+    wards: (Array.isArray(custom.wards) ? custom.wards : []).map((kind) => ({ ...kind, color: hexColor(kind.color, "#8a4fc9") })),
+    places: (Array.isArray(custom.places) ? custom.places : []).map((kind) => ({ ...kind, color: hexColor(kind.color, "#8a4fc9") })),
   };
 }
 

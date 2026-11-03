@@ -105,15 +105,20 @@ export function generateVillage(params: CityParams, language: Language): City {
   const setback = m(hamlet ? 22 : 26);
   const homes = hamlet ? rng.int(1, 4) : Math.max(6, Math.min(60, Math.round((params.population * 1000) / 5.5)));
   if (hamlet) {
-    // A few farmsteads round the yard at the track's end, none on the track itself.
-    for (let k = 0, placed = 0; k < homes * 5 && placed < homes; k++) {
-      const angle = along + Math.PI / 2 + ((k + 0.5) / (homes * 5)) * Math.PI * 1.6 - Math.PI * 0.3 + rng.float(-0.1, 0.1);
-      const site: Point = [center[0] + Math.cos(angle) * m(34), center[1] + Math.sin(angle) * m(34)];
-      // Not in the river or the sea, and not crowding the last one.
-      if (wetSea(site) || (river && distanceToPolyline(site, river.points) < river.width / 2 + m(18)) || sites.some((q) => Math.hypot(q[0] - site[0], q[1] - site[1]) < m(28))) continue;
-      sites.push(site);
-      plotKinds.push("farmstead");
-      placed++;
+    // A few farmsteads round the yard at the track's end, none on the track itself. Where the river leaves no dry spot
+    // among the first few tried, more are tried round the yard, then further out.
+    let placed = 0;
+    for (const [reach, tries] of [[34, homes * 5], [34, 24], [50, 24]]) {
+      for (let k = 0; k < tries && placed < homes; k++) {
+        const angle = along + Math.PI / 2 + ((k + 0.5) / tries) * Math.PI * 1.6 - Math.PI * 0.3 + rng.float(-0.1, 0.1);
+        const site: Point = [center[0] + Math.cos(angle) * m(reach), center[1] + Math.sin(angle) * m(reach)];
+        // Not in the river or the sea, and not crowding the last one.
+        if (wetSea(site) || (river && distanceToPolyline(site, river.points) < river.width / 2 + m(18)) || sites.some((q) => Math.hypot(q[0] - site[0], q[1] - site[1]) < m(28))) continue;
+        sites.push(site);
+        plotKinds.push("farmstead");
+        placed++;
+      }
+      if (placed) break;
     }
   } else {
     sites.push(center);
@@ -175,7 +180,9 @@ export function generateVillage(params: CityParams, language: Language): City {
     const own = rng.fork(`plot-${id}`);
     const inner = insetConvex(cell, m(3)) ?? cell;
     const push = (polygon: Point[], buildingKind: Building["kind"], floors: number) => {
-      if (!wet(polygon) && !roads.some((line) => polygon.some((p) => distanceToPolyline(p, line) < m(4)))) buildings.push({ polygon, ward: id, kind: buildingKind, floors });
+      if (wet(polygon) || roads.some((line) => polygon.some((p) => distanceToPolyline(p, line) < m(4)))) return false;
+      buildings.push({ polygon, ward: id, kind: buildingKind, floors });
+      return true;
     };
     // The way the plot faces: towards the nearest road.
     const facing = (() => {
@@ -208,9 +215,15 @@ export function generateVillage(params: CityParams, language: Language): City {
       return;
     }
     if (kind === "temple") {
-      const chapel = box(toward(m(10)), facing + Math.PI / 2, m(fallen ? 8 : 18), m(fallen ? 6 : 9));
-      push(chapel, "landmark", 1);
-      add("temple", centroid(chapel), id, true, params.faith?.deity ? { deity: params.faith.deity } : {});
+      // The church fronts the road; where the road or the water crowds it, it stands further back or to one side. With
+      // no room for it, there is no church.
+      for (const [back, aside] of [[10, 0], [4, 0], [10, 8], [10, -8], [4, 8], [4, -8]]) {
+        const at = toward(m(back));
+        const chapel = box([at[0] - Math.sin(facing) * m(aside), at[1] + Math.cos(facing) * m(aside)], facing + Math.PI / 2, m(fallen ? 8 : 18), m(fallen ? 6 : 9));
+        if (!push(chapel, "landmark", 1)) continue;
+        add("temple", centroid(chapel), id, true, params.faith?.deity ? { deity: params.faith.deity } : {});
+        break;
+      }
       for (let row = 0; row < 3; row++) for (let col = -3; col <= 3; col++) push(box([site[0] - Math.cos(facing) * m(4 + row * 4) + Math.cos(facing + Math.PI / 2) * m(col * 3), site[1] - Math.sin(facing) * m(4 + row * 4) + Math.sin(facing + Math.PI / 2) * m(col * 3)], facing, m(2), m(1.2)), "grave", 0);
       return;
     }
@@ -254,7 +267,8 @@ export function generateVillage(params: CityParams, language: Language): City {
   if (!hamlet && byGreen[0]) add(fallen ? "barter-market" : "tavern", centroid(byGreen[0].polygon), byGreen[0].ward, true);
   if (!hamlet && byGreen[1] && params.era !== "stone") add(fallen ? "water-still" : "smithy", centroid(byGreen[1].polygon), byGreen[1].ward, true);
   if (river && !hamlet && !modern) {
-    const mill = [...houses].sort((a, b) => distanceToPolyline(centroid(a.polygon), river.points) - distanceToPolyline(centroid(b.polygon), river.points))[0];
+    // Not the inn's house nor the smithy's: one place to a house, so each opens as its own.
+    const mill = houses.filter((house) => !landmarks.some((l) => pointInPolygon([l.x, l.y], house.polygon))).sort((a, b) => distanceToPolyline(centroid(a.polygon), river.points) - distanceToPolyline(centroid(b.polygon), river.points))[0];
     if (mill && distanceToPolyline(centroid(mill.polygon), river.points) < m(120)) add("mill", centroid(mill.polygon), mill.ward, false);
   }
   if (hamlet) {

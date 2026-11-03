@@ -137,6 +137,15 @@ export function generateDistrict(city: City, wardId: number): City {
     }
   });
   for (const ward of blockWards) ward.buildings = buildings.filter((b) => b.ward === ward.id && b.kind !== "tree" && b.kind !== "yard").length;
+  // The quarter's own lots are known by their block and their place in it, not by their place in the list: the
+  // neighbours' houses before them come and go when a neighbouring quarter is rebuilt.
+  const lotsOf = new Map<number, number>();
+  for (const building of buildings) {
+    if (building.origin !== undefined) continue;
+    const n = lotsOf.get(building.ward) ?? 0;
+    lotsOf.set(building.ward, n + 1);
+    building.key = `block-${building.ward - 10_000}-${n}`;
+  }
 
   // Landmarks of the quarter keep their place; each moves to the block it now stands in, and remembers the house of the
   // whole city it stood on, so it opens as the same house from either map.
@@ -166,5 +175,6 @@ export function generateDistrict(city: City, wardId: number): City {
     bridges: city.bridges.map(([a, b]) => [T(a), T(b)] as [Point, Point]),
     landmarks,
     language: city.language,
+    zoom: { x: cx - FRAME_W / 2 / f, y: cy - FRAME_H / 2 / f, k: 1 / f, ground: { seed: city.params.seed, width: city.params.width, height: city.params.height, ...(city.params.relief ? { relief: city.params.relief } : {}) } },
   };
 }
