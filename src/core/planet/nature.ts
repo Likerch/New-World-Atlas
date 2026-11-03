@@ -119,7 +119,20 @@ export interface Trouble {
 export function zonesOf(planet: Planet): Trouble[] {
   const { mesh, water } = planet;
   const zones: Trouble[] = [];
-  const disc = (x: number, y: number, r: number) => Array.from({ length: mesh.cells }, (_, cell) => cell).filter((cell) => Math.hypot(mesh.x[cell] - x, mesh.y[cell] - y) <= r);
+  // The cells within a distance, spread from the nearest one (not a scan of the whole map for every border cell).
+  const disc = (x: number, y: number, r: number) => {
+    const start = mesh.find(x, y);
+    const out = [start];
+    const seen = new Set(out);
+    for (let head = 0; head < out.length; head++) {
+      for (const next of mesh.neighbors[out[head]]) {
+        if (seen.has(next)) continue;
+        seen.add(next);
+        if (Math.hypot(mesh.x[next] - x, mesh.y[next] - y) <= r) out.push(next);
+      }
+    }
+    return out;
+  };
   const ring = (cell: number, steps: number) => disc(mesh.x[cell], mesh.y[cell], mesh.spacing * steps);
   // Fronts: where realms at war meet.
   for (const state of planet.states.slice(1)) {
