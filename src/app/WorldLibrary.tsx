@@ -2,10 +2,19 @@
 // and worlds read from files.
 import { Modal } from "./Modal";
 import { useEffect, useRef, useState } from "react";
-import { ERA_IDS, randomSeed, settingOf, TOP_LEVELS, type Setting, type TopLevel, type WorldDoc } from "../core/index";
+import { ERA_IDS, randomSeed, settingOf, SETTINGS, TOP_LEVELS, type EraId, type Setting, type TopLevel, type WorldDoc } from "../core/index";
 import type { T } from "./i18n";
 import { SettingPanel } from "./SettingPanel";
 import type { NewWorld, Snapshot, Worlds } from "./worlds";
+
+/** Worlds to try the Atlas on: each a different age, from a different top map. */
+const DEMOS: { id: string; top: TopLevel; era: EraId; start: Record<string, unknown> }[] = [
+  { id: "kingdoms", top: "planet", era: "medieval", start: { seed: "demo-kingdoms", template: "continents", history: 300 } },
+  { id: "ruins", top: "planet", era: "post-apocalypse", start: { seed: "demo-ruins", template: "plates" } },
+  { id: "opera", top: "galaxy", era: "far-future", start: { seed: "demo-opera" } },
+  { id: "neon", top: "city", era: "cyberpunk", start: { seed: "demo-neon" } },
+  { id: "crypt", top: "local", era: "medieval", start: { seed: "demo-crypt", kind: "dungeon", theme: "crypt", levels: 3 } },
+];
 
 export const LEVEL_ICON: Record<string, string> = { universe: "🌠", galaxy: "🌌", system: "☀️", planet: "🌍", region: "🗺", underworld: "🕳", city: "🏰", building: "🏠", local: "🗺️" };
 
@@ -248,6 +257,22 @@ export function WorldLibrary({ t, worlds, onClose, onWorldSetting }: { t: T; wor
           >
             ✨ {t("worlds.create")}
           </button>
+          <h3>{t("demo.title")}</h3>
+          <div className="row-buttons">
+            {DEMOS.map((demo) => (
+              <button
+                key={demo.id}
+                type="button"
+                title={t(`demo.${demo.id}.hint`)}
+                onClick={() => {
+                  worlds.create({ name: t(`demo.${demo.id}`), top: demo.top, setting: SETTINGS[demo.era], script: draft.script, start: demo.start });
+                  onClose();
+                }}
+              >
+                {LEVEL_ICON[demo.top]} {t(`demo.${demo.id}`)}
+              </button>
+            ))}
+          </div>
         </section>
       </div>
     </Modal>

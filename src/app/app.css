@@ -916,6 +916,7 @@ table.figures td span:not(.bar) {
   height: auto;
   border: 1px solid var(--border);
   border-radius: 6px;
+}
 
 /* Local maps: a room's card, read-aloud words, the GM's room editor, the wilds' next sheets, the deep's lists. */
 .read-aloud {
@@ -943,12 +944,6 @@ table.figures td span:not(.bar) {
   resize: vertical;
 }
 .sheet-nav {
-
-/* Space: a world's profile code with its travel zone, trade codes, tags, hooks, filters and layers. */
-.profile {
-  margin: 8px 0;
-}
-.uwp {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -991,7 +986,18 @@ table.figures td span:not(.bar) {
   width: 100%;
   box-sizing: border-box;
   font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+}
 
+/* Space: a world's profile code with its travel zone, trade codes, tags, hooks, filters and layers. */
+.profile {
+  margin: 8px 0;
+}
+.uwp {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin-bottom: 4px;
 }
 .uwp code {
@@ -1160,6 +1166,7 @@ dialog.modal {
 }
 dialog.modal::backdrop {
   background: #0000008c;
+}
 
 /* Buildings: ways out of a room, the door editor, room lists of the GM's own building types. */
 .ways {
@@ -1237,4 +1244,75 @@ details.section:not([open]) > summary h2::before {
   padding: 6px 8px;
   border-radius: 6px;
   background: var(--accent-soft);
+}
+.legend-section > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.legend-section > summary::-webkit-details-marker {
+  display: none;
+}
+.legend-section > summary h4::before {
+  content: "▾ ";
+}
+.legend-section:not([open]) > summary h4::before {
+  content: "▸ ";
+}
+
+/* Larger type in the panels (the map keeps its own scale). */
+.app.large > header,
+.app.large > nav.crumbs,
+.app.large > aside,
+.app.large .inspector {
+  zoom: 1.18;
+}
+
+/* A tablet: narrower panels; a narrow screen: the map alone, the panels sliding in over it. */
+.drawer-toggles {
+  display: none;
+}
+@media (max-width: 1180px) {
+  .app {
+    grid-template-columns: 200px 1fr 280px;
+  }
+}
+@media (max-width: 900px) {
+  .app {
+    grid-template-columns: 1fr;
+  }
+  .app > aside.controls,
+  .app .inspector {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    z-index: 15;
+    width: min(360px, 88vw);
+    overflow-y: auto;
+    background: var(--panel);
+    box-shadow: 0 0 24px #00000080;
+    transition: transform 0.2s;
+  }
+  .app > aside.controls {
+    left: 0;
+    transform: translateX(-105%);
+  }
+  .app .inspector {
+    right: 0;
+    transform: translateX(105%);
+  }
+  .app.show-controls > aside.controls,
+  .app.show-inspector .inspector {
+    transform: none;
+  }
+  .drawer-toggles {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 5;
+    display: flex;
+    gap: 6px;
+  }
+  .topbar {
+    flex-wrap: wrap;
+  }
 }

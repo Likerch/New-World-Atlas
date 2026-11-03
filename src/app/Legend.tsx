@@ -26,8 +26,13 @@ export function Legend({ t, sections, open, setOpen }: { t: T; sections: LegendS
         </button>
       </div>
       {sections.map((section) => (
-        <div key={section.key} className="legend-section">
-          <h4>{t(section.key)}</h4>
+        // Each section folds away; a long legend (a planet's with every people and faith) stays short.
+        <details key={section.key} className="legend-section" open={section.entries.length <= 12}>
+          <summary>
+            <h4>
+              {t(section.key)} <small className="muted">{section.entries.length}</small>
+            </h4>
+          </summary>
           <ul>
             {section.entries.map((entry, k) => (
               <li key={k}>
@@ -36,7 +41,7 @@ export function Legend({ t, sections, open, setOpen }: { t: T; sections: LegendS
               </li>
             ))}
           </ul>
-        </div>
+        </details>
       ))}
     </div>
   );

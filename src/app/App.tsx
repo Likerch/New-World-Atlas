@@ -188,6 +188,15 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   const [book, setBook] = useState<{ key: string; map: string; entity: string; name: string } | null | "index">(null);
   const [searching, setSearching] = useState(false);
   const [help, setHelp] = useState(false);
+  // Larger type in the panels, remembered; on a narrow screen the side panels slide in over the map.
+  const [large, setLarge] = useState(() => {
+    try {
+      return localStorage.getItem("atlas.large") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const [drawer, setDrawer] = useState<"controls" | "inspector" | null>(null);
   // The tour shows itself once, on the first visit.
   const [touring, setTouring] = useState(() => {
     try {
@@ -676,7 +685,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
   else if (!isTop && !busy) stage = <div className="empty-hint">{t("worlds.reach", { level: t(`view.${level.id}`) })}</div>;
 
   return (
-    <div className={players ? "app players" : "app"}>
+    <div className={["app", players ? "players" : "", large ? "large" : "", drawer ? `show-${drawer}` : ""].filter(Boolean).join(" ")}>
       <header className="topbar">
         <div className="brand">
           <strong>{t("app.title")}</strong>
@@ -793,6 +802,23 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
             ))}
           </div>
         </details>
+        <button
+          type="button"
+          className="ghost"
+          aria-pressed={large}
+          title={t("app.large")}
+          aria-label={t("app.large")}
+          onClick={() => {
+            setLarge(!large);
+            try {
+              localStorage.setItem("atlas.large", large ? "0" : "1");
+            } catch {
+              // A private window: the size holds for this visit.
+            }
+          }}
+        >
+          A+
+        </button>
         <button type="button" className="ghost" onClick={() => setHelp(true)} title={`${t("help.title")} (?)`} aria-label={t("help.title")}>
           ?
         </button>
@@ -820,6 +846,14 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
       </nav>
       <aside className="controls">{level.controls}</aside>
       <main className="stage">
+        <div className="drawer-toggles">
+          <button type="button" aria-pressed={drawer === "controls"} onClick={() => setDrawer(drawer === "controls" ? null : "controls")}>
+            ☰ {t("app.settings")}
+          </button>
+          <button type="button" aria-pressed={drawer === "inspector"} onClick={() => setDrawer(drawer === "inspector" ? null : "inspector")}>
+            ⓘ {t("app.inspector")}
+          </button>
+        </div>
         {stage}
         {busy && progress ? (
           <div className="busy task" role="status">
