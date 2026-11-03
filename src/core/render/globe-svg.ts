@@ -148,7 +148,7 @@ export function renderGlobe(planet: Planet, options: GlobeOptions = {}): string 
       `<radialGradient id="globe-shade" cx="0.38" cy="0.32" r="0.75"><stop offset="0" stop-color="#fff" stop-opacity="0.18"/><stop offset="0.55" stop-color="#fff" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.45"/></radialGradient>` +
       `<pattern id="unknown" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><path d="M0,0V10" stroke="${theme.ink}" stroke-width="0.6" opacity="0.18"/></pattern></defs>`,
   );
-  out.push(`<rect width="${GLOBE_SIZE}" height="${GLOBE_SIZE}" fill="${themeId === "night" ? "#05070d" : "#0e1420"}"/>`);
+  out.push(`<rect width="${GLOBE_SIZE}" height="${GLOBE_SIZE}" fill="${themeId === "night" || themeId === "hud" ? "#05070d" : "#0e1420"}"/>`);
   out.push(`<circle cx="${C}" cy="${C}" r="${R + 10}" fill="none" stroke="#7fb4ff" stroke-width="14" opacity="0.12"/>`);
   out.push(`<g clip-path="url(#globe-clip)"><circle cx="${C}" cy="${C}" r="${R}" fill="${theme.ocean[0]}"/><circle cx="${C}" cy="${C}" r="${R}" fill="url(#unknown)"/>`);
   const edge: Point[] = [...dense([0, 0], [W, 0], 60), ...dense([W, 0], [W, H], 40), ...dense([W, H], [0, H], 60), ...dense([0, H], [0, 0], 40)];

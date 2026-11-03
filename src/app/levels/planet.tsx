@@ -1,6 +1,6 @@
 // The planet level: world settings, the world map and its inspector.
 import { useMemo, useRef, useState } from "react";
-import { createRng, defaultLayers, editPlanet, emptyEdits, generatePlanet, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type ThemeId } from "../../core/index";
+import { createRng, defaultLayers, editPlanet, eraTheme, emptyEdits, generatePlanet, GLOBE_SIZE, globePick, LAYERS, name, planetParams, planetToJson, renamePlanet, renderGlobe, renderPlanet, TEMPLATES, THEMES, type LayerId, type Planet, type PlanetEdits, type PlanetParams, type ThemeId } from "../../core/index";
 import { Inspector, type Selection, type Tab } from "../Inspector";
 import { SettingPanel } from "../SettingPanel";
 import { WorldEditor, type EditTool } from "../WorldEditor";
@@ -197,7 +197,17 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
             </label>
           </>
         ) : null}
-        <SettingPanel t={t} value={params.setting} onApply={(setting) => load({ setting })} />
+        <SettingPanel
+          t={t}
+          value={params.setting}
+          onApply={(setting) => {
+            // A new age brings the style that suits it; the GM can still pick another.
+            const next = eraTheme(setting);
+            setTheme(next);
+            setLayers(defaultLayers(next));
+            load({ setting });
+          }}
+        />
         {planet && !globe ? (
           <WorldEditor
             t={t}

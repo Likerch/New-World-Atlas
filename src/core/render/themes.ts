@@ -1,8 +1,11 @@
-// Map styles. A theme only decides how data looks; switching it never changes the world.
+// Map styles. A theme only decides how data looks; switching it never changes the world. Each age has a style that
+// suits it: a parchment for the ancients, a road atlas for our day, a hologram for the far future, a dusty map after
+// the fall.
+import { ageOf, type Setting } from "../setting";
 
-export type ThemeId = "atlas" | "parchment" | "political" | "relief" | "night" | "nautical";
+export type ThemeId = "atlas" | "parchment" | "political" | "relief" | "night" | "nautical" | "modern" | "hud" | "wasteland";
 
-export const THEMES: ThemeId[] = ["atlas", "parchment", "political", "relief", "night", "nautical"];
+export const THEMES: ThemeId[] = ["atlas", "parchment", "political", "relief", "night", "nautical", "modern", "hud", "wasteland"];
 
 export interface Theme {
   /** Ocean shades from the deep sea to the shallows. */
@@ -39,6 +42,8 @@ export interface Theme {
 
 const BIOMES_ATLAS = ["#3e6e9e", "#f0dc9c", "#cfc6a2", "#d8cd85", "#c3d38d", "#a6c867", "#7db464", "#5fa451", "#4c9168", "#6c8a5e", "#bab59c", "#f2f6f7", "#8daa86"];
 const BIOMES_SEPIA = ["#c9b991", "#ead7a6", "#dccfa8", "#e2d39e", "#d9d3a2", "#cfc893", "#c2bd86", "#b8b47c", "#b0ad80", "#b9b190", "#d6cdb0", "#f1ebdc", "#c4bf98"];
+const BIOMES_MODERN = ["#aad3df", "#f5e9c6", "#ece7da", "#efe6c4", "#eef0d6", "#d4e8c2", "#c8e2b6", "#b9dba8", "#bcdcb9", "#cfe0c4", "#ece9df", "#ffffff", "#d3e6d2"];
+const BIOMES_WASTE = ["#5f6f6b", "#d9c491", "#c9b993", "#cdb782", "#c6b98a", "#b8ad7d", "#aaa274", "#9e9a6c", "#a19d78", "#a8a084", "#c4b9a0", "#e4ddcc", "#a5a07c"];
 const BIOMES_NIGHT = ["#0e1a30", "#2a2a24", "#24272a", "#262b22", "#1f2a24", "#1b2a22", "#17281f", "#13261d", "#132521", "#18221f", "#22252a", "#2c3440", "#152420"];
 
 export const THEME: Record<ThemeId, Theme> = {
@@ -198,7 +203,91 @@ export const THEME: Record<ThemeId, Theme> = {
     grid: "rgba(56,225,255,0.10)",
     paper: false,
   },
+  modern: {
+    ocean: ["#9ccbe4", "#a3d0e7", "#aad3df", "#b3d9e8", "#bfe0ee"],
+    land: "#f2efe9",
+    biomes: BIOMES_MODERN,
+    heights: null,
+    lake: "#aad3df",
+    river: "#7fb4d6",
+    coast: "#7aa6c2",
+    coastWidth: 0.8,
+    stateFill: 0.18,
+    border: "#8a7fa8",
+    provinceBorder: "#b8b0cc",
+    road: "#c98a3a",
+    sea: "#5d8fb3",
+    ink: "#5e5e5e",
+    iconFill: "#ffffff",
+    tree: "#b9dba8",
+    burg: "#ffffff",
+    burgStroke: "#3a3a3a",
+    label: "#262626",
+    halo: "#ffffff",
+    waterLabel: "#4a7ea8",
+    font: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+    grid: "rgba(90,120,150,0.18)",
+    paper: false,
+  },
+  hud: {
+    ocean: ["#020a12", "#031019", "#041621", "#061c2a", "#082334"],
+    land: "#06202b",
+    biomes: null,
+    heights: ["#06202b", "#072631", "#082c38", "#0a333f", "#0c3a47", "#0e414f", "#104858", "#135061", "#16586b", "#1a6176"],
+    lake: "#041621",
+    river: "#2bb7d9",
+    coast: "#4de1ff",
+    coastWidth: 1,
+    stateFill: 0.12,
+    border: "#7cf6ff",
+    provinceBorder: "#2a8fa8",
+    road: "#4de1ff",
+    sea: "#2a8fa8",
+    ink: "#4de1ff",
+    iconFill: "#06202b",
+    tree: "#0f3a3a",
+    burg: "#bff7ff",
+    burgStroke: "#020a12",
+    label: "#bff7ff",
+    halo: "#020a12",
+    waterLabel: "#2a8fa8",
+    font: "'Consolas', 'Cascadia Mono', 'Courier New', monospace",
+    grid: "rgba(77,225,255,0.16)",
+    paper: false,
+  },
+  wasteland: {
+    ocean: ["#4a5856", "#53625f", "#5c6b67", "#677670", "#73817a"],
+    land: "#cbb894",
+    biomes: BIOMES_WASTE,
+    heights: null,
+    lake: "#6f7d72",
+    river: "#5d6f6a",
+    coast: "#3a3226",
+    coastWidth: 1.2,
+    stateFill: 0.15,
+    border: "#7a2a1a",
+    provinceBorder: "#8a5a3a",
+    road: "#5a4a3a",
+    sea: "#2f3a38",
+    ink: "#4a3a2a",
+    iconFill: "#cbb894",
+    tree: "#8f8a62",
+    burg: "#e9dcc0",
+    burgStroke: "#2e261d",
+    label: "#2e261d",
+    halo: "#d9c9a6",
+    waterLabel: "#2f3a38",
+    font: "'Segoe UI', 'Helvetica Neue', Arial, sans-serif",
+    grid: "rgba(70,55,35,0.16)",
+    paper: true,
+  },
 };
+
+/** The style that suits a world's age. */
+export function eraTheme(setting: Setting): ThemeId {
+  const age = ageOf(setting);
+  return age === "stone" || age === "ancient" ? "parchment" : age === "modern" ? "modern" : age === "cyberpunk" ? "night" : age === "far-future" ? "hud" : age === "post-apocalypse" ? "wasteland" : "atlas";
+}
 
 export type LayerId =
   | "depth"
@@ -229,9 +318,9 @@ export const LAYERS: LayerId[] = ["depth", "biomes", "heights", "icons", "rivers
 export function defaultLayers(theme: ThemeId): Record<LayerId, boolean> {
   return {
     depth: true,
-    biomes: theme !== "political" && theme !== "relief" && theme !== "nautical",
-    heights: theme === "relief",
-    icons: theme !== "political" && theme !== "nautical",
+    biomes: theme !== "political" && theme !== "relief" && theme !== "nautical" && theme !== "hud",
+    heights: theme === "relief" || theme === "hud",
+    icons: theme !== "political" && theme !== "nautical" && theme !== "modern" && theme !== "hud",
     rivers: true,
     states: theme !== "relief" && theme !== "nautical",
     religions: false,
@@ -239,11 +328,11 @@ export function defaultLayers(theme: ThemeId): Record<LayerId, boolean> {
     borders: true,
     routes: true,
     burgs: true,
-    emblems: theme === "political",
+    emblems: theme === "political" || theme === "modern" || theme === "hud",
     labels: true,
     markers: theme !== "political",
     military: false,
-    grid: theme !== "political",
+    grid: theme !== "political" && theme !== "modern",
     temperature: false,
     precipitation: false,
     population: false,

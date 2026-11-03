@@ -499,7 +499,7 @@ export function renderPlanet(planet: Planet, options: RenderOptions = {}): strin
       const [px, py] = inside ? state.pole : [sx / count, sy / count];
       const bend = length * 0.1;
       arches.push(`<path id="sl-${state.id}" d="M${r1(px - (ux * length) / 2)},${r1(py - (uy * length) / 2)}Q${r1(px + uy * bend)},${r1(py - ux * bend)} ${r1(px + (ux * length) / 2)},${r1(py + (uy * length) / 2)}"/>`);
-      const color = themeId === "night" ? state.color : shade(state.color, -0.55);
+      const color = themeId === "night" || themeId === "hud" ? state.color : shade(state.color, -0.55);
       names.push(`<text font-size="${r1(size)}" letter-spacing="${r1(size * 0.22)}" fill="${color}" opacity="0.85" stroke="${theme.halo}" stroke-width="${r1(size * 0.14)}" stroke-opacity="0.6" paint-order="stroke" dy="${r1(size * 0.35)}"><textPath href="#sl-${state.id}" startOffset="50%">${label}</textPath></text>`);
     }
     out.push(`<defs>${arches.join("")}</defs><g text-anchor="middle" font-weight="600">${names.join("")}</g>`);
