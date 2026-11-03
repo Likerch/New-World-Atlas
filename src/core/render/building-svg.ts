@@ -172,6 +172,13 @@ export function renderBuilding(plan: BuildingPlan, options: BuildingRenderOption
   if (plan.yard) {
     const b = plan.yard.bounds;
     out.push(`<rect x="${n(b.x)}" y="${n(b.y)}" width="${n(b.w)}" height="${n(b.h)}" fill="${th.yard}" stroke="${th.dark}" stroke-width="2" stroke-dasharray="6 3"/>`);
+    // A gate in the fence before the front door, and the path up to it.
+    const entry = plan.floors.find((f) => f.level === 0)?.doors.find((door) => door.rooms[1] === -1 && Math.abs(door.at[1] - D) < 0.01);
+    if (entry) {
+      const gx = entry.at[0];
+      const fence = b.y + b.h;
+      out.push(`<rect x="${n(gx - 0.6)}" y="${n(D)}" width="${n(1.2)}" height="${n(fence - D)}" fill="${th.ground}"/><rect x="${n(gx - 0.9)}" y="${n(fence) - 3}" width="${n(1.8)}" height="6" fill="${th.yard}"/><rect x="${n(gx - 0.9) - 3}" y="${n(fence) - 4}" width="4" height="8" fill="${th.dark}"/><rect x="${n(gx + 0.9) - 1}" y="${n(fence) - 4}" width="4" height="8" fill="${th.dark}"/>`);
+    }
     for (const f of plan.yard.features) {
       const x = n(f.x),
         y = n(f.y),
@@ -197,7 +204,14 @@ export function renderBuilding(plan: BuildingPlan, options: BuildingRenderOption
   for (const room of floor.rooms.filter((r) => r.kind === "stairs")) {
     let steps = "";
     for (let y = room.y + 0.3; y < room.y + room.h - 0.2; y += 0.3) steps += `M${n(room.x + 0.2)},${n(y)}H${n(room.x + room.w - 0.2)}`;
-    out.push(`<path d="${steps}" stroke="${th.line}" stroke-width="0.8"/><path d="M${n(room.x + room.w / 2)},${n(room.y + room.h - 0.3)}V${n(room.y + 0.4)}" stroke="${th.line}" stroke-width="1.2" marker-end="none"/>`);
+    // The run of the flight, with a head where it leads: up to the floor above, down to the one below.
+    const cx = room.x + room.w / 2;
+    const top = room.y + 0.4;
+    const bottom = room.y + room.h - 0.3;
+    const head = (y: number, dir: number) => `M${n(cx - 0.35)},${n(y - dir * 0.45)}L${n(cx)},${n(y)}L${n(cx + 0.35)},${n(y - dir * 0.45)}`;
+    const above = plan.floors.some((f) => f.level > floor.level);
+    const below = plan.floors.some((f) => f.level < floor.level);
+    out.push(`<path d="${steps}" stroke="${th.line}" stroke-width="0.8"/><path d="M${n(cx)},${n(bottom)}V${n(top)}${above ? head(top, -1) : ""}${below ? head(bottom, 1) : ""}" stroke="${th.line}" stroke-width="1.2" fill="none"/>`);
   }
   for (const room of floor.rooms) for (const f of [...room.furniture].sort((a, b) => Number(b.kind === "carpet") - Number(a.kind === "carpet"))) out.push(piece(f, th));
   if (options.highlight !== null && options.highlight !== undefined) {
@@ -211,10 +225,14 @@ export function renderBuilding(plan: BuildingPlan, options: BuildingRenderOption
   for (const door of floor.doors) {
     const half = door.width / 2;
     const [cx, cy] = door.at;
-    const gap = door.horizontal ? `<rect x="${n(cx - half)}" y="${n(cy - 0.25)}" width="${n(door.width)}" height="${n(0.5)}" fill="${floorFill}"/>` : `<rect x="${n(cx - 0.25)}" y="${n(cy - half)}" width="${n(0.5)}" height="${n(door.width)}" fill="${floorFill}"/>`;
+    // A door swings into the room it opens to (an outer door, into the house); its gap shows that room's floor.
+    const into = floor.rooms.find((r) => r.id === (door.rooms[1] >= 0 ? door.rooms[1] : door.rooms[0]));
+    const fill = (into && th.rooms[into.kind]) || floorFill;
+    const s = into ? (door.horizontal ? Math.sign(into.y + into.h / 2 - cy) || -1 : Math.sign(into.x + into.w / 2 - cx) || 1) : -1;
+    const gap = door.horizontal ? `<rect x="${n(cx - half)}" y="${n(cy - 0.25)}" width="${n(door.width)}" height="${n(0.5)}" fill="${fill}"/>` : `<rect x="${n(cx - 0.25)}" y="${n(cy - half)}" width="${n(0.5)}" height="${n(door.width)}" fill="${fill}"/>`;
     const swing = door.horizontal
-      ? `<path d="M${n(cx - half)},${n(cy)}L${n(cx - half)},${n(cy - door.width)}A${n(door.width)},${n(door.width)} 0 0 1 ${n(cx + half)},${n(cy)}" fill="none" stroke="${th.line}" stroke-width="0.8"/>`
-      : `<path d="M${n(cx)},${n(cy - half)}L${n(cx + door.width)},${n(cy - half)}A${n(door.width)},${n(door.width)} 0 0 1 ${n(cx)},${n(cy + half)}" fill="none" stroke="${th.line}" stroke-width="0.8"/>`;
+      ? `<path d="M${n(cx - half)},${n(cy)}L${n(cx - half)},${n(cy + s * door.width)}A${n(door.width)},${n(door.width)} 0 0 ${s < 0 ? 1 : 0} ${n(cx + half)},${n(cy)}" fill="none" stroke="${th.line}" stroke-width="0.8"/>`
+      : `<path d="M${n(cx)},${n(cy - half)}L${n(cx + s * door.width)},${n(cy - half)}A${n(door.width)},${n(door.width)} 0 0 ${s > 0 ? 1 : 0} ${n(cx)},${n(cy + half)}" fill="none" stroke="${th.line}" stroke-width="0.8"/>`;
     out.push(gap + swing);
   }
 
@@ -255,11 +273,21 @@ export function renderRoom(room: RoomMap, options: { theme?: BuildingThemeId; gr
   const o = pad * P;
   const out: string[] = [];
   out.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" font-family="'Segoe UI', Arial, sans-serif">`);
-  out.push(`<defs><radialGradient id="light"><stop offset="0" stop-color="#ffd27a" stop-opacity="0.45"/><stop offset="1" stop-color="#ffd27a" stop-opacity="0"/></radialGradient></defs>`);
+  out.push(`<defs><marker id="stair-head" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse"><path d="M0,0L10,5L0,10Z" fill="${th.dark}"/></marker><radialGradient id="light"><stop offset="0" stop-color="#ffd27a" stop-opacity="0.45"/><stop offset="1" stop-color="#ffd27a" stop-opacity="0"/></radialGradient></defs>`);
   out.push(`<rect width="${W}" height="${H}" fill="${th.paper}"/><g transform="translate(${o},${o})">`);
   out.push(`<rect width="${room.w * P}" height="${room.h * P}" fill="${th.rooms[room.kind as RoomKind] ?? th.floor}"/>`);
   for (const [x, y, r] of room.lights) out.push(`<circle cx="${x * P}" cy="${y * P}" r="${r * P}" fill="url(#light)"/>`);
   for (const item of room.items.filter((i) => i.kind === "rug")) out.push(`<rect x="${(item.x - 1.4) * P}" y="${(item.y - 1) * P}" width="${2.8 * P}" height="${2 * P}" rx="6" fill="#b0463c" fill-opacity="0.3" stroke="#b0463c" stroke-dasharray="6 3"/>`);
+  // A stairwell up close: its treads across the long side, the run's arrow to where it leads.
+  if (room.kind === "stairs") {
+    const long = room.h >= room.w;
+    let treads = "";
+    for (let t = 0.3; t < (long ? room.h : room.w) - 0.1; t += 0.3) treads += long ? `M${0.15 * P},${t * P}H${(room.w - 0.15) * P}` : `M${t * P},${0.15 * P}V${(room.h - 0.15) * P}`;
+    out.push(`<path d="${treads}" stroke="${th.line}" stroke-width="1.4"/>`);
+    const go = (up: boolean) => (long ? `M${(room.w / 2) * P},${(up ? room.h - 0.4 : 0.4) * P}V${(up ? 0.5 : room.h - 0.5) * P}` : `M${(up ? 0.4 : room.w - 0.4) * P},${(room.h / 2) * P}H${(up ? room.w - 0.5 : 0.5) * P}`);
+    if (room.flights?.up) out.push(`<path d="${go(true)}" stroke="${th.dark}" stroke-width="3" marker-end="url(#stair-head)"/><text x="${(long ? room.w / 2 + 0.3 : room.w - 0.6) * P}" y="${(long ? 0.6 : room.h / 2 - 0.3) * P}" font-size="14" font-weight="700" fill="${th.dark}">▲</text>`);
+    if (room.flights?.down) out.push(`<text x="${(long ? room.w / 2 + 0.3 : 0.4) * P}" y="${(long ? room.h - 0.3 : room.h / 2 + 0.6) * P}" font-size="14" font-weight="700" fill="${th.dark}">▼</text>`);
+  }
   for (const f of [...room.furniture].sort((a, b) => Number(b.kind === "carpet") - Number(a.kind === "carpet"))) out.push(piece(f, th, P));
   if (!options.players) for (const c of room.cover) out.push(`<rect x="${c.x * P - 3}" y="${c.y * P - 3}" width="${c.w * P + 6}" height="${c.h * P + 6}" fill="none" stroke="#e0a400" stroke-width="2" ${c.full ? "" : `stroke-dasharray="6 4"`} opacity="0.8"/>`);
   for (const item of room.items) {
@@ -283,7 +311,8 @@ export function renderRoom(room: RoomMap, options: { theme?: BuildingThemeId; gr
     const cx = x * P,
       cy = y * P;
     if (exit.kind === "door") {
-      out.push(exit.horizontal ? `<rect x="${cx - half}" y="${cy - wall}" width="${half * 2}" height="${wall * 2}" fill="${th.floor}"/>` : `<rect x="${cx - wall}" y="${cy - half}" width="${wall * 2}" height="${half * 2}" fill="${th.floor}"/>`);
+      const floorColour = th.rooms[room.kind as RoomKind] ?? th.floor;
+      out.push(exit.horizontal ? `<rect x="${cx - half}" y="${cy - wall}" width="${half * 2}" height="${wall * 2}" fill="${floorColour}"/>` : `<rect x="${cx - wall}" y="${cy - half}" width="${wall * 2}" height="${half * 2}" fill="${floorColour}"/>`);
       out.push(exit.horizontal ? `<path d="M${cx - half},${cy}A${half * 2},${half * 2} 0 0 1 ${cx + half},${cy - half * 2}" fill="none" stroke="${th.line}" stroke-width="1.5"/>` : `<path d="M${cx},${cy - half}A${half * 2},${half * 2} 0 0 1 ${cx + half * 2},${cy + half}" fill="none" stroke="${th.line}" stroke-width="1.5"/>`);
     } else out.push(exit.horizontal ? `<rect x="${cx - half}" y="${cy - wall / 3}" width="${half * 2}" height="${(wall * 2) / 3}" fill="${th.window}"/>` : `<rect x="${cx - wall / 3}" y="${cy - half}" width="${(wall * 2) / 3}" height="${half * 2}" fill="${th.window}"/>`);
   }

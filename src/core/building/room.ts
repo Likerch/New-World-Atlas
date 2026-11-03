@@ -40,6 +40,8 @@ export interface RoomMap {
   cover: Cover[];
   exits: Exit[];
   lights: [number, number, number][];
+  /** For a stairwell: whether its flights lead up and down. */
+  flights?: { up: boolean; down: boolean };
 }
 
 const ON: Partial<Record<FurnitureKind, ItemKind[]>> = {
@@ -62,23 +64,43 @@ export function generateRoom(plan: BuildingPlan, floorIndex: number, roomId: num
   const room = floor.rooms.find((r) => r.id === roomId)!;
   const seed = `${plan.params.seed}/floor-${floor.level}/room-${roomId}`;
   const rng = createRng(seed);
-  const modern = plan.params.era === "modern" || plan.params.era === "cyberpunk" || plan.params.era === "industrial" || plan.params.era === "far-future";
+  const era = plan.params.era;
   const local = (x: number, y: number): Point => [x - room.x, y - room.y];
   const furniture = room.furniture.map((f) => ({ ...f, x: f.x - room.x, y: f.y - room.y }));
   const items: RoomItem[] = [];
-  const swap = (kind: ItemKind): ItemKind => (!modern ? kind : kind === "candle" ? "lamp" : kind === "letter" ? "datapad" : kind === "coins" ? "credstick" : kind === "book" ? "datapad" : kind);
+  // What lies about follows the age: no letters, keys or coins in a stone-age hut, lamps once there is gas or power,
+  // datapads and cred-sticks only when there are screens.
+  const screens = era === "modern" || era === "cyberpunk" || era === "far-future";
+  const swap = (kind: ItemKind): ItemKind | null =>
+    era === "stone"
+      ? ["letter", "papers", "book", "key", "candle", "datapad", "credstick"].includes(kind)
+        ? null
+        : kind === "coins"
+          ? "relic"
+          : kind === "mug" || kind === "plate" || kind === "bottle"
+            ? "jar"
+            : kind
+      : screens
+        ? kind === "candle" ? "lamp" : kind === "letter" || kind === "book" ? "datapad" : kind === "coins" ? "credstick" : kind
+        : era === "industrial" || era === "post-apocalypse"
+          ? kind === "candle" ? "lamp" : kind === "letter" && era === "post-apocalypse" ? "papers" : kind
+          : kind;
+  const put = (x: number, y: number, kind: ItemKind, hidden: boolean) => {
+    const now = swap(kind);
+    if (now) items.push({ x, y, kind: now, hidden });
+  };
   for (const f of furniture) {
     const options = ON[f.kind];
     if (!options) continue;
     for (let k = rng.int(1, f.kind === "shelf" || f.kind === "counter" ? 4 : 2); k > 0; k--) {
-      items.push({ x: f.x + rng.float(0.15, 0.85) * f.w, y: f.y + rng.float(0.15, 0.85) * f.h, kind: swap(rng.pick(options)), hidden: false });
+      put(f.x + rng.float(0.15, 0.85) * f.w, f.y + rng.float(0.15, 0.85) * f.h, rng.pick(options), false);
     }
   }
   // On the floor: a rug in living spaces, rubbish in stores and cells.
   if (["hall", "living-room", "bedroom", "study", "vip"].includes(room.kind) && rng.chance(0.6)) items.push({ x: room.w / 2, y: room.h / 2, kind: "rug", hidden: false });
   if (["storage", "cellar", "cell", "pantry"].includes(room.kind)) for (let k = rng.int(1, 4); k > 0; k--) items.push({ x: rng.float(0.4, room.w - 0.4), y: rng.float(0.4, room.h - 0.4), kind: room.kind === "cell" ? "bones" : "rubbish", hidden: false });
   // Hidden things: a loose board, a false bottom, something under the bed.
-  for (let k = rng.int(0, 2); k > 0; k--) items.push({ x: rng.float(0.5, room.w - 0.5), y: rng.float(0.5, room.h - 0.5), kind: swap(rng.pick<ItemKind>(["coins", "key", "letter", "weapon", "relic"])), hidden: true });
+  for (let k = rng.int(0, 2); k > 0; k--) put(rng.float(0.5, room.w - 0.5), rng.float(0.5, room.h - 0.5), rng.pick<ItemKind>(["coins", "key", "letter", "weapon", "relic"]), true);
 
   const cover: Cover[] = furniture.filter((f) => FULL.has(f.kind) || HALF.has(f.kind)).map((f) => ({ x: f.x, y: f.y, w: f.w, h: f.h, full: FULL.has(f.kind) }));
   const lights: [number, number, number][] = furniture.filter((f) => LIGHT.has(f.kind)).map((f) => [f.x + f.w / 2, f.y + f.h / 2, 4]);
@@ -93,5 +115,6 @@ export function generateRoom(plan: BuildingPlan, floorIndex: number, roomId: num
       return { at: local((win.a[0] + win.b[0]) / 2, (win.a[1] + win.b[1]) / 2), kind: "window", horizontal, width: Math.hypot(win.b[0] - win.a[0], win.b[1] - win.a[1]) };
     }),
   ];
-  return { seed, kind: room.kind, w: room.w, h: room.h, furniture, items, cover, exits, lights };
+  const flights = room.kind === "stairs" ? { up: floorIndex < plan.floors.length - 1, down: floorIndex > 0 } : undefined;
+  return { seed, kind: room.kind, w: room.w, h: room.h, furniture, items, cover, exits, lights, flights };
 }

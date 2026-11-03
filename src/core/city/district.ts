@@ -7,7 +7,7 @@ import { name } from "../language";
 import { area, centroid, ccw, clipConvex, insetConvex, longestEdge, segmentIntersection, splitConvex } from "../polygon";
 import { createRng } from "../random";
 import { lots, scatter } from "./buildings";
-import { organicEra, type Building, type City, type Street, type Ward } from "./model";
+import { organicEra, PROPS, type Building, type City, type Street, type Ward } from "./model";
 
 const FRAME_W = 1200;
 const FRAME_H = 900;
@@ -144,7 +144,11 @@ export function generateDistrict(city: City, wardId: number): City {
     .map((landmark) => {
       const at = T([landmark.x, landmark.y]);
       const block = blockWards.reduce((best, ward) => (Math.hypot(ward.center[0] - at[0], ward.center[1] - at[1]) < Math.hypot(best.center[0] - at[0], best.center[1] - at[1]) ? ward : best), blockWards[0] ?? focus);
-      return { ...landmark, x: at[0], y: at[1], ward: block.id };
+      // On the house it marks, not in the courtyard behind it.
+      const homes = buildings.filter((b) => b.ward === block.id && !PROPS.includes(b.kind) && b.kind !== "shed");
+      const away = (b: Building) => Math.hypot(centroid(b.polygon)[0] - at[0], centroid(b.polygon)[1] - at[1]);
+      const spot = homes.length ? centroid(homes.reduce((best, b) => (away(b) < away(best) ? b : best)).polygon) : at;
+      return { ...landmark, x: spot[0], y: spot[1], ward: block.id };
     });
   return {
     params: { ...city.params, seed, name: focus.name || city.name, width: FRAME_W, height: FRAME_H },

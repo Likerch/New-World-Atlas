@@ -1,6 +1,6 @@
 // The building level: floor plans, floor by floor, with the rooms' furnishings.
 import { useMemo, useRef, useState } from "react";
-import { BUILDING_THEMES, BUILDING_TYPES, ERA_BUILDINGS, buildingFromCity, buildingParams, ERAS, generateBuilding, generateRoom, PX, renderBuilding, renderRoom, ROOM_PX, type BuildingParams, type BuildingPlan, type BuildingThemeId, type City, buildingLegend } from "../../core/index";
+import { BUILDING_THEMES, BUILDING_TYPES, MAX_FLOORS, ERA_BUILDINGS, buildingFromCity, buildingParams, ERAS, generateBuilding, generateRoom, PX, renderBuilding, renderRoom, ROOM_PX, type BuildingParams, type BuildingPlan, type BuildingThemeId, type City, buildingLegend } from "../../core/index";
 import type { Level, LevelContext } from "./types";
 
 export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): Level & { openFromCity: (city: City, index: number) => void } {
@@ -144,7 +144,7 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null): 
         {(["width", "depth", "floors"] as const).map((key) => (
           <label key={key}>
             {t(`field.${key}`)}
-            <input type="number" min={key === "floors" ? 1 : 4} max={key === "floors" ? 6 : 60} value={input[key]} onChange={(event) => set(key, Number(event.target.value))} />
+            <input type="number" min={key === "floors" ? 1 : 4} max={key === "floors" ? MAX_FLOORS : 60} value={input[key]} onChange={(event) => set(key, Number(event.target.value))} />
           </label>
         ))}
         {(["cellar", "yard"] as const).map((key) => (

@@ -4,6 +4,7 @@ import type { HallPurpose, Tier, Tiers } from "../city/tiers";
 import { pathData, smooth } from "../geometry";
 import { toCyrillic } from "../language";
 import { renderCity, type CityRenderOptions } from "./city-svg";
+import { present, type LegendEntry, type LegendSection } from "./legend";
 
 const r1 = (value: number) => Math.round(value * 10) / 10;
 const ring = (points: [number, number][]) => `M${points.map(([x, y]) => `${r1(x)},${r1(y)}`).join("L")}Z`;
@@ -39,4 +40,20 @@ export function renderTier(city: City, tiers: Tiers, tier: Tier, options: CityRe
   out.push(`<text x="20" y="34" font-size="20" letter-spacing="3" fill="#d8c79a" font-weight="600">${text(city.name.toUpperCase())}</text>`);
   out.push(`</svg>`);
   return out.join("");
+}
+
+/** What a tier shows, for its legend: only what is on it. */
+export function tierLegend(tiers: Tiers, tier: Tier): LegendSection[] {
+  if (tier === "upper") {
+    const entries: LegendEntry[] = [{ key: "legend.roof", swatch: { fill: "#1c2236", stroke: "#38e1ff" } }];
+    if (tiers.upper.bridges.length) entries.push({ key: "legend.skybridge", swatch: { line: "#ff3d7f", width: 2.6 } });
+    if (tiers.upper.pads.length) entries.push({ key: "legend.pad", swatch: { glyph: "H", color: "#ffcc33", bg: "#0b0d14" } });
+    return [{ key: "tier.upper", entries }];
+  }
+  if (tier !== "under") return [];
+  const ways: LegendEntry[] = [{ key: "legend.tunnel", swatch: { line: "#4a4f5c", width: 5, over: "#2b2f38", overWidth: 3 } }];
+  if (tiers.under.sewer) ways.push({ key: "legend.sewer", swatch: { line: "#1f4a5c", width: 5 } });
+  if (tiers.under.shafts.length) ways.push({ key: "legend.shaft", swatch: { glyph: "#", color: "#c9a227", bg: "#0d0e12" } });
+  const halls = present(tiers.under.halls.map((hall) => hall.purpose)).map((purpose): LegendEntry => ({ key: `hall.${purpose}`, swatch: { glyph: HALL_GLYPH[purpose], color: "#c9a227", bg: "#22252d" } }));
+  return [{ key: "legend.ways", entries: ways }, ...(halls.length ? [{ key: "legend.halls", entries: halls }] : [])];
 }

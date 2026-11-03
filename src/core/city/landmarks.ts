@@ -26,10 +26,13 @@ export function placeLandmarks(params: CityParams, layout: Layout, buildings: Bu
     return pick;
   };
   const place = (kind: LandmarkKind, kinds: WardKind[], biggest = false, named = false, test?: (b: Building) => boolean) => {
-    const b = building(kinds, biggest, test);
+    // A wish (by a gate, by the river) that no building meets gives way rather than losing the place.
+    const b = building(kinds, biggest, test) ?? (test ? building(kinds, biggest) : null);
     if (b) add(kind, centroid(b.polygon), b.ward, named);
   };
-  const nearGate = (b: Building) => layout.walls[0]?.gates.some((gate) => Math.hypot(centroid(b.polygon)[0] - gate[0], centroid(b.polygon)[1] - gate[1]) < layout.radius * 0.35) ?? true;
+  // The town's gates, not the citadel's (which has none): a town walled only round its castle has taverns anywhere.
+  const townWall = layout.walls.find((wall) => !wall.citadel);
+  const nearGate = (b: Building) => townWall?.gates.some((gate) => Math.hypot(centroid(b.polygon)[0] - gate[0], centroid(b.polygon)[1] - gate[1]) < layout.radius * 0.35) ?? true;
   const byRiver = (b: Building) => !!layout.river && distanceToPolyline(centroid(b.polygon), layout.river.points) < layout.river.width * 2;
   const taverns = Math.max(1, Math.min(6, Math.round(1 + Math.sqrt(params.population))));
 

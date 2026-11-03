@@ -3,7 +3,8 @@
 import { PROPS, type City } from "../city/model";
 import type { Point } from "../geometry";
 import { pointInPolygon } from "../polygon";
-import { BUILDING_FLOORS, buildingParams, type BuildingParams, type BuildingType } from "./plan";
+import { BUILDING_FLOORS, MAX_FLOORS, buildingParams, type BuildingParams, type BuildingType } from "./plan";
+import { hashString } from "../random";
 
 /** Sides of the smallest rectangle around a convex outline (rotating each edge onto the x-axis). */
 export function footprint(polygon: Point[]): [number, number] {
@@ -65,6 +66,10 @@ const BY_LANDMARK: Record<string, BuildingType> = {
   "vault-door": "bunker",
   "radio-tower": "bunker",
   scrapyard: "warehouse",
+  lighthouse: "keep",
+  mill: "smithy",
+  stadium: "temple",
+  arena: "temple",
 };
 
 /** The building at a map point, if any (not trees, fields, graves or piers). */
@@ -78,7 +83,8 @@ export function buildingFromCity(city: City, index: number): BuildingParams {
   const landmark = city.landmarks.find((l) => l.ward === building.ward && pointInPolygon([l.x, l.y], building.polygon));
   const modern = ["modern", "cyberpunk", "industrial", "far-future", "post-apocalypse"].includes(city.params.era);
   const era = city.params.era;
-  const pick = (k: number) => (index * 2654435761) % k;
+  // A stable draw per building (a product taken modulo k only cycled with the index: every fifth house a smithy).
+  const pick = (k: number, salt = "") => hashString(`${city.params.seed}/building-${index}${salt}`) % k;
   let type: BuildingType = "house";
   if (building.kind === "hut" || building.kind === "longhouse") type = building.kind;
   else if (landmark && BY_LANDMARK[landmark.kind]) type = BY_LANDMARK[landmark.kind];
@@ -104,7 +110,7 @@ export function buildingFromCity(city: City, index: number): BuildingParams {
   else if (ward) {
     if (["patriciate", "rich-residential", "administration"].includes(ward.kind)) type = "manor";
     else if (["merchants", "commercial"].includes(ward.kind)) type = "shop";
-    else if (ward.kind === "craftsmen") type = (index * 2654435761) % 5 === 0 ? "smithy" : (index % 3 === 0 ? "shop" : "house");
+    else if (ward.kind === "craftsmen") type = pick(5, "craft") === 0 ? "smithy" : pick(3, "shop") === 0 ? "shop" : "house";
     else if (ward.kind === "residential" || ward.kind === "megablock") type = modern && building.floors >= 3 ? "apartment" : "house";
     else if (ward.kind === "harbour" || ward.kind === "port") type = "warehouse";
     else if (ward.kind === "settlement") type = "house";
@@ -119,7 +125,8 @@ export function buildingFromCity(city: City, index: number): BuildingParams {
     name: landmark?.name ?? "",
     width,
     depth,
-    floors: Math.max(BUILDING_FLOORS[type][0], Math.min(6, building.floors || 1)),
+    // One-storey kinds (a temple's nave, a hut) stay one storey however tall the city draws them; others keep their height.
+    floors: BUILDING_FLOORS[type][1] === 1 ? 1 : Math.max(BUILDING_FLOORS[type][0], Math.min(MAX_FLOORS, building.floors || 1)),
     yard: ["house", "manor", "tavern", "smithy"].includes(type) && !modern,
   });
 }

@@ -1,6 +1,6 @@
 // The city level: a city of its own or one opened from a planet town.
 import { useMemo, useRef, useState } from "react";
-import { buildingAt, cityTiers, generateDistrict, renderTier, type Tier, cityFromBurg, PROPS, cityParams, CITY_LAYERS, createLanguage, createRng, defaultCityTheme, generateCity, pointInPolygon, renameCity, renderCity, type City, type CityLayerId, type CityParams, type CityThemeId, type Language, type Planet, cityLegend } from "../../core/index";
+import { buildingAt, cityTiers, generateDistrict, renderTier, tierLegend, type Tier, cityFromBurg, PROPS, cityParams, CITY_LAYERS, createLanguage, createRng, defaultCityTheme, generateCity, pointInPolygon, renameCity, renderCity, type City, type CityLayerId, type CityParams, type CityThemeId, type Language, type Planet, cityLegend } from "../../core/index";
 import { CityControls, CityInspector, type CitySelection } from "../CityPanels";
 import type { Level, LevelContext } from "./types";
 
@@ -29,7 +29,10 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
       const started = performance.now();
       const made = generateCity(next, tongue ?? createLanguage(createRng(next.seed).fork("language")));
       setTime(Math.round(performance.now() - started));
+      // A city of another age is drawn in that age's style; a new city starts on its streets.
+      if (raw && made.params.era !== raw.params.era) setTheme(defaultCityTheme(made.params.era));
       setCity(made);
+      setTier("street");
       setParents([]);
       setInput({ ...made.params, name: next.name });
       setSelection(null);
@@ -37,9 +40,11 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
   };
   const set = <K extends keyof CityParams>(key: K, value: CityParams[K]) => setInput((current) => ({ ...current, [key]: value }));
   const tiers = useMemo(() => (city && tier !== "street" ? cityTiers(city) : null), [city, tier]);
-  const legend = useMemo(() => (city ? cityLegend(city, { theme, layers }) : undefined), [city, theme, layers]);
+  const legend = useMemo(() => (city ? (tiers && tier !== "street" ? tierLegend(tiers, tier) : cityLegend(city, { theme, layers })) : undefined), [city, tiers, tier, theme, layers]);
   const svg = useMemo(() => (city ? (tiers ? renderTier(city, tiers, tier, { theme, layers, script: ctx.script }) : renderCity(city, { theme, layers, script: ctx.script, highlight: selection?.kind === "ward" ? selection.id : null })) : ""), [city, tiers, tier, theme, layers, ctx.script, selection]);
   const highTier = city ? city.params.era === "modern" || city.params.era === "cyberpunk" || city.params.era === "far-future" : false;
+  // A camp has no levels above or below its huts.
+  const tierTabs: Tier[] = !city || city.params.era === "stone" ? [] : (["upper", "street", "under"] as Tier[]).filter((item) => item !== "upper" || highTier);
 
   return {
     id: "city",
@@ -116,11 +121,9 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
             ← {t("action.back")}
           </button>
         ) : null}
-        {city ? (
+        {tierTabs.length ? (
           <div className="floor-tabs">
-            {(["upper", "street", "under"] as Tier[])
-              .filter((item) => item !== "upper" || highTier)
-              .map((item) => (
+            {tierTabs.map((item) => (
                 <button key={item} type="button" aria-pressed={tier === item} onClick={() => setTier(item)}>
                   {t(`tier.${item}${item === "under" && !highTier ? ".old" : ""}`)}
                 </button>
@@ -137,7 +140,6 @@ export function useCityLevel(ctx: LevelContext, initialSeed: string | undefined,
           layers={layers}
           setLayers={setLayers}
           t={t}
-          ru={ctx.locale === "ru"}
         />
       </>
     ),

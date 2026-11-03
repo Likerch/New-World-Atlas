@@ -1,6 +1,6 @@
 // Building-level regressions: run with `npm test`.
 import assert from "node:assert/strict";
-import { BUILDING_THEMES, BUILDING_TYPES, buildingAt, buildingFromCity, centroid, ERA_BUILDINGS, generateBuilding, generateCity, generateRoom, pointInPolygon, renderBuilding, renderRoom } from "../src/core/index";
+import { PROPS, tierLegend, cityTiers, generateDistrict, BUILDING_THEMES, BUILDING_TYPES, buildingAt, buildingFromCity, centroid, ERA_BUILDINGS, generateBuilding, generateCity, generateRoom, pointInPolygon, renderBuilding, renderRoom } from "../src/core/index";
 
 let passed = 0;
 function test(title: string, run: () => void) {
@@ -83,6 +83,71 @@ test("a room opens as a scene: things inside it, doors on its walls, cover from 
   assert.match(renderRoom(hidden), /#c0392b/u, "the GM sees the hidden find");
   assert.doesNotMatch(renderRoom(hidden, { players: true }), /#c0392b/u, "players do not");
   assert.equal(JSON.stringify(generateRoom(plan, floor, hall.id)), JSON.stringify(room));
+});
+
+test("a tall tower keeps all its floors; a nave or a hut never stacks itself", () => {
+  const office = generateBuilding({ seed: "tall", type: "office", floors: 14, cellar: false });
+  assert.equal(office.floors.length, 14);
+  for (const type of ["temple", "hut", "domus"] as const) {
+    const plan = generateBuilding({ seed: "one", type, floors: 4, cellar: false });
+    assert.equal(plan.floors.length, 1, `${type} stacked itself`);
+    assert.equal(plan.params.floors, 1);
+  }
+  const city = generateCity({ seed: "stacks", era: "medieval", population: 40, walls: true, citadel: true });
+  const temple = city.landmarks.find((l) => l.kind === "temple");
+  const index = temple ? city.buildings.findIndex((b) => !PROPS.includes(b.kind) && pointInPolygon([temple.x, temple.y], b.polygon)) : -1;
+  if (index >= 0) assert.equal(generateBuilding(buildingFromCity(city, index)).floors.filter((f) => f.level >= 0).length, 1, "a temple from the city has one nave");
+});
+
+test("the front door opens into a room for guests, and a house with a yard has a back door", () => {
+  let stores = 0;
+  let backs = 0;
+  let houses = 0;
+  for (let k = 0; k < 40; k++) {
+    for (const type of ["manor", "lab", "tavern", "house"] as const) {
+      const plan = generateBuilding({ seed: `door-${k}`, type, era: type === "lab" ? "far-future" : "medieval" });
+      const ground = plan.floors.find((f) => f.level === 0)!;
+      const front = ground.doors.find((d) => d.rooms[1] === -1 && Math.abs(d.at[1] - plan.params.depth) < 0.01)!;
+      const room = ground.rooms.find((r) => r.id === front.rooms[0])!;
+      if (["storage", "pantry"].includes(room.kind) && ground.rooms.some((r) => Math.abs(r.y + r.h - plan.params.depth) < 0.01 && !["storage", "pantry", "stairs"].includes(r.kind))) stores++;
+      if (type === "house" && plan.params.yard) {
+        houses++;
+        if (ground.doors.some((d) => d.rooms[1] === -1 && d.at[1] < 0.01)) backs++;
+      }
+    }
+  }
+  assert.equal(stores, 0, "a guest walked into a store");
+  assert.ok(backs >= houses * 0.8, `${backs} of ${houses} houses have a back door`);
+});
+
+test("what lies about follows the age, and stairs show where they lead", () => {
+  for (let k = 0; k < 30; k++) {
+    const hut = generateBuilding({ seed: `hut-${k}`, type: "hut", era: "stone" });
+    for (const room of hut.floors[0].rooms) {
+      const items = generateRoom(hut, 0, room.id).items.map((item) => item.kind);
+      for (const kind of ["letter", "key", "coins", "papers", "book", "datapad", "credstick"]) assert.ok(!items.includes(kind as never), `a ${kind} in a stone-age hut`);
+    }
+  }
+  const tavern = generateBuilding({ seed: "flights", type: "tavern", floors: 2, cellar: false });
+  const stairs = tavern.floors[0].rooms.find((r) => r.kind === "stairs")!;
+  const close = generateRoom(tavern, 0, stairs.id);
+  assert.deepEqual(close.flights, { up: true, down: false });
+  assert.match(renderRoom(close), /▲/u);
+});
+
+test("a camp marks its places on its huts; tiers have their own legend", () => {
+  const city = generateCity({ seed: "close", era: "medieval", population: 30, walls: true, citadel: true });
+  for (const ward of city.wards.filter((w) => w.urban && city.landmarks.some((l) => l.ward === w.id)).slice(0, 4)) {
+    const close = generateDistrict(city, ward.id);
+    for (const landmark of close.landmarks) {
+      const homes = close.buildings.filter((b) => b.ward === landmark.ward && !PROPS.includes(b.kind) && b.kind !== "shed");
+      if (homes.length) assert.ok(homes.some((b) => pointInPolygon([landmark.x, landmark.y], b.polygon) || Math.hypot(centroid(b.polygon)[0] - landmark.x, centroid(b.polygon)[1] - landmark.y) < 0.01), `${landmark.kind} stands in a yard`);
+    }
+  }
+  const neon = generateCity({ seed: "neon", era: "cyberpunk", population: 900 });
+  const tiers = cityTiers(neon);
+  assert.ok(tierLegend(tiers, "under").some((section) => section.key === "legend.halls"));
+  assert.equal(tierLegend(tiers, "upper")[0].entries[0].key, "legend.roof");
 });
 
 console.log(`building: ${passed} regressions passed`);

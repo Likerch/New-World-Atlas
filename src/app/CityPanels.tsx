@@ -1,6 +1,6 @@
 // City mode: its settings on the left, its quarters and places on the right.
 import { useState } from "react";
-import { area, pointInPolygon, CITY_LAYERS, CITY_THEMES, ERAS, type City, type CityLayerId, type CityParams, type CityThemeId } from "../core/index";
+import { area, pointInPolygon, PROPS, CITY_LAYERS, CITY_THEMES, ERAS, type City, type CityLayerId, type CityParams, type CityThemeId } from "../core/index";
 import type { T } from "./i18n";
 
 const DIRECTIONS: [string, number][] = [
@@ -13,7 +13,8 @@ const DIRECTIONS: [string, number][] = [
   ["N", -Math.PI / 2],
   ["NE", -Math.PI / 4],
 ];
-const COMPASS_RU: Record<string, string> = { E: "восток", SE: "юго-восток", S: "юг", SW: "юго-запад", W: "запад", NW: "северо-запад", N: "север", NE: "северо-восток" };
+/** Places in the open: a square's well, a gallows, a camp's fire. They have no plan to open. */
+const OPEN_AIR = new Set(["market-well", "gallows", "fire-pit", "sacred-stone", "animal-pen", "undercity", "vault-door", "launch-pad", "av-port"]);
 const nearestDirection = (angle: number) => DIRECTIONS.reduce((best, item) => (Math.abs(Math.atan2(Math.sin(item[1] - angle), Math.cos(item[1] - angle))) < Math.abs(Math.atan2(Math.sin(best[1] - angle), Math.cos(best[1] - angle))) ? item : best))[1];
 
 interface PanelProps {
@@ -24,10 +25,9 @@ interface PanelProps {
   layers: Record<CityLayerId, boolean>;
   setLayers: (layers: Record<CityLayerId, boolean>) => void;
   t: T;
-  ru: boolean;
 }
 
-export function CityControls({ params, set, theme, setTheme, layers, setLayers, t, ru }: PanelProps) {
+export function CityControls({ params, set, theme, setTheme, layers, setLayers, t }: PanelProps) {
   const direction = (key: "coast" | "river") => (
     <label className="check">
       <input type="checkbox" checked={params[key] !== null} onChange={(event) => set(key, event.target.checked ? Math.PI / 2 : null)} />
@@ -36,7 +36,7 @@ export function CityControls({ params, set, theme, setTheme, layers, setLayers, 
         <select value={nearestDirection(params[key]!)} onChange={(event) => set(key, Number(event.target.value))}>
           {DIRECTIONS.map(([label, angle]) => (
             <option key={label} value={angle}>
-              {ru ? COMPASS_RU[label] : label}
+              {t(`compass.${label}`)}
             </option>
           ))}
         </select>
@@ -62,7 +62,7 @@ export function CityControls({ params, set, theme, setTheme, layers, setLayers, 
       </label>
       <label>
         {t("field.population")}
-        <input type="number" min={0.5} max={20000} step={0.5} value={params.population} onChange={(event) => set("population", Math.max(0.5, Number(event.target.value)))} />
+        <input type="number" min={0.01} max={20000} step="any" value={params.population} onChange={(event) => set("population", Math.max(0.01, Number(event.target.value) || 0.01))} />
       </label>
       {direction("coast")}
       {direction("river")}
@@ -197,7 +197,7 @@ export function CityInspector({ city, t, nm, selection, onSelect, onOpenBuilding
             </button>
           ) : null}
           {(() => {
-            const index = city.buildings.findIndex((b) => b.ward === landmark.ward && pointInPolygon([landmark.x, landmark.y], b.polygon));
+            const index = OPEN_AIR.has(landmark.kind) ? -1 : city.buildings.findIndex((b) => b.ward === landmark.ward && !PROPS.includes(b.kind) && pointInPolygon([landmark.x, landmark.y], b.polygon));
             return index >= 0 ? (
               <button type="button" className="primary wide" onClick={() => onOpenBuilding(index)}>
                 🏠 {t("action.openBuilding")}

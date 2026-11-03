@@ -125,4 +125,14 @@ test("a camp, a polis, a city of the far future and a dead city each look their 
   assert.equal(cityFromBurg(world, capital.id).params.population, Math.round(capital.population * 100) / 100, "a town sized by its age keeps its people");
 });
 
+test("a town walled only round its castle keeps its taverns; a craftsmen's quarter is no pattern of numbers", () => {
+  const town = generateCity({ seed: "castle-only", era: "medieval", population: 30, walls: false, citadel: true });
+  const expected = Math.max(1, Math.min(6, Math.round(1 + Math.sqrt(30))));
+  assert.ok(town.landmarks.filter((l) => l.kind === "tavern").length >= expected - 1, "taverns were lost to the citadel's gateless ring");
+  const city = generateCity({ seed: "crafts", era: "medieval", population: 60, walls: true, citadel: true });
+  const crafts = new Set(city.wards.filter((w) => w.kind === "craftsmen").map((w) => w.id));
+  const smithies = city.buildings.map((b, index) => [b, index] as const).filter(([b]) => crafts.has(b.ward) && b.kind === "house").filter(([, index]) => buildingFromCity(city, index).type === "smithy").map(([, index]) => index % 5);
+  if (smithies.length > 3) assert.ok(new Set(smithies).size > 1, "every fifth house is a smithy");
+});
+
 console.log(`city: ${passed} regressions passed`);

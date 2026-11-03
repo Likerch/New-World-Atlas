@@ -264,6 +264,9 @@ const SIZES: Record<BuildingType, [number, number, number, number]> = {
   bunker: [14, 24, 10, 16],
 };
 
+/** The most floors a plan draws: a tower of the far future. */
+export const MAX_FLOORS = 60;
+
 /** Floor counts each type usually has. */
 export const BUILDING_FLOORS: Record<BuildingType, [number, number]> = {
   house: [1, 2],
@@ -407,6 +410,8 @@ function slice(rect: Rect, rooms: [RoomKind, number][], out: { rect: Rect; kind:
   slice(b, rooms.slice(k), out, along);
 }
 
+/** Rooms a guest should not walk into from the street. */
+const BACK_ROOMS = new Set<RoomKind>(["storage", "pantry", "cellar", "stairs"]);
 const CIRCULATION = new Set<RoomKind>(["corridor", "hall", "common-room", "lobby", "shop-floor", "nave", "stairs", "dance-floor", "living-room", "waiting-room", "workshop", "storage", "cellar", "throne-room", "atrium", "garden", "ticket-hall", "platform", "machine-hall", "canteen", "gym", "changing-room", "airlock", "grow-room"]);
 
 /** The wall two rooms share, if they touch along at least a door's width. */
@@ -710,7 +715,9 @@ export function generateBuilding(input: Partial<BuildingParams> = {}): BuildingP
   // The long side runs along x; the street (and the front door) is on the bottom side, y = depth.
   const W = Math.max(params.width, params.depth, 5);
   const D = Math.max(4, Math.min(params.width, params.depth));
-  const levels = [...(params.cellar ? [-1] : []), ...Array.from({ length: Math.max(1, Math.min(params.floors, 6)) }, (_, k) => k)];
+  // A one-storey kind (a nave, a hut) never stacks itself; anything else rises as high as asked.
+  const storeys = BUILDING_FLOORS[params.type][1] === 1 ? 1 : Math.max(1, Math.min(params.floors, MAX_FLOORS));
+  const levels = [...(params.cellar ? [-1] : []), ...Array.from({ length: storeys }, (_, k) => k)];
   const multi = levels.length > 1;
   const stairsW = multi ? Math.min(2.8, W * 0.25) : 0;
   const stairsH = Math.min(4.2, D * 0.5);
@@ -764,10 +771,15 @@ export function generateBuilding(input: Partial<BuildingParams> = {}): BuildingP
       if (other) addDoor(room, other);
     }
     if (level === 0) {
-      const front = rooms.filter((room) => Math.abs(room.y + room.h - D) < 0.01 && room.kind !== "stairs").sort((a, b) => Number(CIRCULATION.has(b.kind)) - Number(CIRCULATION.has(a.kind)) || b.w - a.w)[0];
+      // The front door opens into a room for guests (a hall, a shop floor), not a store under the stairs.
+      const welcome = (room: Room) => (BACK_ROOMS.has(room.kind) ? 0 : CIRCULATION.has(room.kind) ? 2 : 1);
+      const front = rooms.filter((room) => Math.abs(room.y + room.h - D) < 0.01 && room.kind !== "stairs").sort((a, b) => welcome(b) - welcome(a) || b.w - a.w)[0];
       if (front) doors.push({ at: [front.x + front.w / 2, D], horizontal: true, width: ["temple", "keep", "warehouse", "factory", "station", "store", "bathhouse", "hydroponics", "bunker"].includes(params.type) ? 2.4 : 1.2, rooms: [front.id, -1] });
-      const kitchen = rooms.find((room) => room.kind === "kitchen" && room.y < 0.01);
-      if (kitchen) doors.push({ at: [kitchen.x + kitchen.w / 2, 0], horizontal: true, width: 0.9, rooms: [kitchen.id, -1] });
+      // A back door to the yard (or a service door of a big house): from the kitchen, else a workshop or a store.
+      const service = (room: Room) => (room.kind === "kitchen" ? 3 : room.kind === "workshop" ? 2 : ["storage", "pantry", "hall", "common-room", "corridor"].includes(room.kind) ? 1 : 0);
+      const wanted = params.type !== "bunker" && (params.yard || W * D >= 150);
+      const back = rooms.filter((room) => room.y < 0.01 && room.kind !== "stairs" && (wanted ? service(room) > 0 : room.kind === "kitchen")).sort((a, b) => service(b) - service(a) || b.w - a.w)[0];
+      if (back) doors.push({ at: [back.x + back.w / 2, 0], horizontal: true, width: 0.9, rooms: [back.id, -1] });
     }
 
     // Windows along the outer walls, kept clear of the doors.
@@ -798,6 +810,7 @@ export function generateBuilding(input: Partial<BuildingParams> = {}): BuildingP
  });
     floors.push({ level, rooms, doors, windows });
   }
+  params.floors = storeys;
 
   // The yard: a fenced plot round the house with what a household keeps outside.
   let yard: BuildingPlan["yard"] = null;
