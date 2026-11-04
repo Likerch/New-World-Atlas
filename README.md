@@ -6,8 +6,8 @@
 
 ## Установка на Windows
 
-Готовая программа лежит на странице [последнего релиза](https://github.com/Likerch/New-World-Atlas/releases/latest):
-скачайте `New World Atlas_<версия>_x64-setup.exe` (меньше 2 МБ) и запустите его.
+Скачайте установщик [New-World-Atlas-setup.exe](https://github.com/Likerch/New-World-Atlas/raw/main/release/New-World-Atlas-setup.exe)
+(меньше 2 МБ, лежит в репозитории в `release/`) и запустите его.
 
 1. Windows может показать «Система Windows защитила ваш компьютер»: установщик не подписан. Нажмите «Подробнее» →
    «Выполнить в любом случае».
@@ -43,8 +43,9 @@ npm run desktop        # окно программы поверх dev-серве
 npm run desktop:build  # установщик в src-tauri/target/release/bundle/nsis/
 ```
 
-Чтобы выпустить версию: поднимите `version` в `package.json` (программа берёт её оттуда), соберите установщик и
-приложите его к новому релизу `vX.Y.Z` на GitHub.
+Чтобы выпустить версию: поднимите `version` в `package.json` (программа берёт её оттуда), соберите установщик,
+скопируйте его поверх `release/New-World-Atlas-setup.exe` и закоммитьте. Имя файла постоянное, поэтому ссылка выше
+всегда ведёт на последнюю версию.
 
 ## Что готово: уровень «планета» (этап 1)
 
