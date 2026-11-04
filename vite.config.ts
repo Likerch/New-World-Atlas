@@ -14,5 +14,6 @@ function precache(): Plugin {
 
 export default defineConfig({
   plugins: [react(), precache()],
-  server: { port: 5173 },
+  // The Windows app's Rust build (src-tauri/target) is not the page's: watching it crashes on locked files.
+  server: { port: 5173, watch: { ignored: ["**/src-tauri/**"] } },
 });

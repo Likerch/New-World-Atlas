@@ -1,8 +1,7 @@
 // The atlas as a book to print: a cover, the contents, every map open in the world as a full page, the handbook's
-// pages and an index of named places. It opens in a window of its own to print (or is saved as a page, where windows
-// are blocked).
+// pages and an index of named places, printed from a hidden frame (the print window can also save it as a PDF).
 import { markdown, titleOf, type WorldDoc } from "../core/index";
-import { download } from "./Handbook";
+import { printPage } from "./desktop";
 import type { T } from "./i18n";
 
 const escape = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;").replace(/"/gu, "&quot;");
@@ -35,12 +34,5 @@ ${maps.map((map, k) => `<section class="map"><h2>${escape(map.title)}</h2>${scop
 ${pages.length ? `<section><h2>${escape(t("book.title.book"))}</h2>${pages.map((page) => `<div class="page"><h3>${escape(nm(titleOf(page)))}</h3>${picture(page.image)}${markdown(page.text)}${withSecrets && page.secret ? `<div class="secret">${markdown(page.secret)}</div>` : ""}</div>`).join("")}</section>` : ""}
 ${names.length ? `<section><h2>${escape(t("book.index"))}</h2><div class="index">${names.map((name) => `<div>${escape(nm(name))}</div>`).join("")}</div></section>` : ""}
 </body></html>`;
-  const view = window.open("", "_blank");
-  if (!view) {
-    download(`${world.name || "atlas"}.html`, html, "text/html");
-    return;
-  }
-  view.document.write(html);
-  view.document.close();
-  setTimeout(() => view.print(), 700);
+  printPage(html);
 }

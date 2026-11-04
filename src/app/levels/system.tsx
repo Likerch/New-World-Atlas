@@ -72,6 +72,7 @@ import { PeopleList } from "../People";
 import { CustomThing, LoreBlock, ProfileCard, Row } from "../SpaceCards";
 import type { SpaceLinks } from "./space-links";
 import type { Level, LevelContext } from "./types";
+import { printPage } from "../desktop";
 
 type Selection = { kind: "body"; id: number } | { kind: "moon"; body: number; moon: number } | { kind: "site"; id: number } | null;
 type Tool = "add" | "remove";
@@ -748,7 +749,7 @@ function BodyCard({ t, nm, locale, system, body: id, moon: moonIndex, era, owner
 
 const html = (text: string) => text.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;");
 
-/** A printable card of the system: its star, main world profile, worlds and places, in a window of its own. */
+/** A printable card of the system: its star, main world profile, worlds and places. */
 function printCard(system: StarSystem, t: T, nm: (name: string) => string, locale: string) {
   const p = system.profile;
   const rows = system.bodies
@@ -764,9 +765,6 @@ function printCard(system: StarSystem, t: T, nm: (name: string) => string, local
 ${p.tags.map((tag) => `<p><b>${html(t(`tag.${tag}`))}.</b> ${html(t(`tag.${tag}.about`))}</p>`).join("")}
 <table><tr><th>${html(t("legend.worlds"))}</th><th>${html(t("stat.kind2"))}</th><th>AU</th><th>${html(t("place.temperature"))}</th><th>${html(t("space.atmosphere"))}</th><th>${html(t("stat.population"))}</th><th>${html(t("space.moons"))}</th></tr>${rows}</table>
 ${places ? `<h3>${html(t("legend.sites"))}</h3><ul>${places}</ul>` : ""}
-<script>window.onload=()=>window.print()</script></body></html>`;
-  const win = window.open("", "_blank");
-  if (!win) return;
-  win.document.write(page);
-  win.document.close();
+</body></html>`;
+  printPage(page);
 }

@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { readCampaign, type MapPatch, type Pin } from "../core/index";
 import type { CampaignStore } from "./campaign";
 import type { T } from "./i18n";
+import { saveFile } from "./desktop";
 
 export type GmMode = "inspect" | "pin" | "reveal" | "hide";
 
@@ -143,15 +144,7 @@ export function GmPanel({ t, store, mapKey, sheetKey, selected, onPage, onCopy, 
       <div className="gm-row">
         <button
           type="button"
-          onClick={() => {
-            const blob = new Blob([JSON.stringify(store.file(), null, 1)], { type: "application/json" });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = "campaign.atlas.json";
-            link.click();
-            setTimeout(() => URL.revokeObjectURL(url), 5000);
-          }}
+          onClick={() => void saveFile("campaign.atlas.json", JSON.stringify(store.file(), null, 1), "application/json")}
         >
           💾 {t("gm.save")}
         </button>

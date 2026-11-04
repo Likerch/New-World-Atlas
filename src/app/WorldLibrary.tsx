@@ -7,6 +7,7 @@ import type { T } from "./i18n";
 import { SettingPanel } from "./SettingPanel";
 import { packOwn, readPack } from "./pack";
 import type { NewWorld, Snapshot, Worlds } from "./worlds";
+import { saveFile } from "./desktop";
 
 /** Worlds to try the Atlas on: each a different age, from a different top map. */
 const DEMOS: { id: string; top: TopLevel; era: EraId; start: Record<string, unknown> }[] = [
@@ -19,14 +20,7 @@ const DEMOS: { id: string; top: TopLevel; era: EraId; start: Record<string, unkn
 
 export const LEVEL_ICON: Record<string, string> = { universe: "🌠", galaxy: "🌌", system: "☀️", planet: "🌍", region: "🗺", underworld: "🕳", city: "🏰", building: "🏠", local: "🗺️" };
 
-function download(name: string, data: unknown) {
-  const url = URL.createObjectURL(new Blob([JSON.stringify(data)], { type: "application/json" }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
-}
+const download = (name: string, data: unknown) => void saveFile(name, JSON.stringify(data), "application/json");
 
 const fileName = (world: WorldDoc) => `${world.name.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-") || "world"}.atlas.json`;
 

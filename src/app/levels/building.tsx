@@ -45,6 +45,7 @@ import { BuildingTypes, loadList, saveList } from "../CityKinds";
 import { NumberInput } from "../NumberInput";
 import { NpcCard, PeopleList, RumourList, say } from "../People";
 import type { Level, LevelContext } from "./types";
+import { printPage } from "../desktop";
 
 /** Room kinds the GM can give a room. */
 const ROOM_KINDS: RoomKind[] = ["hall", "common-room", "kitchen", "pantry", "bedroom", "guest-room", "storage", "workshop", "shop-floor", "office", "study", "chapel", "nave", "sacristy", "armory", "barracks", "throne-room", "bath", "cellar", "cell", "living-room", "dining", "lobby", "operating-room", "waiting-room", "dance-floor", "bar", "vip", "toilet", "server-room", "atrium", "garden", "classroom", "gym", "canteen", "machine-hall", "boiler-room", "vault", "lab", "grow-room", "capsules", "garage", "vestibule", "attic", "guard-room", "ballroom", "gallery", "ritual-room", "stage", "auditorium", "mill-room"];
@@ -135,12 +136,7 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null, o
         return `<li><b>${item.n}. ${esc(names[`room:${item.level}:${item.room}`] || roomName(kind))}</b> — ${esc(t(item.detail))}${lines.map((line) => `<br/>${esc(line)}`).join("")}</li>`;
       })
       .join("");
-    const page = window.open("", "_blank");
-    if (!page) return;
-    page.document.write(`<!doctype html><html lang="${ctx.locale}"><head><meta charset="utf-8"/><title>${esc(title)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;margin:24px;color:#2b2620}section{page-break-inside:avoid;margin-bottom:24px}svg{max-width:100%;height:auto}li{margin:4px 0}</style></head><body><h1>${esc(title)}</h1><p>${esc(`${t("npc.owner")}: ${nm(key.owner.name)}, ${t(`role.${key.owner.role}@${era}`)} · ${words(key.hook)}`)}</p>${sheets}<h2>${esc(t("key.title"))}</h2><ol style="list-style:none;padding:0">${entries}</ol></body></html>`);
-    page.document.close();
-    page.focus();
-    page.print();
+    printPage(`<!doctype html><html lang="${ctx.locale}"><head><meta charset="utf-8"/><title>${esc(title)}</title><style>body{font-family:'Segoe UI',Arial,sans-serif;margin:24px;color:#2b2620}section{page-break-inside:avoid;margin-bottom:24px}svg{max-width:100%;height:auto}li{margin:4px 0}</style></head><body><h1>${esc(title)}</h1><p>${esc(`${t("npc.owner")}: ${nm(key.owner.name)}, ${t(`role.${key.owner.role}@${era}`)} · ${words(key.hook)}`)}</p>${sheets}<h2>${esc(t("key.title"))}</h2><ol style="list-style:none;padding:0">${entries}</ol></body></html>`);
   };
 
   const selectedRoom = current?.rooms.find((r) => r.id === room);

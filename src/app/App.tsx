@@ -77,15 +77,7 @@ import { Search } from "./Search";
 import { CheatSheet, Tour } from "./Help";
 import { LevelIcon } from "./LevelIcon";
 import { growPlanet } from "./work";
-
-function download(name: string, blob: Blob) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
-}
+import { saveFile } from "./desktop";
 
 async function svgToPng(svg: string, width: number, height: number, scale = 2): Promise<Blob> {
   const image = new Image();
@@ -829,7 +821,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
               disabled={!map}
               onClick={() => {
                 closeExport();
-                if (map) download(`${fileName}.svg`, new Blob([exported], { type: "image/svg+xml" }));
+                if (map) void saveFile(`${fileName}.svg`, new Blob([exported], { type: "image/svg+xml" }));
               }}
             >
               {t("action.exportSvg")}
@@ -841,7 +833,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
                 closeExport();
                 if (!map) return;
                 try {
-                  download(`${fileName}.png`, await svgToPng(exported, map.width, map.height));
+                  await saveFile(`${fileName}.png`, await svgToPng(exported, map.width, map.height));
                 } catch (problem) {
                   console.error(problem);
                   alert(t("export.pngFailed"));
@@ -856,7 +848,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
               onClick={() => {
                 closeExport();
                 const data = level.data();
-                if (data) download(`${fileName}.json`, new Blob([JSON.stringify(secrets ? { ...(data as object), gm: patch } : data)], { type: "application/json" }));
+                if (data) void saveFile(`${fileName}.json`, new Blob([JSON.stringify(secrets ? { ...(data as object), gm: patch } : data)], { type: "application/json" }));
               }}
             >
               {t("action.exportJson")}
@@ -868,7 +860,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
                 disabled={!map}
                 onClick={() => {
                   closeExport();
-                  download(`${fileName}.${item.file}`, item.make());
+                  void saveFile(`${fileName}.${item.file}`, item.make());
                 }}
               >
                 {item.label}

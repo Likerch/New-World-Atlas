@@ -4,6 +4,7 @@ import { Modal } from "./Modal";
 import { useMemo, useState } from "react";
 import { emptyPage, findPage, handbookMarkdown, markdown, titleOf, type Page, type WorldDoc } from "../core/index";
 import type { T } from "./i18n";
+import { saveFile } from "./desktop";
 
 /** A picture made small enough to keep in the world: at most 640 px across, as JPEG. */
 async function shrink(file: File): Promise<string> {
@@ -21,15 +22,6 @@ async function shrink(file: File): Promise<string> {
   } finally {
     URL.revokeObjectURL(url);
   }
-}
-
-export function download(name: string, text: string, type = "text/markdown") {
-  const url = URL.createObjectURL(new Blob([text], { type }));
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 /** One page: read it (links lead to other pages), or write it. */
@@ -160,11 +152,11 @@ export function Handbook({
           </ul>
           {!list.length ? <p className="muted">{t("book.none")}</p> : null}
           <div className="row-buttons">
-            <button type="button" onClick={() => download(`${world.name || "world"}.md`, handbookMarkdown(world, false))}>
+            <button type="button" onClick={() => void saveFile(`${world.name || "world"}.md`, handbookMarkdown(world, false), "text/markdown")}>
               ⬇ {t("book.markdown")}
             </button>
             {!players ? (
-              <button type="button" onClick={() => download(`${world.name || "world"}-gm.md`, handbookMarkdown(world, true))}>
+              <button type="button" onClick={() => void saveFile(`${world.name || "world"}-gm.md`, handbookMarkdown(world, true), "text/markdown")}>
                 ⬇ {t("book.markdownGm")}
               </button>
             ) : null}

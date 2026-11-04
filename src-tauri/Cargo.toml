@@ -1,0 +1,24 @@
+[package]
+name = "new-world-atlas"
+version = "0.1.0"
+description = "New World Atlas as a Windows app"
+authors = ["Likerchik"]
+repository = "https://github.com/Likerch/New-World-Atlas"
+edition = "2024"
+rust-version = "1.90"
+
+[build-dependencies]
+tauri-build = { version = "2.7.4", features = [] }
+
+[dependencies]
+tauri = { version = "2.12.5", features = [] }
+percent-encoding = "2"
+rfd = "0.17"
+tauri-plugin-window-state = "2"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
