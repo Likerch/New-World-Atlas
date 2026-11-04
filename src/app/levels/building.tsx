@@ -418,7 +418,7 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null, o
               ) : null}
               <RumourList t={t} nm={nm} rumours={key.rumours} players={ctx.players} />
               <PeopleList t={t} nm={nm} people={key.household.slice(1, 12)} age={era} />
-              <button type="button" className="wide" onClick={printSheet}>
+              <button type="button" className="wide" data-tour="print-sheet" onClick={printSheet}>
                 🖨 {t("action.printSheet")}
               </button>
               <p className="muted">{t("building.hint")}</p>
@@ -612,7 +612,7 @@ export function useBuildingLevel(ctx: LevelContext, back: (() => void) | null, o
                       ) : null}
                     </details>
                   ) : null}
-                  <button type="button" className="link" onClick={() => setRoom(null)}>
+                  <button type="button" className="link" data-tour="whole-building" onClick={() => setRoom(null)}>
                     ← {t("building.whole")}
                   </button>
                 </div>

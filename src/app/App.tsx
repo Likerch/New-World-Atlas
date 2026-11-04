@@ -67,14 +67,16 @@ import { usePlanetLevel } from "./levels/planet";
 import { useGalaxyLevel, useSystemLevel, useUniverseLevel, type SpaceLinks } from "./levels/space";
 import type { Level, LevelContext, LevelId } from "./levels/types";
 import { MapView, type Focus } from "./MapView";
-import { WorldLibrary } from "./WorldLibrary";
+import { DEMOS, WorldLibrary } from "./WorldLibrary";
 import { useWorlds, type Worlds } from "./worlds";
 import { useListKeys } from "./keys";
 import { setUnits } from "./format";
 import { printAtlas } from "./book";
 import { Handbook } from "./Handbook";
 import { Search } from "./Search";
-import { CheatSheet, Tour } from "./Help";
+import { CheatSheet } from "./Help";
+import { Coach, Lessons, type Run } from "./Coach";
+import { LESSONS, type Lesson } from "./lessons";
 import { LevelIcon } from "./LevelIcon";
 import { growPlanet } from "./work";
 import { saveFile } from "./desktop";
@@ -144,12 +146,70 @@ export function App() {
   useListKeys();
   const t = useMemo(() => translator(locale), [locale]);
   const worlds = useWorlds(t("worlds.firstName"));
+  // The lessons live above the world's view: a lesson that borrows a demo world goes on in it.
+  const [catalog, setCatalog] = useState<"welcome" | "open" | null>(() => {
+    try {
+      return localStorage.getItem("atlas.toured") ? null : "welcome";
+    } catch {
+      return null;
+    }
+  });
+  const [run, setRun] = useState<Run | null>(null);
   if (!worlds.ready) return <div className="loading">{t("worlds.loading")}</div>;
+  const lesson = run ? LESSONS.find((item) => item.id === run.id) : undefined;
+  const closeCatalog = () => {
+    setCatalog(null);
+    try {
+      localStorage.setItem("atlas.toured", "1");
+    } catch {
+      // A private window: the welcome may show again next time.
+    }
+  };
+  const start = (next: Lesson, from = run?.from) => {
+    closeCatalog();
+    setRun({ id: next.id, step: !next.tops || next.tops.includes(worlds.world.top) ? 0 : -1, from });
+  };
+  /** The lesson's demo world: the one made for it before, or a new one. */
+  const openDemo = async () => {
+    const demo = DEMOS.find((item) => item.id === lesson?.demo);
+    if (!lesson || !demo) return;
+    const from = run?.from ?? worlds.world.id;
+    const name = t(`demo.${demo.id}`);
+    const made = worlds.list.find((item) => item.name === name && item.top === demo.top);
+    if (made) await worlds.open(made.id);
+    else await worlds.create({ name, top: demo.top, setting: SETTINGS[demo.era], script: worlds.world.script, start: demo.start });
+    setRun({ id: lesson.id, step: 0, from });
+  };
   // A world opened anew starts with fresh levels.
   return (
-    <Guard t={t}>
-      <WorldView key={`${worlds.world.id}:${worlds.generation}`} t={t} locale={locale} setLocale={setLocale} worlds={worlds} />
-    </Guard>
+    <>
+      <Guard t={t}>
+        <WorldView key={`${worlds.world.id}:${worlds.generation}`} t={t} locale={locale} setLocale={setLocale} worlds={worlds} onLessons={() => setCatalog("open")} />
+      </Guard>
+      {catalog ? <Lessons t={t} welcome={catalog === "welcome"} onStart={(next) => start(next)} onClose={closeCatalog} /> : null}
+      {lesson && run ? (
+        <Coach
+          key={lesson.id}
+          t={t}
+          lesson={lesson}
+          step={run.step}
+          demoName={lesson.demo ? t(`demo.${lesson.demo}`) : ""}
+          fromName={run.from && run.from !== worlds.world.id ? worlds.list.find((item) => item.id === run.from)?.name : undefined}
+          onStep={(step) => setRun({ ...run, step })}
+          onDemo={() => void openDemo()}
+          onBack={() => {
+            if (run.from) void worlds.open(run.from);
+            setRun(null);
+          }}
+          onNext={LESSONS[LESSONS.indexOf(lesson) + 1] ? () => start(LESSONS[LESSONS.indexOf(lesson) + 1]) : undefined}
+          onCatalog={() => {
+            setRun(null);
+            setCatalog("open");
+          }}
+          onClose={() => setRun(null)}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -177,7 +237,7 @@ class Guard extends Component<{ t: T; children: ReactNode }, { problem: string |
   }
 }
 
-function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; setLocale: (locale: Locale) => void; worlds: Worlds }) {
+function WorldView({ t, locale, setLocale, worlds, onLessons }: { t: T; locale: Locale; setLocale: (locale: Locale) => void; worlds: Worlds; onLessons: () => void }) {
   const { world } = worlds;
   const query = useMemo(() => new URLSearchParams(location.search), []);
   const script = world.script;
@@ -228,22 +288,6 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
     }
   });
   const [drawer, setDrawer] = useState<"controls" | "inspector" | null>(null);
-  // The tour shows itself once, on the first visit.
-  const [touring, setTouring] = useState(() => {
-    try {
-      return !localStorage.getItem("atlas.toured");
-    } catch {
-      return false;
-    }
-  });
-  const endTour = () => {
-    setTouring(false);
-    try {
-      localStorage.setItem("atlas.toured", "1");
-    } catch {
-      // A private window: the tour may show again next time.
-    }
-  };
   // Back and forward in the browser walk the levels the GM went through.
   const popping = useRef(false);
   const closeExport = () => exportMenu.current?.removeAttribute("open");
@@ -759,7 +803,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
           {levels
             .filter((item) => shown.includes(item.id))
             .map((item) => (
-              <button key={item.id} type="button" aria-pressed={item.id === view} onClick={() => showLevel(item.id)}>
+              <button key={item.id} type="button" data-level={item.id} aria-pressed={item.id === view} onClick={() => showLevel(item.id)}>
                 <LevelIcon level={item.id} /> {t(`view.${item.id}`)}
                 {item.title ? `: ${nm(item.title)}` : ""}
               </button>
@@ -772,23 +816,23 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
           </label>
         )}
         {isTop ? (
-          <button type="button" onClick={() => generate(randomSeed())} title={t("action.random")}>
+          <button type="button" data-tour="random" onClick={() => generate(randomSeed())} title={t("action.random")}>
             🎲
           </button>
         ) : null}
         {level.fixed ? null : (
-          <button type="button" className="primary" onClick={() => generate()} disabled={busy || (!isTop && !map)}>
+          <button type="button" className="primary" data-tour="generate" onClick={() => generate()} disabled={busy || (!isTop && !map)}>
             {t("action.generate")}
           </button>
         )}
         <span className="grow" />
-        <button type="button" className="ghost" onClick={() => setSearching(true)} title={t("search.title")} aria-label={t("search.title")}>
+        <button type="button" className="ghost" data-tour="search" onClick={() => setSearching(true)} title={t("search.title")} aria-label={t("search.title")}>
           🔍
         </button>
-        <button type="button" className="ghost" onClick={() => setBook("index")} title={t("book.title.book")} aria-label={t("book.title.book")}>
+        <button type="button" className="ghost" data-tour="handbook" onClick={() => setBook("index")} title={t("book.title.book")} aria-label={t("book.title.book")}>
           📖
         </button>
-        <button type="button" className="ghost" onClick={worlds.undo} disabled={!worlds.canUndo} title={t("action.undo")} aria-label={t("action.undo")}>
+        <button type="button" className="ghost" data-tour="undo" onClick={worlds.undo} disabled={!worlds.canUndo} title={t("action.undo")} aria-label={t("action.undo")}>
           ↶
         </button>
         <button type="button" className="ghost" onClick={worlds.redo} disabled={!worlds.canRedo} title={t("action.redo")} aria-label={t("action.redo")}>
@@ -801,15 +845,15 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
         ) : (
           <span className="muted save-state">{t(worlds.saving === "saving" ? "worlds.saving" : "worlds.saved")}</span>
         )}
-        <select value={world.units ?? "metric"} aria-label={t("field.units")} onChange={(event) => worlds.update((current) => ({ ...current, units: event.target.value as "metric" | "imperial", updated: Date.now() }))}>
+        <select value={world.units ?? "metric"} data-tour="units" aria-label={t("field.units")} onChange={(event) => worlds.update((current) => ({ ...current, units: event.target.value as "metric" | "imperial", updated: Date.now() }))}>
           <option value="metric">{t("units.metric")}</option>
           <option value="imperial">{t("units.imperial")}</option>
         </select>
-        <select value={script} aria-label={t("field.script")} onChange={(event) => worlds.update((current) => ({ ...current, script: event.target.value as "latin" | "cyrillic", updated: Date.now() }))}>
+        <select value={script} data-tour="script" aria-label={t("field.script")} onChange={(event) => worlds.update((current) => ({ ...current, script: event.target.value as "latin" | "cyrillic", updated: Date.now() }))}>
           <option value="latin">{t("script.latin")}</option>
           <option value="cyrillic">{t("script.cyrillic")}</option>
         </select>
-        <details className="menu" ref={exportMenu}>
+        <details className="menu" data-tour="export" ref={exportMenu}>
           <summary>{t("action.export")}</summary>
           <div>
             <label className="check" title={t("export.secretsHint")}>
@@ -872,6 +916,7 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
           type="button"
           className="ghost"
           aria-pressed={large}
+          data-tour="large"
           title={t("app.large")}
           aria-label={t("app.large")}
           onClick={() => {
@@ -885,10 +930,13 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
         >
           A+
         </button>
-        <button type="button" className="ghost" onClick={() => setHelp(true)} title={`${t("help.title")} (?)`} aria-label={t("help.title")}>
+        <button type="button" className="ghost" data-tour="lessons" onClick={onLessons} title={t("help.lessons")} aria-label={t("help.lessons")}>
+          🎓
+        </button>
+        <button type="button" className="ghost" data-tour="help" onClick={() => setHelp(true)} title={`${t("help.title")} (?)`} aria-label={t("help.title")}>
           ?
         </button>
-        <button type="button" className="ghost" onClick={() => setLocale(locale === "ru" ? "en" : "ru")}>
+        <button type="button" className="ghost" data-tour="locale" onClick={() => setLocale(locale === "ru" ? "en" : "ru")}>
           {locale === "ru" ? "EN" : "RU"}
         </button>
       </header>
@@ -1015,13 +1063,12 @@ function WorldView({ t, locale, setLocale, worlds }: { t: T; locale: Locale; set
         <CheatSheet
           t={t}
           onClose={() => setHelp(false)}
-          onTour={() => {
+          onLessons={() => {
             setHelp(false);
-            setTouring(true);
+            onLessons();
           }}
         />
       ) : null}
-      {touring && !help ? <Tour t={t} onClose={endTour} /> : null}
       {searching ? (
         <Search
           t={t}

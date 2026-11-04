@@ -591,7 +591,7 @@ export function useGalaxyLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
           )}
           <nav className="tabs">
             {(["empires", "stars", "zones", "sectors"] as const).map((name) => (
-              <button key={name} type="button" aria-pressed={tab === name} onClick={() => setTab(name)}>
+              <button key={name} type="button" data-tab={name} aria-pressed={tab === name} onClick={() => setTab(name)}>
                 {t(`space.${name}`)}
               </button>
             ))}

@@ -1216,7 +1216,7 @@ dialog.modal::backdrop {
   max-width: 120px;
 }
 
-/* Help: the cheat sheet and the tour. */
+/* Help: the cheat sheet. */
 dialog.cheat {
   width: min(560px, 100%);
 }
@@ -1229,21 +1229,267 @@ kbd {
   font-size: 12px;
   white-space: nowrap;
 }
-dialog.tour {
-  width: min(440px, 100%);
+
+/* Lessons: the catalog, and the coach over the app — the lit element, the step's card and the mouse it draws. */
+dialog.lessons {
+  width: min(880px, 100%);
 }
-dialog.tour-levels {
-  margin-top: 70px;
+.lesson-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 4px;
 }
-dialog.tour-map {
-  margin: auto;
+.lesson-progress progress {
+  flex: 1;
+  min-width: 120px;
+  accent-color: var(--accent);
 }
-dialog.tour-inspector {
-  margin-right: 24px;
+.lesson-group h3 {
+  margin: 14px 0 6px;
 }
-dialog.tour-controls,
-dialog.tour-gm {
-  margin-left: 24px;
+.lesson-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 8px;
+}
+.lesson-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+}
+.lesson-card:hover {
+  border-color: var(--accent);
+}
+.lesson-card.done {
+  background: var(--accent-soft);
+}
+.lesson-card b,
+.lesson-card small {
+  display: block;
+}
+.lesson-card small {
+  margin-top: 3px;
+}
+.lesson-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+.coach {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  pointer-events: none;
+}
+.coach-shade {
+  position: fixed;
+  inset: 0;
+  background: #00000066;
+}
+.coach-spot {
+  position: fixed;
+  border-radius: 10px;
+  box-shadow: 0 0 0 200vmax #00000094;
+  outline: 3px solid var(--accent);
+  transition:
+    left 0.25s,
+    top 0.25s,
+    width 0.25s,
+    height 0.25s;
+  animation: coach-pulse 1.6s ease-in-out infinite;
+}
+@keyframes coach-pulse {
+  50% {
+    outline-offset: 5px;
+  }
+}
+.coach-card {
+  position: fixed;
+  width: min(370px, calc(100vw - 20px));
+  padding: 12px 14px;
+  pointer-events: auto;
+  color: var(--text);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 14px 40px #00000080;
+  transition:
+    left 0.2s,
+    top 0.2s;
+  -webkit-user-select: text;
+  user-select: text;
+}
+.coach-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.coach-icon {
+  font-size: 16px;
+}
+.coach-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.coach-card h3 {
+  margin: 8px 0 4px;
+  font-size: 15px;
+}
+.coach-card p {
+  margin: 4px 0;
+  line-height: 1.45;
+}
+.coach-keys kbd {
+  margin-right: 4px;
+}
+.coach-task {
+  font-weight: 600;
+  color: var(--accent);
+}
+.coach-task.done {
+  color: #3f9a55;
+}
+.coach-dots {
+  display: flex;
+  gap: 4px;
+  margin: 10px 0 8px;
+}
+.coach-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--border);
+  transition: width 0.2s;
+}
+.coach-dots span.past {
+  background: var(--muted);
+}
+.coach-dots span.on {
+  width: 18px;
+  background: var(--accent);
+}
+.gesture {
+  flex: none;
+  margin-top: 8px;
+  overflow: visible;
+}
+.gesture-body {
+  fill: var(--bg);
+  stroke: var(--text);
+  stroke-width: 2;
+}
+.gesture-line {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.5;
+}
+.gesture-left,
+.gesture-right {
+  fill: transparent;
+}
+.gesture-wheel {
+  fill: var(--muted);
+}
+.gesture-arrows {
+  fill: var(--accent);
+  animation: gesture-blink 1.2s ease-in-out infinite;
+}
+.gesture-trail {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+.gesture-click .gesture-left,
+.gesture-right .gesture-right {
+  animation: gesture-press 1.4s infinite;
+}
+.gesture-double .gesture-left {
+  animation: gesture-press-twice 1.6s infinite;
+}
+.gesture-wheel .gesture-wheel {
+  animation: gesture-roll 1.2s ease-in-out infinite;
+}
+.gesture-drag .gesture-left {
+  fill: var(--accent);
+}
+.gesture-drag .gesture-mouse {
+  animation: gesture-drag 2s ease-in-out infinite;
+}
+.gesture-hover .gesture-mouse {
+  animation: gesture-hover 2.4s ease-in-out infinite;
+}
+@keyframes gesture-press {
+  0%,
+  55%,
+  100% {
+    fill: transparent;
+  }
+  15%,
+  40% {
+    fill: var(--accent);
+  }
+}
+@keyframes gesture-press-twice {
+  0%,
+  22%,
+  42%,
+  100% {
+    fill: transparent;
+  }
+  8%,
+  16%,
+  30%,
+  38% {
+    fill: var(--accent);
+  }
+}
+@keyframes gesture-roll {
+  0%,
+  100% {
+    transform: translateY(-2px);
+    fill: var(--accent);
+  }
+  50% {
+    transform: translateY(3px);
+  }
+}
+@keyframes gesture-blink {
+  50% {
+    opacity: 0.25;
+  }
+}
+@keyframes gesture-drag {
+  0%,
+  100% {
+    transform: translateX(-6px);
+  }
+  50% {
+    transform: translateX(6px);
+  }
+}
+@keyframes gesture-hover {
+  0%,
+  100% {
+    transform: translate(-4px, 3px);
+  }
+  50% {
+    transform: translate(4px, -3px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .coach-spot,
+  .gesture * {
+    animation: none !important;
+  }
 }
 
 /* Panel sections that fold away under their heading. */

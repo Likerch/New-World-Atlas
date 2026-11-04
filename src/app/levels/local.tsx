@@ -165,6 +165,7 @@ export function useLocalLevel(ctx: LevelContext, back: (() => void) | null, link
           <button
             type="button"
             className="primary wide"
+            data-tour="local-down"
             onClick={() => {
               const depth = (raw.params.depth ?? 1) + 1;
               setAbove([...above, raw]);

@@ -473,7 +473,7 @@ export function Inspector({ planet, t, nm, selection, onSelect, tab, setTab, onO
     <aside className="inspector">
       <nav className="tabs">
         {tabs.map((name) => (
-          <button key={name} type="button" aria-pressed={tab === name} onClick={() => setTab(name)}>
+          <button key={name} type="button" data-tab={name} aria-pressed={tab === name} onClick={() => setTab(name)}>
             {t(`panel.${name === "place" ? "place" : name}`)}
           </button>
         ))}

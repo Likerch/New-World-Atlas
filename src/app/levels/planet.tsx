@@ -323,7 +323,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
             ← {t("action.backToSystem")}
           </button>
         ) : null}
-        <button type="button" className="primary wide" onClick={() => setForm(true)}>
+        <button type="button" className="primary wide" data-tour="planet-form" onClick={() => setForm(true)}>
           🌍 {t("world.planetForm")}
         </button>
         {raw && changed ? (
@@ -357,12 +357,12 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
           />
         ) : null}
         {planet && openUnderworld ? (
-          <button type="button" className="wide" onClick={() => openUnderworld(planet)}>
+          <button type="button" className="wide" data-tour="underworld" onClick={() => openUnderworld(planet)}>
             🕳 {t("action.openUnderworld")}
           </button>
         ) : null}
         {planet ? (
-          <div className="floor-tabs">
+          <div className="floor-tabs" data-tour="globe">
             <button type="button" aria-pressed={!globe} onClick={() => setGlobe(null)}>
               🗺 {t("view.flat")}
             </button>
@@ -519,7 +519,7 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
         ))}
         {raw ? (
           <>
-            <h4 className="muted" title={t("reroll.hint")}>
+            <h4 className="muted" data-tour="reroll" title={t("reroll.hint")}>
               🎲 {t("reroll.title")}
             </h4>
             <div className="row-buttons">
@@ -559,14 +559,14 @@ export function usePlanetLevel(ctx: LevelContext, initialSeed: string | undefine
         </details>
         </Section>
         <Section id="planet-view" title={t("panel.layers")}>
-        <div className="row-buttons">
+        <div className="row-buttons" data-tour="presets">
           {Object.keys(PRESETS).map((name) => (
             <button key={name} type="button" onClick={() => setAll({ ...Object.fromEntries(LAYERS.map((id) => [id, false])), ...PRESETS[name] } as Record<LayerId, boolean>)}>
               {t(`preset.${name}`)}
             </button>
           ))}
           {planet ? (
-            <button type="button" onClick={() => setTables(true)}>
+            <button type="button" data-tour="tables" onClick={() => setTables(true)}>
               📊 {t("table.title")}
             </button>
           ) : null}

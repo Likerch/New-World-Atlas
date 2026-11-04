@@ -14,6 +14,7 @@ export function Section({ id, title, open = true, children }: { id: string; titl
   return (
     <details
       className="section"
+      data-section={id}
       open={shown}
       onToggle={(event) => {
         const now = event.currentTarget.open;

@@ -225,7 +225,7 @@ export function useRegionLevel(
           />
         ) : null}
         {region ? (
-          <button type="button" className="wide" onClick={() => links.openUnderworld(region)}>
+          <button type="button" className="wide" data-tour="underworld" onClick={() => links.openUnderworld(region)}>
             ⛏ {t("action.openUnderworld")}
           </button>
         ) : null}

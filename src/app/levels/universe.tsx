@@ -311,6 +311,7 @@ export function useUniverseLevel(ctx: LevelContext, links: SpaceLinks, setting?:
           <button
             type="button"
             className="wide"
+            data-tour="universe-ruler"
             aria-pressed={measuring}
             onClick={() => {
               setMeasuring(!measuring);
@@ -479,7 +480,7 @@ export function useUniverseLevel(ctx: LevelContext, links: SpaceLinks, setting?:
         )}
         <nav className="tabs">
           {(["galaxies", "clusters", "voids", "strange", "powers"] as const).map((name) => (
-            <button key={name} type="button" aria-pressed={tab === name} onClick={() => setTab(name)}>
+            <button key={name} type="button" data-tab={name} aria-pressed={tab === name} onClick={() => setTab(name)}>
               {galaxyWord(`utab.${name}`)}
             </button>
           ))}

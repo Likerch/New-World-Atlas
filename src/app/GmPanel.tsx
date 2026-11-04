@@ -70,7 +70,7 @@ export function GmPanel({ t, store, mapKey, sheetKey, selected, onPage, onCopy, 
           </button>
         ))}
       </div>
-      <label className="check">
+      <label className="check" data-tour="fog">
         <input type="checkbox" checked={sheet.fog.enabled} disabled={!sheetKey} onChange={(event) => updateSheet((p) => ({ ...p, fog: { ...p.fog, enabled: event.target.checked } }))} />
         {t("gm.fog")}
       </label>
@@ -86,7 +86,7 @@ export function GmPanel({ t, store, mapKey, sheetKey, selected, onPage, onCopy, 
           </button>
         </div>
       ) : null}
-      <button type="button" className="wide" onClick={() => setPlayers(true)}>
+      <button type="button" className="wide" data-tour="players" onClick={() => setPlayers(true)}>
         👁 {t("gm.players")}
       </button>
 
@@ -124,7 +124,7 @@ export function GmPanel({ t, store, mapKey, sheetKey, selected, onPage, onCopy, 
       )}
 
       {sheet.pins.length ? (
-        <div className="gm-block">
+        <div className="gm-block" data-tour="pins">
           <h4>{t("gm.pins")}</h4>
           {sheet.pins.map((pin) => (
             <div key={pin.id} className="gm-pin">

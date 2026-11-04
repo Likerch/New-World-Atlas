@@ -462,7 +462,7 @@ export function useSystemLevel(ctx: LevelContext, links: SpaceLinks, back: (() =
           </details>
         ) : null}
         {system ? (
-          <button type="button" className="wide" onClick={() => printCard(system, t, nm, ctx.locale)}>
+          <button type="button" className="wide" data-tour="print-card" onClick={() => printCard(system, t, nm, ctx.locale)}>
             🖨 {t("system.print")}
           </button>
         ) : null}

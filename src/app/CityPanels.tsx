@@ -666,7 +666,7 @@ export function CityInspector({ city, society, shops, t, nm, players, selection,
       ) : null}
       <nav className="tabs">
         {(["wards", "landmarks", "streets", "factions", "directory"] as const).map((name) => (
-          <button key={name} type="button" aria-pressed={tab === name} onClick={() => setTab(name)}>
+          <button key={name} type="button" data-tab={name} aria-pressed={tab === name} onClick={() => setTab(name)}>
             {t(`panel.${name}`)}
           </button>
         ))}

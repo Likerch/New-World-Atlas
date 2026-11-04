@@ -10,12 +10,13 @@ import type { NewWorld, Snapshot, Worlds } from "./worlds";
 import { saveFile } from "./desktop";
 
 /** Worlds to try the Atlas on: each a different age, from a different top map. */
-const DEMOS: { id: string; top: TopLevel; era: EraId; start: Record<string, unknown> }[] = [
+export const DEMOS: { id: string; top: TopLevel; era: EraId; start: Record<string, unknown> }[] = [
   { id: "kingdoms", top: "planet", era: "medieval", start: { seed: "demo-kingdoms", template: "continents", history: 300 } },
   { id: "ruins", top: "planet", era: "post-apocalypse", start: { seed: "demo-ruins", template: "plates" } },
   { id: "opera", top: "galaxy", era: "far-future", start: { seed: "demo-opera" } },
   { id: "neon", top: "city", era: "cyberpunk", start: { seed: "demo-neon" } },
   { id: "crypt", top: "local", era: "medieval", start: { seed: "demo-crypt", kind: "dungeon", theme: "crypt", levels: 3 } },
+  { id: "cosmos", top: "universe", era: "far-future", start: { seed: "demo-cosmos" } },
 ];
 
 export const LEVEL_ICON: Record<string, string> = { universe: "🌠", galaxy: "🌌", system: "☀️", planet: "🌍", region: "🗺", underworld: "🕳", city: "🏰", building: "🏠", local: "🗺️" };
@@ -39,7 +40,7 @@ export function WorldLibrary({ t, worlds, onClose, onWorldSetting }: { t: T; wor
   const era = (setting: Partial<Setting>) => t(`era.${settingOf(setting).era}`);
 
   return (
-    <Modal label={t("worlds.title")} onClose={onClose}>
+    <Modal className="library" label={t("worlds.title")} onClose={onClose}>
       <div className="modal-head">
         <h2>{t("worlds.title")}</h2>
         <button type="button" className="ghost" onClick={onClose} aria-label={t("action.close")}>
@@ -47,7 +48,7 @@ export function WorldLibrary({ t, worlds, onClose, onWorldSetting }: { t: T; wor
         </button>
       </div>
       <div className="modal-grid">
-        <section>
+        <section data-tour="library-current">
           <h3>{t("worlds.current")}</h3>
           <label>
             {t("worlds.name")}
@@ -67,6 +68,7 @@ export function WorldLibrary({ t, worlds, onClose, onWorldSetting }: { t: T; wor
             </button>
             <button
               type="button"
+              data-tour="snapshot"
               onClick={async () => {
                 const label = prompt(t("worlds.snapshotLabel"), new Date().toLocaleString(t.locale));
                 if (label === null) return;
@@ -115,7 +117,7 @@ export function WorldLibrary({ t, worlds, onClose, onWorldSetting }: { t: T; wor
             </>
           ) : null}
         </section>
-        <section>
+        <section data-tour="library-all">
           <h3>{t("worlds.all")}</h3>
           <ul className="list world-list">
             {worlds.list.map((item) => (
@@ -149,7 +151,7 @@ export function WorldLibrary({ t, worlds, onClose, onWorldSetting }: { t: T; wor
               </li>
             ))}
           </ul>
-          <button type="button" className="wide" onClick={() => picker.current?.click()}>
+          <button type="button" className="wide" data-tour="library-load" onClick={() => picker.current?.click()}>
             📂 {t("worlds.load")}
           </button>
           <input
@@ -211,7 +213,7 @@ export function WorldLibrary({ t, worlds, onClose, onWorldSetting }: { t: T; wor
             </>
           ) : null}
         </section>
-        <section>
+        <section data-tour="library-new">
           <h3>{t("worlds.new")}</h3>
           <label>
             {t("worlds.name")}
@@ -255,7 +257,7 @@ export function WorldLibrary({ t, worlds, onClose, onWorldSetting }: { t: T; wor
           </button>
           <h3>{t("pack.title")}</h3>
           <p className="muted">{t("pack.hint")}</p>
-          <div className="row-buttons">
+          <div className="row-buttons" data-tour="packs">
             <button type="button" onClick={() => download("own-content.atlas-pack.json", packOwn())}>
               📦 {t("pack.save")}
             </button>
@@ -281,7 +283,7 @@ export function WorldLibrary({ t, worlds, onClose, onWorldSetting }: { t: T; wor
             />
           </div>
           <h3>{t("demo.title")}</h3>
-          <div className="row-buttons">
+          <div className="row-buttons" data-tour="demos">
             {DEMOS.map((demo) => (
               <button
                 key={demo.id}
