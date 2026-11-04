@@ -39,6 +39,28 @@ body,
   margin: 0;
 }
 
+/* An app, not a page: dragging the map or double-clicking it or a button does not paint labels and panels blue.
+   Text meant to be read or copied (the place card, the handbook, fields) stays selectable; controls never are. */
+body {
+  -webkit-user-select: none;
+  user-select: none;
+}
+input,
+textarea,
+[contenteditable="true"],
+.inspector,
+.page-text {
+  -webkit-user-select: text;
+  user-select: text;
+}
+button,
+select,
+summary,
+.tabs {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
 .app {
   display: grid;
   grid-template-columns: 230px 1fr 320px;
