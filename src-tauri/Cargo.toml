@@ -1,6 +1,6 @@
 [package]
 name = "new-world-atlas"
-version = "0.1.0"
+version = "0.2.0"
 description = "New World Atlas as a Windows app"
 authors = ["Likerchik"]
 repository = "https://github.com/Likerch/New-World-Atlas"

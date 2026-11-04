@@ -1,0 +1,44 @@
+# The repository keeps only the latest Windows installer (release/New-World-Atlas-setup.exe). When a push replaces it
+# with a new version, the one it replaced is published as the release of its own version, so every earlier version
+# stays downloadable from Releases. A rebuild of the same version just replaces the file.
+name: Archive the replaced installer
+
+on:
+  push:
+    branches: [main]
+    paths: [release/New-World-Atlas-setup.exe]
+
+permissions:
+  contents: write
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Publish the replaced installer as its version's release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          file=release/New-World-Atlas-setup.exe
+          if ! git cat-file -e "$BEFORE:$file" 2>/dev/null; then
+            echo "No installer before this push: nothing to archive."
+            exit 0
+          fi
+          old=$(git show "$BEFORE:package.json" | jq -r .version)
+          new=$(jq -r .version package.json)
+          if [ "$old" = "$new" ]; then
+            echo "Still version $new: the installer was rebuilt, not replaced by a new version."
+            exit 0
+          fi
+          if gh release view "v$old" >/dev/null 2>&1; then
+            echo "v$old is already released."
+            exit 0
+          fi
+          asset="New-World-Atlas_${old}_x64-setup.exe"
+          git show "$BEFORE:$file" > "$asset"
+          gh release create "v$old" "$asset" --target "$BEFORE" --title "New World Atlas $old" \
+            --notes "Установщик New World Atlas $old для Windows. Последняя версия всегда лежит в репозитории: [release/New-World-Atlas-setup.exe](https://github.com/${{ github.repository }}/raw/main/release/New-World-Atlas-setup.exe)."
